@@ -6,6 +6,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/hanfei1991/microcosom/master/scheduler"
 	"github.com/hanfei1991/microcosom/pkg/etcdutil"
 	"github.com/hanfei1991/microcosom/pkg/log"
 	"go.etcd.io/etcd/clientv3"
@@ -28,30 +29,43 @@ type Server struct {
 	//election *election.Election
 
 	// sched scheduler
-	scheduler *Scheduler
-	// jobMng jobManager
+	scheduler  *scheduler.Scheduler
+	jobManager *JobManager
 	// 
 
 	cfg *Config
 }
 
-func NewServer(cfg *Config) *Server {
+func NewServer(cfg *Config) (*Server, error) {
 	server := &Server {
 		cfg: cfg,
-		scheduler: &Scheduler{},
+		scheduler: &scheduler.Scheduler{},
+		jobManager: &JobManager{},
 	}
-	return server
+	return server, nil
 }
 
+// Submit Job
 func (s *Server) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) (*pb.SubmitJobResponse, error) {
 	return &pb.SubmitJobResponse{}, nil
 }
 
-// 
+// RegisterExecutor implements grpc interface.
 func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorRequest) (*pb.RegisterExecutorResponse, error) {
 	// register executor to scheduler
-	s.scheduler.AddExecutor(req.Name, req.Address)
+	// TODO: check leader, if not leader, return notLeader error.
+	err := s.scheduler.AddExecutor(req)
+	if err != nil {
+		return &pb.RegisterExecutorResponse{
+			Err: pb.ErrorCode_Other,
+			ErrMessage: err.Error(),
+		}, nil
+	}
 	return &pb.RegisterExecutorResponse{}, nil
+}
+
+func (s *Server) DeleteExecutor() {
+	// To implement
 }
 
 func (s *Server) Start(ctx context.Context) (err error) {

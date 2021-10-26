@@ -34,15 +34,17 @@ message SubmitJobRequest {
         CDC = 1;
         Benchmark = 2;
     }
-    string config = 1;
+    JobType tp = 1;
+    string config = 2;
     // User name, token, etc...
-    string user = 2;
-    // TODO: Resouce Limit
+    string user = 3;
+    // TODO: Resource Limit
 }
 
 enum ErrorCode {
     None = 0;
     NotLeader = 1;
+    Other = 2;
 }
 
 message SubmitJobResponse {
@@ -56,6 +58,7 @@ message RegisterExecutorRequest {
     string name = 1;
     string address = 2;
     string version = 3;
+    int64  capability = 4;
 }
 
 message RegisterExecutorResponse {

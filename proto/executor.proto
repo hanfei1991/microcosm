@@ -1,0 +1,51 @@
+
+syntax = "proto3";
+
+package pb;
+
+service Executor {
+    rpc SubmitSubJob(SubmitSubJobRequest) returns (SubmitSubJobResponse) {}
+    rpc LaunchSubJob(LaunchSubJobRequest) returns (LaunchSubJobResponse) {}
+    rpc CancelSubJob(CancelSubJobRequest) returns (CancelSubJobResponse) {}
+}
+
+message TaskError {
+    string msg = 1; 
+}
+
+message LaunchSubJobRequest {
+    int32 job_id = 1;
+}
+
+message LaunchSubJobResponse {
+    repeated TaskError errors = 1;
+}
+
+message CancelSubJobRequest {
+    int32 job_id = 1;
+}
+
+message CancelSubJobResponse {
+    repeated TaskError errors = 1;
+}
+
+message SubmitSubJobRequest {
+    int32 job_id = 1;
+    repeated TaskRequest tasks = 2;
+}
+
+message TaskRequest {
+    int32 id = 1;
+    repeated Channel inputs = 2;
+    repeated Channel outputs = 3;
+    string plan_description = 4;
+}
+
+message Channel {
+    int32 src_id = 1;
+    int32 dst_id = 2;
+}
+
+message SubmitSubJobResponse {
+    repeated TaskError errors = 1;
+}

@@ -1,6 +1,7 @@
-package config
+package benchmark 
 
 import (
+	"encoding/json"
 	"flag"
 
 	"github.com/BurntSushi/toml"
@@ -19,9 +20,9 @@ func NewConfig() *Config {
 type Config struct {
 	*flag.FlagSet
 
-	TableNum int      `toml: "table-cnt"`
-	Servers  []string `toml: "servers"`
-	Timeout  int      `toml: "timeout"`
+	TableNum int      `toml: "table-cnt" json: "table-cnt"`
+	Servers  []string `toml: "servers"   json: "server-addrs"`
+	Timeout  int      `toml: "timeout"   json: "timeout"`
 
 	configFile string
 }
@@ -30,6 +31,12 @@ type Config struct {
 func (c *Config) configFromFile(path string) error {
 	_, err := toml.DecodeFile(path, c)
 	return errors.Trace(err)
+}
+
+func configFromJson(j string) (*Config, error) {
+	c := NewConfig()
+	err := json.Unmarshal([]byte(j), c)
+	return c, err
 }
 
 // Parse parses flag definitions from the argument list.
