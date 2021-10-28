@@ -15,11 +15,11 @@ const (
 	ExecutorClosed
 )
 
-// TODO:  How should we identify an executor, string (name) or int (id)?
+type ExecutorID int32
 
 // ExecutorInfo describes an Executor.
 type ExecutorInfo struct {
-	Name 			  string  `json:"name"`
+	ID 			      ExecutorID `json:"id"`
 	Addr 			  string  `json:"addr"`
 	// The capability of executor, including 
 	// 1. cpu (goroutines)

@@ -1,8 +1,12 @@
 package master
 
-import "github.com/hanfei1991/microcosom/master/scheduler"
+import (
+	resource "github.com/hanfei1991/microcosom/master/resource_manager"
+	"github.com/hanfei1991/microcosom/model"
+)
 
 type JobMaster interface {
-	Launch(*scheduler.Scheduler) error
-	ID() string
+	DispatchJob() error
+	RescheduleTask(txn *resource.RescheduleTxn)
+	ID() model.JobID 
 }

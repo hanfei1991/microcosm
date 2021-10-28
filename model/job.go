@@ -7,7 +7,7 @@ type TaskID int32
 
 type Job struct {
 	ID    JobID 
-	Tasks []*LogicalTask
+	Tasks []*Task
 }
 
 func (j *Job) ToPB() (*pb.SubmitSubJobRequest) {
@@ -17,7 +17,7 @@ func (j *Job) ToPB() (*pb.SubmitSubJobRequest) {
 	for _, t:= range j.Tasks {
 		req.Tasks = append(req.Tasks, t.ToPB())
 	}
-	return req, nil
+	return req
 }
 
 type Task struct {
@@ -26,12 +26,13 @@ type Task struct {
 	outputChannels []*Channel
 	intputChannels []*Channel
 
-	plan Plan	
+	// TODO: operator or operator tree
+	op Operator	
 
 	Cost int
 	PreferedLocation string
 
-	Executor string
+	Executor ExecutorID
 	Status   TaskStatus
 }
 
@@ -47,7 +48,7 @@ const (
 func (t *Task) ToPB() *pb.TaskRequest {
 	req := &pb.TaskRequest{
 		Id : t.ID,
-		PlanDescription: t.plan.Serialize(),
+		PlanDescription: t.op.Serialize(),
 	}
 	for _, c := range t.intputChannels {
 		req.Inputs = append(req.Inputs, c.ToPB())
@@ -71,6 +72,6 @@ func (c *Channel) ToPB() *pb.Channel {
 	}
 }
 
-type Plan interface {
+type Operator interface {
 	Serialize() string 
 }
