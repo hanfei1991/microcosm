@@ -17,12 +17,19 @@ The master module consists of several components:
     - Handle Heartbeat
     - Maintain the stats of Executors
       - Notify Resource Manager Udpate the status infos
-- **ResourceManager**. It implements several interfaces, including:
-  - GetResourceShapshot
-  - ApplyNewTasks
-  - UpdateExecutorStats
-  - Register/UnRegister Executor
-  - GetRescheduleTxn
+    - Once an executor is offline, it should notify the resource manager to reschedule all the tasks on it.
+- ResourceManager
+  - ResourceManager maintains the status of all executors and tasks.
+  - It implements several interfaces, including:
+    - GetResourceShapshot
+    - ApplyNewTasks
+    - UpdateExecutorStats
+    - Register/UnRegister Executor
+    - GetRescheduleTxn
+  - The Cost Model is supposed to have two types
+    - Expected Usage
+    - Real Usage
+  - The Occupied resources in `Resource Manager` should be `sum(max(expected usage, real usage)`. The real usage will be updated by hearbeat.
 - JobManager
   - Receive SubmitJob Request, Check the type of Job, Create the JobMaster.
   - JobMaster (per job)
