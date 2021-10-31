@@ -29,7 +29,6 @@ type ExecutorInfo struct {
 	Capability        int     `json:"cap"`
 	// What kind of information do we need?
 	//LastHeartbeatTime int64    
-	Status            int     `json:"status"`
 }
 
 type JobType int

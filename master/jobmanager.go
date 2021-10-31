@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/hanfei1991/microcosom/master/jobmaster/benchmark"
-	resource "github.com/hanfei1991/microcosom/master/resource_manager"
+	"github.com/hanfei1991/microcosom/master/cluster"
 	"github.com/hanfei1991/microcosom/model"
 	"github.com/hanfei1991/microcosom/pb"
 	"github.com/hanfei1991/microcosom/pkg/etcdutil"
@@ -18,10 +18,11 @@ type JobManager struct {
 
 	jobMasters []JobMaster
 	dispatchJobQueue chan JobMaster
-	resourceMgr resource.ResourceMgr
+	resourceMgr cluster.ResourceMgr
+	executorClient cluster.ExecutorClient
 }
 
-func (j *JobManager) SubmitJob(req *pb.SubmitJobRequest, s *scheduler.Scheduler) (error) {
+func (j *JobManager) SubmitJob(req *pb.SubmitJobRequest) (error) {
 	info := model.JobInfo{
 		Config: req.Config,
 		UserName: req.User,
@@ -40,6 +41,7 @@ func (j *JobManager) SubmitJob(req *pb.SubmitJobRequest, s *scheduler.Scheduler)
 	}
 	j.jobMasters[jobMaster.ID()] = jobMaster
 	j.dispatchJobQueue <- jobMaster
+	return nil
 }
 
 func (j *JobManager) Run() {
@@ -48,9 +50,9 @@ func (j *JobManager) Run() {
 		select {
 		case <- ticker.C:
 			// 
-			txn := j.resourceMgr.GetRescheduleTxn()
-			if txn != nil {
-				j.jobMasters[txn.JID].RescheduleTask(txn)
+			task := j.resourceMgr.GetRescheduleTask()
+			if task != nil {
+				j.jobMasters[task.JobID].RescheduleTask(task)
 			}
 		case jobMaster := <- j.dispatchJobQueue:
 			jobMaster.DispatchJob()

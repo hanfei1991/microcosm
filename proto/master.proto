@@ -21,10 +21,29 @@ service Master {
     //GetMembers returns the available master members
     //rpc GetMembers(GetMembersRequest) {}
 
-    //rpc Heartbeat() {}
+    rpc Heartbeat(HeartbeatRequest) returns(HeartbeatResponse) {}
     // TODO: Support more interface.
 
     // - PutClusterConfig
+}
+
+message HeartbeatRequest {
+    int32 executor_id = 1;
+    int32 resource_usage = 2;
+    repeated TaskStatus tasks = 3;
+    
+    uint64 timestamp = 4;
+    uint64 ttl = 5;
+}
+
+message TaskStatus {
+    int32 task_id = 1;
+    int32 resource_usage = 2;
+}
+
+message HeartbeatResponse {
+    ErrorCode err = 1;
+    string err_message = 2;
 }
 
 message SubmitJobRequest {

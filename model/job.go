@@ -22,7 +22,7 @@ func (j *Job) ToPB() (*pb.SubmitSubJobRequest) {
 
 type Task struct {
 	ID TaskID 
-
+	JobID JobID
 	outputChannels []*Channel
 	intputChannels []*Channel
 
@@ -32,7 +32,7 @@ type Task struct {
 	Cost int
 	PreferedLocation string
 
-	Executor ExecutorID
+	ExecutorID ExecutorID
 	Status   TaskStatus
 }
 

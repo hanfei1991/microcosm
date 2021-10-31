@@ -6,7 +6,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/hanfei1991/microcosom/master/scheduler"
+	"github.com/hanfei1991/microcosom/master/cluster"
 	"github.com/hanfei1991/microcosom/pkg/etcdutil"
 	"github.com/hanfei1991/microcosom/pkg/log"
 	"go.etcd.io/etcd/clientv3"
@@ -29,7 +29,7 @@ type Server struct {
 	//election *election.Election
 
 	// sched scheduler
-	scheduler  *scheduler.Scheduler
+	executorManager  *cluster.ExecutorManager
 	jobManager *JobManager
 	// 
 
@@ -39,10 +39,19 @@ type Server struct {
 func NewServer(cfg *Config) (*Server, error) {
 	server := &Server {
 		cfg: cfg,
-		scheduler: &scheduler.Scheduler{},
-		jobManager: &JobManager{},
+		executorManager: &cluster.ExecutorManager{},
+	}
+	server.jobManager = &JobManager{
+		dispatchJobQueue: make(chan JobMaster, 1024),
+		resourceMgr: server.executorManager,
+		executorClient: server.executorManager,
 	}
 	return server, nil
+}
+
+func (s *Server) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest)  (*pb.HeartbeatResponse, error) {
+
+	return &pb.HeartbeatResponse{}
 }
 
 // Submit Job
@@ -54,7 +63,7 @@ func (s *Server) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) (*pb.S
 func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorRequest) (*pb.RegisterExecutorResponse, error) {
 	// register executor to scheduler
 	// TODO: check leader, if not leader, return notLeader error.
-	err := s.scheduler.AddExecutor(req)
+	err := s.executorManager.AddExecutor(req)
 	if err != nil {
 		return &pb.RegisterExecutorResponse{
 			Err: pb.ErrorCode_Other,
