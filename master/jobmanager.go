@@ -8,7 +8,6 @@ import (
 	"github.com/hanfei1991/microcosom/master/cluster"
 	"github.com/hanfei1991/microcosom/model"
 	"github.com/hanfei1991/microcosom/pb"
-	"github.com/hanfei1991/microcosom/pkg/etcdutil"
 	"go.etcd.io/etcd/clientv3"
 )
 
@@ -16,8 +15,10 @@ import (
 type JobManager struct {
 	cli *clientv3.Client
 
-	jobMasters []JobMaster
+	jobMasters map[model.JobID]JobMaster
 	dispatchJobQueue chan JobMaster
+	scheduleTaskQueue chan *model.Task
+
 	resourceMgr cluster.ResourceMgr
 	executorClient cluster.ExecutorClient
 }
@@ -40,22 +41,5 @@ func (j *JobManager) SubmitJob(req *pb.SubmitJobRequest) (error) {
 		return errors.New("not yet implemented")
 	}
 	j.jobMasters[jobMaster.ID()] = jobMaster
-	j.dispatchJobQueue <- jobMaster
-	return nil
-}
-
-func (j *JobManager) Run() {
-	ticker := time.NewTicker(1 * time.Second)
-	for {
-		select {
-		case <- ticker.C:
-			// 
-			task := j.resourceMgr.GetRescheduleTask()
-			if task != nil {
-				j.jobMasters[task.JobID].RescheduleTask(task)
-			}
-		case jobMaster := <- j.dispatchJobQueue:
-			jobMaster.DispatchJob()
-		}
-	}
+	return jobMaster.DispatchJob()
 }

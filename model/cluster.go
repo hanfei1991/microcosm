@@ -1,18 +1,10 @@
 package model
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"fmt"
 
-type ExecutorStatus int
-
-const (
-	// The executor just start.
-	ExecutorBootstrap ExecutorStatus = iota
-	// The executor is running.
-	ExecutorRunning
-	// The executor is busy.
-	ExecutorBusy 
-	// The executor has been closed.
-	ExecutorClosed
+	"github.com/hanfei1991/microcosom/pkg/adapter"
 )
 
 type ExecutorID int32
@@ -31,13 +23,16 @@ type ExecutorInfo struct {
 	//LastHeartbeatTime int64    
 }
 
+func (e *ExecutorInfo) EtcdKey() string{
+	return adapter.ExecutorKeyAdapter.Encode(fmt.Sprintf("%d", e.ID))
+}
+
 type JobType int
 const (
 	JobDM JobType = iota
 	JobCDC
 	JobBenchmark
 )
-
 
 type JobInfo struct {
 	Type   JobType  `json:"type"`

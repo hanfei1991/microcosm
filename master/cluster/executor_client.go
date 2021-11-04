@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/hanfei1991/microcosom/model"
+	"github.com/hanfei1991/microcosom/pb"
 	"google.golang.org/grpc"
 )
 
@@ -14,10 +15,16 @@ type ExecutorClient interface {
 
 type executorClient struct {
 	conn *grpc.ClientConn
+	client pb.ExecutorClient
 }
 
 func (c *executorClient) send(ctx context.Context, req *ExecutorRequest) (*ExecutorResponse, error) {
-	// to implement
+	resp := &ExecutorResponse{}
+	switch req.Cmd {
+	case CmdDispatchSubJob:
+		c.client.SubmitSubJob(ctx, req.)
+	}
+
 }
 
 func newExecutorClient(addr string) (*executorClient, error) {
@@ -30,8 +37,19 @@ func newExecutorClient(addr string) (*executorClient, error) {
 	}, nil
 }
 
+type CmdType uint16
+
+const (
+	CmdDispatchSubJob CmdType = 1 + iota
+)
+
 type ExecutorRequest struct {
+	Cmd CmdType
 	Req interface{}
+}
+
+func (e *ExecutorRequest) DispatchSubJob() *pb.DispatchSubJob {
+
 }
 
 type ExecutorResponse struct {

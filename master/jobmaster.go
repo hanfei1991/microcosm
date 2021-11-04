@@ -7,6 +7,5 @@ import (
 
 type JobMaster interface {
 	DispatchJob() error
-	RescheduleTask(txn *resource.RescheduleTxn)
 	ID() model.JobID 
 }
