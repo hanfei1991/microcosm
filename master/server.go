@@ -19,8 +19,6 @@ import (
 
 // Server handles PRC requests for df master.
 
-// TODO: Do we need pd client?
-
 type Server struct {
 
 	etcd *embed.Etcd
@@ -50,27 +48,28 @@ func NewServer(cfg *Config) (*Server, error) {
 }
 
 func (s *Server) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest)  (*pb.HeartbeatResponse, error) {
-
-	return &pb.HeartbeatResponse{}
+	return s.executorManager.HandleHeartbeat(req)
 }
 
-// Submit Job
+// SubmitJob passes request onto "JobManager".
 func (s *Server) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) (*pb.SubmitJobResponse, error) {
 	return &pb.SubmitJobResponse{}, nil
 }
 
-// RegisterExecutor implements grpc interface.
+// RegisterExecutor implements grpc interface, and passes request onto executor manager.
 func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorRequest) (*pb.RegisterExecutorResponse, error) {
 	// register executor to scheduler
 	// TODO: check leader, if not leader, return notLeader error.
-	err := s.executorManager.AddExecutor(req)
+	execInfo, err := s.executorManager.AddExecutor(req)
 	if err != nil {
 		return &pb.RegisterExecutorResponse{
 			Err: pb.ErrorCode_Other,
 			ErrMessage: err.Error(),
 		}, nil
 	}
-	return &pb.RegisterExecutorResponse{}, nil
+	return &pb.RegisterExecutorResponse{
+		ExecutorId: int32(execInfo.ID),
+	}, nil
 }
 
 func (s *Server) DeleteExecutor() {

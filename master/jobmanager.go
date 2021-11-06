@@ -4,10 +4,11 @@ import (
 	"errors"
 	"time"
 
-	"github.com/hanfei1991/microcosom/master/jobmaster/benchmark"
 	"github.com/hanfei1991/microcosom/master/cluster"
+	"github.com/hanfei1991/microcosom/master/jobmaster/benchmark"
 	"github.com/hanfei1991/microcosom/model"
 	"github.com/hanfei1991/microcosom/pb"
+	"github.com/hanfei1991/microcosom/pkg/autoid"
 	"go.etcd.io/etcd/clientv3"
 )
 
@@ -19,27 +20,38 @@ type JobManager struct {
 	dispatchJobQueue chan JobMaster
 	scheduleTaskQueue chan *model.Task
 
+	idAllocater *autoid.Allocator
 	resourceMgr cluster.ResourceMgr
 	executorClient cluster.ExecutorClient
 }
 
-func (j *JobManager) SubmitJob(req *pb.SubmitJobRequest) (error) {
+// SubmitJob processes "SubmitJobRequest".
+func (j *JobManager) SubmitJob(req *pb.SubmitJobRequest) (*pb.SubmitJobResponse) {
 	info := model.JobInfo{
 		Config: req.Config,
 		UserName: req.User,
 	}
 	var jobMaster JobMaster	
 	var err error
+	resp := &pb.SubmitJobResponse{}
 	switch req.Tp {
 	case pb.SubmitJobRequest_Benchmark:
 		info.Type = model.JobBenchmark
-		jobMaster, err = benchmark.BuildBenchmarkJobMaster(info.Config)
+		jobMaster, err = benchmark.BuildBenchmarkJobMaster(info.Config, j.idAllocater, j.resourceMgr, j.executorClient)
 		if err != nil {
-			return err
+			resp.ErrMessage = err.Error()
+			return resp
 		}
 	default:
-		return errors.New("not yet implemented")
+		resp.ErrMessage = "unknown job type"
+		return resp
+	}
+	err = jobMaster.DispatchJob()
+	if err != nil {
+		resp.ErrMessage = err.Error()
+		return resp
 	}
 	j.jobMasters[jobMaster.ID()] = jobMaster
-	return jobMaster.DispatchJob()
+	resp.JobId = int32(jobMaster.ID())
+	return resp
 }

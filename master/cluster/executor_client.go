@@ -20,11 +20,12 @@ type executorClient struct {
 
 func (c *executorClient) send(ctx context.Context, req *ExecutorRequest) (*ExecutorResponse, error) {
 	resp := &ExecutorResponse{}
+	var err error
 	switch req.Cmd {
-	case CmdDispatchSubJob:
-		c.client.SubmitSubJob(ctx, req.)
+	case CmdSubmitSubJob:
+		resp.Resp, err = c.client.SubmitSubJob(ctx, req.SubmitSubJob())
 	}
-
+	return resp, err
 }
 
 func newExecutorClient(addr string) (*executorClient, error) {
@@ -40,7 +41,7 @@ func newExecutorClient(addr string) (*executorClient, error) {
 type CmdType uint16
 
 const (
-	CmdDispatchSubJob CmdType = 1 + iota
+	CmdSubmitSubJob CmdType = 1 + iota
 )
 
 type ExecutorRequest struct {
@@ -48,10 +49,10 @@ type ExecutorRequest struct {
 	Req interface{}
 }
 
-func (e *ExecutorRequest) DispatchSubJob() *pb.DispatchSubJob {
-
+func (e *ExecutorRequest) SubmitSubJob() *pb.SubmitSubJobRequest {
+	return e.Req.(*pb.SubmitSubJobRequest)
 }
 
 type ExecutorResponse struct {
-	resp interface{}
+	Resp interface{}
 }

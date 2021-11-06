@@ -28,7 +28,6 @@ type Task struct {
 
 	// TODO: operator or operator tree
 	op Operator	
-
 	Cost int
 	PreferedLocation string
 
@@ -47,8 +46,8 @@ const (
 
 func (t *Task) ToPB() *pb.TaskRequest {
 	req := &pb.TaskRequest{
-		Id : t.ID,
-		PlanDescription: t.op.Serialize(),
+		Id : int32(t.ID),
+		PlanDescription: string(t.op),
 	}
 	for _, c := range t.intputChannels {
 		req.Inputs = append(req.Inputs, c.ToPB())
@@ -67,11 +66,9 @@ type Channel struct {
 
 func (c *Channel) ToPB() *pb.Channel {
 	return &pb.Channel{
-		SrcId: c.src.ID,
-		DstId: c.dst.ID,
+		SrcId: int32(c.src.ID),
+		DstId: int32(c.dst.ID),
 	}
 }
 
-type Operator interface {
-	Serialize() string 
-}
+type Operator string 

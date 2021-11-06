@@ -25,22 +25,18 @@ type ExecutorManager struct {
 
 	mu sync.Mutex
 	executors map[model.ExecutorID]*Executor
-//	migrateTasks []*model.Task
 
 	idAllocator *autoid.Allocator
 	haStore ha.HAStore
 }
 
-func (e *ExecutorManager) removeExecutor(id model.ExecutorID) error {
+func (e *ExecutorManager) RemoveExecutor(id model.ExecutorID) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	exec, ok := e.executors[id]
 	if !ok {
 		return errors.New("cannot find executor")
 	}
-	//for _, t := range exec.resource.Tasks {
-	//	e.migrateTasks = append(e.migrateTasks, t.Task)
-	//}
 	delete(e.executors, id)
 	err := e.haStore.Del(exec.EtcdKey())
 	if err != nil {
@@ -50,36 +46,27 @@ func (e *ExecutorManager) removeExecutor(id model.ExecutorID) error {
 }
 
 func (e *ExecutorManager) HandleHeartbeat(req * pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	exec, ok := s.executors[model.ExecutorID(req.ExecutorId)]
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	exec, ok := e.executors[model.ExecutorID(req.ExecutorId)]
 	if !ok {
 		return &pb.HeartbeatResponse{ErrMessage: "not found executor"}, nil
 	}
+	e.mu.Lock()
 	exec.lastUpdateTime = time.Unix(int64(req.Timestamp), 0)
 	exec.heartbeatTTL = time.Duration(req.Ttl) * time.Millisecond
 	usage := ResourceUsage(req.ResourceUsage)
 	exec.resource.Used = usage
+	e.mu.Unlock()
 	resp := &pb.HeartbeatResponse{}
-	for _, taskRes := range req.Tasks {
-		id := taskRes.TaskId
-		used := taskRes.ResourceUsage
-		if t, ok := exec.resource.Tasks[model.TaskID(id)]; !ok {
-			resp.ErrMessage = "can find task"	
-		} else {
-			t.Used = ResourceUsage(used)
-		}
-	}
 	return resp, nil
 }
 
 // AddExecutor processes the `RegisterExecutorRequest`.
-// 
 func (e *ExecutorManager) AddExecutor(req *pb.RegisterExecutorRequest) (*model.ExecutorInfo, error) {
-
 	e.mu.Lock()
 	info := &model.ExecutorInfo{
-		ID: model.ExecutorID(s.idAllocator.AllocID()),
+		ID: model.ExecutorID(e.idAllocator.AllocID()),
 		Addr: req.Address,
 		Capability: int(req.Capability),
 	}
@@ -115,15 +102,13 @@ const (
 	Running ExecutorStatus = iota
 	Disconnected
 	Tombstone
+	Busy
 )
 
 type Executor struct {
 	model.ExecutorInfo
 	Status ExecutorStatus
 	resource ExecutorResource
-
-	// Executor is busy and will not accept any new task.
-	Busy bool
 
 	mu sync.Mutex
 	// Last heartbeat
@@ -151,7 +136,7 @@ func (e *ExecutorManager) check() error {
 	for id, exec := range e.executors {
 		if !exec.checkAlive() {
 			e.mu.Unlock()
-			err := e.removeExecutor(id)
+			err := e.RemoveExecutor(id)
 			return err
 		}
 	}
@@ -178,29 +163,13 @@ func (e *ExecutorManager) Send(ctx context.Context, id model.ExecutorID, req *Ex
 // Resource is the min unit of resource that we count.
 type ResourceUsage int
 
-//type Task struct {
-//	*model.Task
-//	Reserved ResourceUnit
-//	Used     ResourceUnit
-//}
-
 type ExecutorResource struct {
 	ID model.ExecutorID
 
 	Capacity ResourceUsage
 	Reserved ResourceUsage
 	Used     ResourceUsage
-	//Tasks    map[model.TaskID]*Task
 }
-
-//func (e *ExecutorResource) appendTask(t *model.Task) {
-//	task := &Task{
-//		Task: t,
-//		Reserved: ResourceUnit(t.Cost),
-//	}
-//	e.Tasks[t.ID] = task
-//	e.Reserved += task.Reserved
-//}
 
 func (e *ExecutorResource) getSnapShot() *ExecutorResource {
 	r := &ExecutorResource{
@@ -208,8 +177,5 @@ func (e *ExecutorResource) getSnapShot() *ExecutorResource {
 		Reserved: e.Reserved,
 		Used: e.Used,
 	}
-	//for _, t:= range e.Tasks {
-	//	r.Tasks[t.ID] = t
-	//}
 	return r
 }
