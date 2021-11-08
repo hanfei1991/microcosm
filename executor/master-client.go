@@ -1,11 +1,13 @@
 package executor
 
 import (
+	"context"
 	"errors"
 	"strings"
 
 	"github.com/hanfei1991/microcosom/pb"
-	"github.com/hanfei1991/microcosom/pkg/context"
+	"github.com/hanfei1991/microcosom/pkg/log"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
 
@@ -28,6 +30,7 @@ func NewMasterClient(cfg *Config) (*MasterClient, error) {
 	}
 	client.urls = getJoinURLs(cfg.Join)
 	client.leader = client.urls[0]
+	log.L().Logger.Info("dailing master", zap.String("leader", client.leader))
 	var err error
 	client.conn, err = grpc.Dial(client.leader, grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {
@@ -37,10 +40,10 @@ func NewMasterClient(cfg *Config) (*MasterClient, error) {
 	return client, nil
 }
 
-func (c *MasterClient) SendHeartbeat(req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
-	return c.client.Heartbeat(context.Background().Ctx, req)
+func (c *MasterClient) SendHeartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
+	return c.client.Heartbeat(ctx, req)
 }
 
-func (c *MasterClient) RegisterExecutor(req *pb.RegisterExecutorRequest) (resp *pb.RegisterExecutorResponse, err error) {
-	return c.client.RegisterExecutor(context.Background().Ctx, req)
+func (c *MasterClient) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorRequest) (resp *pb.RegisterExecutorResponse, err error) {
+	return c.client.RegisterExecutor(ctx, req)
 }

@@ -62,6 +62,7 @@ func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorR
 	// TODO: check leader, if not leader, return notLeader error.
 	execInfo, err := s.executorManager.AddExecutor(req)
 	if err != nil {
+		log.L().Logger.Error("add executor failed", zap.Error(err))
 		return &pb.RegisterExecutorResponse{
 			Err: pb.ErrorCode_Other,
 			ErrMessage: err.Error(),
@@ -111,10 +112,16 @@ func (s *Server) Start(ctx context.Context) (err error) {
 
 	// generate grpcServer
 	s.etcd, err = startEtcd(etcdCfg, gRPCSvr, nil, time.Minute)
+	if err != nil {
+		return
+	}
 
 	// start grpc server
 
 	s.etcdClient, err = etcdutil.CreateClient([]string{withHost(s.cfg.MasterAddr)}, nil)
+	if err != nil {
+		return
+	}
 
 	// start leader election
 	// TODO: Consider election. And Notify workers when leader changes.

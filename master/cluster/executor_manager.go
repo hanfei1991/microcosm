@@ -10,8 +10,10 @@ import (
 	"github.com/hanfei1991/microcosom/pb"
 	"github.com/hanfei1991/microcosom/pkg/autoid"
 	"github.com/hanfei1991/microcosom/pkg/ha"
+	"github.com/hanfei1991/microcosom/pkg/log"
 	"github.com/pingcap/errors"
 	"go.etcd.io/etcd/clientv3"
+	"go.uber.org/zap"
 )
 
 var _ ExecutorClient = &ExecutorManager{}
@@ -64,6 +66,7 @@ func (e *ExecutorManager) HandleHeartbeat(req * pb.HeartbeatRequest) (*pb.Heartb
 
 // AddExecutor processes the `RegisterExecutorRequest`.
 func (e *ExecutorManager) AddExecutor(req *pb.RegisterExecutorRequest) (*model.ExecutorInfo, error) {
+	log.L().Logger.Info("add executor", zap.String("addr", req.Address))
 	e.mu.Lock()
 	info := &model.ExecutorInfo{
 		ID: model.ExecutorID(e.idAllocator.AllocID()),

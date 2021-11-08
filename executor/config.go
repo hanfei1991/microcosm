@@ -87,6 +87,7 @@ type Config struct {
 	ConfigFile string `toml:"config-file" json:"config-file"`
 	// TODO: in the future dm-workers should share a same ttl from dm-master
 	KeepAliveTTL      int64 `toml:"keepalive-ttl" json:"keepalive-ttl"`
+	KeepAliveInterval int64 `toml:"keepalive-interval" json:"keepalive-interval"`
 
 	printVersion      bool
 	printSampleConfig bool

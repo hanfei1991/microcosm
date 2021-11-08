@@ -9,6 +9,7 @@ import (
 	"github.com/hanfei1991/microcosom/model"
 	"github.com/hanfei1991/microcosom/pb"
 	"github.com/hanfei1991/microcosom/pkg/log"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
 
@@ -40,39 +41,52 @@ func (s *Server) CancelSubJob(ctx context.Context, req *pb.CancelSubJobRequest) 
 func (s *Server) Start(ctx context.Context) error {
 	// Start grpc server
 
-	rootLis, err := net.Listen("tcp", s.cfg.WorkerAddr)
+	rootLis, err := net.Listen("tcp", "127.0.0.1:10241")
 
 	if err != nil {
 		return err
 	}
+
+	log.L().Logger.Info("listen address", zap.String("addr", s.cfg.WorkerAddr))
 
 	s.srv = grpc.NewServer()
 	pb.RegisterExecutorServer(s.srv, s)
 
-	err = s.srv.Serve(rootLis)
-	if err != nil {
-		return err
-	}
+	grpcExitCh := make(chan struct{}, 1)
+
+	go func() {
+		err1 := s.srv.Serve(rootLis)
+		if err1 != nil {
+			log.L().Logger.Error("start grpc server failed", zap.Error(err))
+		}
+		grpcExitCh <- struct{}{}
+	}()
 
 	// Register myself
 	s.cli, err = NewMasterClient(s.cfg)
 	if err != nil {
 		return err
 	}
+	log.L().Logger.Info("master client init successful")
 	registerReq := &pb.RegisterExecutorRequest{
 		Address: s.cfg.WorkerAddr,
 		Capability: 100,
 	}
-	resp, err := s.cli.RegisterExecutor(registerReq)
+
+	resp, err := s.cli.RegisterExecutor(ctx, registerReq)
 	if err != nil {
 		return err
 	}
 	s.ID = model.ExecutorID(resp.ExecutorId)
+	log.L().Logger.Info("register successful", zap.Int32("id", int32(s.ID)))
+
 	// Start Heartbeat
-	ticker := time.NewTicker(500 * time.Millisecond)
+	ticker := time.NewTicker(time.Duration(s.cfg.KeepAliveInterval) * time.Millisecond)
 	for {
 		select {
 		case <-ctx.Done():
+			return nil
+		case <- grpcExitCh:
 			return nil
 		case t := <-ticker.C:
 			req := &pb.HeartbeatRequest{
@@ -81,10 +95,10 @@ func (s *Server) Start(ctx context.Context) error {
 				Timestamp: uint64(t.Unix()),
 				Ttl: uint64(s.cfg.KeepAliveTTL),
 			}
-			resp, err := s.cli.client.Heartbeat(ctx, req)
+			resp, err := s.cli.SendHeartbeat(ctx, req)
 			if err != nil {
 				log.L().Error("heartbeat meet error")
-				if s.lastHearbeatTime.Add(time.Duration(s.cfg.KeepAliveTTL)).Before(time.Now()) {
+				if s.lastHearbeatTime.Add(time.Duration(s.cfg.KeepAliveTTL) * time.Millisecond).Before(time.Now()) {
 					return err
 				}
 				continue
@@ -92,6 +106,7 @@ func (s *Server) Start(ctx context.Context) error {
 			if resp.ErrMessage != "" {
 				return errors.New(resp.ErrMessage)
 			}
+			log.L().Error("heartbeat success")
 			s.lastHearbeatTime = t
 		}
 	}
