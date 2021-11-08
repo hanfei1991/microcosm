@@ -1,9 +1,6 @@
 package master
 
 import (
-	"errors"
-	"time"
-
 	"github.com/hanfei1991/microcosom/master/cluster"
 	"github.com/hanfei1991/microcosom/master/jobmaster/benchmark"
 	"github.com/hanfei1991/microcosom/model"

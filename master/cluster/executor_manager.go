@@ -96,18 +96,9 @@ func (e *ExecutorManager) AddExecutor(req *pb.RegisterExecutorRequest) (*model.E
 	return info, nil
 }
 
-type ExecutorStatus int32
-
-const (
-	Running ExecutorStatus = iota
-	Disconnected
-	Tombstone
-	Busy
-)
-
 type Executor struct {
 	model.ExecutorInfo
-	Status ExecutorStatus
+	Status model.ExecutorStatus
 	resource ExecutorResource
 
 	mu sync.Mutex
@@ -119,13 +110,13 @@ type Executor struct {
 }
 
 func (e *Executor) checkAlive() bool {
-	if atomic.LoadInt32((*int32)(&e.Status)) == int32(Tombstone) {
+	if atomic.LoadInt32((*int32)(&e.Status)) == int32(model.Tombstone) {
 		return false	
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.lastUpdateTime.Add(e.heartbeatTTL).Before(time.Now()) {
-		atomic.StoreInt32((*int32)(&e.Status), int32(Tombstone))
+		atomic.StoreInt32((*int32)(&e.Status), int32(model.Tombstone))
 		return false	
 	}
 	return true
@@ -154,7 +145,7 @@ func (e *ExecutorManager) Send(ctx context.Context, id model.ExecutorID, req *Ex
 	e.mu.Lock()
 	resp, err := exec.client.send(ctx, req)
 	if err != nil {
-		atomic.CompareAndSwapInt32((*int32)(&exec.Status), int32(Running), int32(Disconnected))
+		atomic.CompareAndSwapInt32((*int32)(&exec.Status), int32(model.Running), int32(model.Disconnected))
 		return resp, err
 	}
 	return resp, nil

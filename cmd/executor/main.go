@@ -8,7 +8,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/hanfei1991/microcosom/master"
+	"github.com/hanfei1991/microcosom/executor"
 	"github.com/hanfei1991/microcosom/pkg/log"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -20,7 +20,7 @@ import (
 // 4. start server
 func main() {
 	// 1. parse config
-	cfg := master.NewConfig()
+	cfg := executor.NewConfig()
 	err := cfg.Parse(os.Args[1:])
 	switch errors.Cause(err) {
 	case nil:
@@ -44,18 +44,11 @@ func main() {
 
 	// 3. start server
 	ctx, cancel := context.WithCancel(context.Background())
-	server, err := master.NewServer(cfg)
+	server := executor.NewServer(cfg)
 	if err != nil {
 		log.L().Error("fail to start dm-master", zap.Error(err))
 		os.Exit(2)
 	}
-	err = server.Start(ctx)
-	if err != nil {
-		log.L().Error("fail to start dm-master", zap.Error(err))
-		os.Exit(2)
-	}
-
-	// 4. wait for stopping the process
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc,
 		syscall.SIGHUP,
@@ -67,5 +60,9 @@ func main() {
 		log.L().Info("got signal to exit", zap.Stringer("signal", sig))
 		cancel()
 	}()
-	<-ctx.Done()
+	err = server.Start(ctx)
+	if err != nil {
+		log.L().Error("fail to start dm-master", zap.Error(err))
+		os.Exit(2)
+	}
 }

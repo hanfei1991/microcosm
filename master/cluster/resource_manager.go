@@ -1,7 +1,6 @@
 package cluster
 
-import (
-)
+import "github.com/hanfei1991/microcosom/model"
 
 // ResouceManager manages the resources of the clusters.
 type ResourceMgr interface {
@@ -19,7 +18,7 @@ func (r *ExecutorManager) GetResourceSnapshot() *ResourceSnapshot {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, exec := range r.executors {
-		if exec.Status == Running && exec.resource.Capacity > exec.resource.Reserved && exec.resource.Capacity > exec.resource.Used{
+		if exec.Status == model.Running && exec.resource.Capacity > exec.resource.Reserved && exec.resource.Capacity > exec.resource.Used{
 			snapshot.Executors = append(snapshot.Executors, exec.resource.getSnapShot())
 		}
 	}

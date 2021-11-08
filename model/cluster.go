@@ -34,6 +34,15 @@ const (
 	JobBenchmark
 )
 
+type ExecutorStatus int32
+
+const (
+	Running ExecutorStatus = iota
+	Disconnected
+	Tombstone
+	Busy
+)
+
 type JobInfo struct {
 	Type   JobType  `json:"type"`
 	Config string  `json:"config"` // describes a cdc/dm or other type of job.

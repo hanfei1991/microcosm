@@ -5,7 +5,7 @@ package pb;
 
 service Executor {
     rpc SubmitSubJob(SubmitSubJobRequest) returns (SubmitSubJobResponse) {}
-    rpc LaunchSubJob(LaunchSubJobRequest) returns (LaunchSubJobResponse) {}
+    //rpc LaunchSubJob(LaunchSubJobRequest) returns (LaunchSubJobResponse) {}
     rpc CancelSubJob(CancelSubJobRequest) returns (CancelSubJobResponse) {}
 }
 

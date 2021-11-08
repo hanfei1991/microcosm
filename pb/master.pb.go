@@ -81,15 +81,15 @@ func (x SubmitJobRequest_JobType) String() string {
 }
 
 func (SubmitJobRequest_JobType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_f9c348dec43a6705, []int{3, 0}
+	return fileDescriptor_f9c348dec43a6705, []int{2, 0}
 }
 
 type HeartbeatRequest struct {
-	ExecutorId    int32         `protobuf:"varint,1,opt,name=executor_id,json=executorId,proto3" json:"executor_id,omitempty"`
-	ResourceUsage int32         `protobuf:"varint,2,opt,name=resource_usage,json=resourceUsage,proto3" json:"resource_usage,omitempty"`
-	Tasks         []*TaskStatus `protobuf:"bytes,3,rep,name=tasks,proto3" json:"tasks,omitempty"`
-	Timestamp     uint64        `protobuf:"varint,4,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
-	Ttl           uint64        `protobuf:"varint,5,opt,name=ttl,proto3" json:"ttl,omitempty"`
+	ExecutorId    int32  `protobuf:"varint,1,opt,name=executor_id,json=executorId,proto3" json:"executor_id,omitempty"`
+	ResourceUsage int32  `protobuf:"varint,2,opt,name=resource_usage,json=resourceUsage,proto3" json:"resource_usage,omitempty"`
+	Status        int32  `protobuf:"varint,3,opt,name=status,proto3" json:"status,omitempty"`
+	Timestamp     uint64 `protobuf:"varint,4,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	Ttl           uint64 `protobuf:"varint,5,opt,name=ttl,proto3" json:"ttl,omitempty"`
 }
 
 func (m *HeartbeatRequest) Reset()         { *m = HeartbeatRequest{} }
@@ -139,11 +139,11 @@ func (m *HeartbeatRequest) GetResourceUsage() int32 {
 	return 0
 }
 
-func (m *HeartbeatRequest) GetTasks() []*TaskStatus {
+func (m *HeartbeatRequest) GetStatus() int32 {
 	if m != nil {
-		return m.Tasks
+		return m.Status
 	}
-	return nil
+	return 0
 }
 
 func (m *HeartbeatRequest) GetTimestamp() uint64 {
@@ -160,58 +160,6 @@ func (m *HeartbeatRequest) GetTtl() uint64 {
 	return 0
 }
 
-type TaskStatus struct {
-	TaskId        int32 `protobuf:"varint,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
-	ResourceUsage int32 `protobuf:"varint,2,opt,name=resource_usage,json=resourceUsage,proto3" json:"resource_usage,omitempty"`
-}
-
-func (m *TaskStatus) Reset()         { *m = TaskStatus{} }
-func (m *TaskStatus) String() string { return proto.CompactTextString(m) }
-func (*TaskStatus) ProtoMessage()    {}
-func (*TaskStatus) Descriptor() ([]byte, []int) {
-	return fileDescriptor_f9c348dec43a6705, []int{1}
-}
-func (m *TaskStatus) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *TaskStatus) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_TaskStatus.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalToSizedBuffer(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
-}
-func (m *TaskStatus) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TaskStatus.Merge(m, src)
-}
-func (m *TaskStatus) XXX_Size() int {
-	return m.Size()
-}
-func (m *TaskStatus) XXX_DiscardUnknown() {
-	xxx_messageInfo_TaskStatus.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_TaskStatus proto.InternalMessageInfo
-
-func (m *TaskStatus) GetTaskId() int32 {
-	if m != nil {
-		return m.TaskId
-	}
-	return 0
-}
-
-func (m *TaskStatus) GetResourceUsage() int32 {
-	if m != nil {
-		return m.ResourceUsage
-	}
-	return 0
-}
-
 type HeartbeatResponse struct {
 	Err        ErrorCode `protobuf:"varint,1,opt,name=err,proto3,enum=pb.ErrorCode" json:"err,omitempty"`
 	ErrMessage string    `protobuf:"bytes,2,opt,name=err_message,json=errMessage,proto3" json:"err_message,omitempty"`
@@ -221,7 +169,7 @@ func (m *HeartbeatResponse) Reset()         { *m = HeartbeatResponse{} }
 func (m *HeartbeatResponse) String() string { return proto.CompactTextString(m) }
 func (*HeartbeatResponse) ProtoMessage()    {}
 func (*HeartbeatResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_f9c348dec43a6705, []int{2}
+	return fileDescriptor_f9c348dec43a6705, []int{1}
 }
 func (m *HeartbeatResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -275,7 +223,7 @@ func (m *SubmitJobRequest) Reset()         { *m = SubmitJobRequest{} }
 func (m *SubmitJobRequest) String() string { return proto.CompactTextString(m) }
 func (*SubmitJobRequest) ProtoMessage()    {}
 func (*SubmitJobRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_f9c348dec43a6705, []int{3}
+	return fileDescriptor_f9c348dec43a6705, []int{2}
 }
 func (m *SubmitJobRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -335,7 +283,7 @@ func (m *SubmitJobResponse) Reset()         { *m = SubmitJobResponse{} }
 func (m *SubmitJobResponse) String() string { return proto.CompactTextString(m) }
 func (*SubmitJobResponse) ProtoMessage()    {}
 func (*SubmitJobResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_f9c348dec43a6705, []int{4}
+	return fileDescriptor_f9c348dec43a6705, []int{3}
 }
 func (m *SubmitJobResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -388,17 +336,16 @@ func (m *SubmitJobResponse) GetJobId() int32 {
 type RegisterExecutorRequest struct {
 	// dm need 'worker-name' to locate the worker.
 	// TODO: Do we really need a "worker name"? Can we use address to identify an executor?
-	Name       string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Address    string `protobuf:"bytes,2,opt,name=address,proto3" json:"address,omitempty"`
-	Version    string `protobuf:"bytes,3,opt,name=version,proto3" json:"version,omitempty"`
-	Capability int64  `protobuf:"varint,4,opt,name=capability,proto3" json:"capability,omitempty"`
+	Address    string `protobuf:"bytes,1,opt,name=address,proto3" json:"address,omitempty"`
+	Version    string `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	Capability int64  `protobuf:"varint,3,opt,name=capability,proto3" json:"capability,omitempty"`
 }
 
 func (m *RegisterExecutorRequest) Reset()         { *m = RegisterExecutorRequest{} }
 func (m *RegisterExecutorRequest) String() string { return proto.CompactTextString(m) }
 func (*RegisterExecutorRequest) ProtoMessage()    {}
 func (*RegisterExecutorRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_f9c348dec43a6705, []int{5}
+	return fileDescriptor_f9c348dec43a6705, []int{4}
 }
 func (m *RegisterExecutorRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -426,13 +373,6 @@ func (m *RegisterExecutorRequest) XXX_DiscardUnknown() {
 }
 
 var xxx_messageInfo_RegisterExecutorRequest proto.InternalMessageInfo
-
-func (m *RegisterExecutorRequest) GetName() string {
-	if m != nil {
-		return m.Name
-	}
-	return ""
-}
 
 func (m *RegisterExecutorRequest) GetAddress() string {
 	if m != nil {
@@ -465,7 +405,7 @@ func (m *RegisterExecutorResponse) Reset()         { *m = RegisterExecutorRespon
 func (m *RegisterExecutorResponse) String() string { return proto.CompactTextString(m) }
 func (*RegisterExecutorResponse) ProtoMessage()    {}
 func (*RegisterExecutorResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_f9c348dec43a6705, []int{6}
+	return fileDescriptor_f9c348dec43a6705, []int{5}
 }
 func (m *RegisterExecutorResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -519,7 +459,6 @@ func init() {
 	proto.RegisterEnum("pb.ErrorCode", ErrorCode_name, ErrorCode_value)
 	proto.RegisterEnum("pb.SubmitJobRequest_JobType", SubmitJobRequest_JobType_name, SubmitJobRequest_JobType_value)
 	proto.RegisterType((*HeartbeatRequest)(nil), "pb.HeartbeatRequest")
-	proto.RegisterType((*TaskStatus)(nil), "pb.TaskStatus")
 	proto.RegisterType((*HeartbeatResponse)(nil), "pb.HeartbeatResponse")
 	proto.RegisterType((*SubmitJobRequest)(nil), "pb.SubmitJobRequest")
 	proto.RegisterType((*SubmitJobResponse)(nil), "pb.SubmitJobResponse")
@@ -530,43 +469,40 @@ func init() {
 func init() { proto.RegisterFile("master.proto", fileDescriptor_f9c348dec43a6705) }
 
 var fileDescriptor_f9c348dec43a6705 = []byte{
-	// 573 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x54, 0xcd, 0x4e, 0xd5, 0x40,
-	0x14, 0xee, 0xb4, 0xf7, 0xc7, 0x1e, 0x84, 0x94, 0x13, 0x91, 0x06, 0x49, 0x21, 0x8d, 0x26, 0x68,
-	0xcc, 0x35, 0xc1, 0x9d, 0x4b, 0x7e, 0x12, 0x21, 0xfc, 0x24, 0x05, 0xd6, 0x64, 0x7a, 0x7b, 0x84,
-	0x02, 0xbd, 0x53, 0x67, 0xa6, 0x46, 0x16, 0x2e, 0x7c, 0x03, 0x77, 0xbe, 0x86, 0x8f, 0xe1, 0x12,
-	0x77, 0x2e, 0x0d, 0xbc, 0x88, 0x99, 0xb9, 0xbd, 0x97, 0x9b, 0x82, 0x89, 0x0b, 0x76, 0x73, 0xbe,
-	0x33, 0xe7, 0x9b, 0xef, 0xfc, 0x0d, 0x3c, 0x2e, 0xb8, 0xd2, 0x24, 0x7b, 0xa5, 0x14, 0x5a, 0xa0,
-	0x5b, 0xa6, 0xf1, 0x0f, 0x06, 0xc1, 0x7b, 0xe2, 0x52, 0xa7, 0xc4, 0x75, 0x42, 0x1f, 0x2b, 0x52,
-	0x1a, 0x97, 0x60, 0x8a, 0x3e, 0x53, 0xbf, 0xd2, 0x42, 0x1e, 0xe7, 0x59, 0xc8, 0x96, 0xd9, 0x4a,
-	0x3b, 0x81, 0x11, 0xb4, 0x95, 0xe1, 0x0b, 0x98, 0x91, 0xa4, 0x44, 0x25, 0xfb, 0x74, 0x5c, 0x29,
-	0x7e, 0x42, 0xa1, 0x6b, 0xef, 0x4c, 0x8f, 0xd0, 0x23, 0x03, 0xe2, 0x73, 0x68, 0x6b, 0xae, 0xce,
-	0x55, 0xe8, 0x2d, 0x7b, 0x2b, 0x53, 0xab, 0x33, 0xbd, 0x32, 0xed, 0x1d, 0x72, 0x75, 0x7e, 0xa0,
-	0xb9, 0xae, 0x54, 0x32, 0x74, 0xe2, 0x22, 0xf8, 0x3a, 0x2f, 0x48, 0x69, 0x5e, 0x94, 0x61, 0x6b,
-	0x99, 0xad, 0xb4, 0x92, 0x5b, 0x00, 0x03, 0xf0, 0xb4, 0xbe, 0x08, 0xdb, 0x16, 0x37, 0xc7, 0x78,
-	0x07, 0xe0, 0x96, 0x04, 0xe7, 0xa1, 0x6b, 0x68, 0x6e, 0x75, 0x76, 0x8c, 0xf9, 0xdf, 0x1a, 0xe3,
-	0x23, 0x98, 0x9d, 0xc8, 0x5f, 0x95, 0x62, 0xa0, 0x08, 0x97, 0xc0, 0x23, 0x29, 0x2d, 0xe1, 0xcc,
-	0xea, 0xb4, 0x91, 0xbd, 0x29, 0xa5, 0x90, 0xeb, 0x22, 0xa3, 0xc4, 0x78, 0x6c, 0x85, 0xa4, 0x3c,
-	0x2e, 0x48, 0x8d, 0x99, 0xfd, 0x04, 0x48, 0xca, 0xdd, 0x21, 0x12, 0x7f, 0x67, 0x10, 0x1c, 0x54,
-	0x69, 0x91, 0xeb, 0x6d, 0x91, 0x8e, 0xea, 0xfa, 0x1a, 0x5c, 0x5d, 0xd6, 0xac, 0x8b, 0x86, 0xb5,
-	0x79, 0xa3, 0xb7, 0x2d, 0xd2, 0xc3, 0xcb, 0x92, 0x12, 0x57, 0x97, 0xf8, 0x14, 0x3a, 0x7d, 0x31,
-	0xf8, 0x90, 0x9f, 0xd4, 0xf4, 0xb5, 0x85, 0x08, 0xad, 0x4a, 0x91, 0x0c, 0x3d, 0x8b, 0xda, 0x73,
-	0xfc, 0x12, 0xba, 0x75, 0x28, 0x76, 0xc0, 0xdd, 0xd8, 0x0d, 0x1c, 0xec, 0x82, 0xb7, 0xbe, 0xb1,
-	0x1e, 0x30, 0x9c, 0x06, 0x7f, 0x8d, 0x06, 0xfd, 0xd3, 0x82, 0xcb, 0xf3, 0xc0, 0x8d, 0x2f, 0x60,
-	0x76, 0xe2, 0xd9, 0x87, 0x4a, 0x18, 0xe7, 0xa0, 0x73, 0x26, 0x52, 0xd3, 0x06, 0xcf, 0x96, 0xb9,
-	0x7d, 0x26, 0xd2, 0xad, 0x2c, 0xfe, 0xca, 0x60, 0x3e, 0xa1, 0x93, 0xdc, 0x8c, 0xdd, 0x66, 0x3d,
-	0x40, 0xa3, 0x72, 0x20, 0xb4, 0x06, 0xbc, 0x20, 0xfb, 0xaa, 0x9f, 0xd8, 0x33, 0x86, 0xd0, 0xe5,
-	0x59, 0x26, 0x49, 0xa9, 0xfa, 0x8d, 0x91, 0x69, 0x3c, 0x9f, 0x48, 0xaa, 0x5c, 0x0c, 0xea, 0xcc,
-	0x47, 0x26, 0x46, 0x00, 0x7d, 0x5e, 0xf2, 0x34, 0xbf, 0xc8, 0xf5, 0xa5, 0x9d, 0x20, 0x2f, 0x99,
-	0x40, 0xe2, 0x2f, 0x10, 0xde, 0x95, 0xf0, 0x60, 0x89, 0x37, 0x96, 0xc5, 0x6b, 0x2e, 0xcb, 0xab,
-	0x37, 0xe0, 0x8f, 0x39, 0xf1, 0x11, 0xb4, 0xf6, 0xc4, 0x80, 0x02, 0xc7, 0xb4, 0x65, 0x4f, 0xe8,
-	0x1d, 0xe2, 0x19, 0xc9, 0x80, 0xa1, 0x0f, 0xed, 0x7d, 0x7d, 0x4a, 0x32, 0x70, 0x57, 0x7f, 0x31,
-	0xe8, 0xec, 0xda, 0x45, 0xc5, 0x7d, 0x08, 0x9a, 0xd2, 0xf1, 0x99, 0x51, 0xf9, 0x8f, 0x9a, 0x2e,
-	0x2c, 0xde, 0xef, 0x1c, 0x66, 0x1b, 0x3b, 0xf8, 0x0e, 0xfc, 0x71, 0xf7, 0xf1, 0xc9, 0x7d, 0x33,
-	0xb8, 0x30, 0xd7, 0x40, 0x27, 0x63, 0xc7, 0xab, 0x32, 0x8c, 0x6d, 0xfe, 0x1c, 0xc3, 0xd8, 0x3b,
-	0xfb, 0x14, 0x3b, 0x6b, 0xe1, 0xcf, 0xeb, 0x88, 0x5d, 0x5d, 0x47, 0xec, 0xcf, 0x75, 0xc4, 0xbe,
-	0xdd, 0x44, 0xce, 0xd5, 0x4d, 0xe4, 0xfc, 0xbe, 0x89, 0x9c, 0xb4, 0x63, 0x3f, 0xa3, 0xb7, 0x7f,
-	0x03, 0x00, 0x00, 0xff, 0xff, 0xbe, 0x1c, 0x6e, 0x4b, 0x9c, 0x04, 0x00, 0x00,
+	// 528 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x54, 0xcd, 0x6e, 0xd3, 0x40,
+	0x10, 0xf6, 0xda, 0x49, 0x8a, 0x07, 0x5a, 0xb9, 0x2b, 0x0a, 0x56, 0x89, 0xdc, 0xca, 0x12, 0x52,
+	0x41, 0x28, 0x48, 0xe5, 0xc6, 0xb1, 0x69, 0x25, 0x5a, 0x91, 0x56, 0x32, 0xf4, 0x1c, 0xad, 0xe3,
+	0x21, 0x75, 0x89, 0xb3, 0x66, 0x76, 0x8d, 0xe8, 0x81, 0x77, 0xe0, 0xc6, 0x9d, 0xa7, 0xe1, 0x58,
+	0x6e, 0x1c, 0x51, 0xf2, 0x22, 0xc8, 0x1b, 0x3b, 0x44, 0x6e, 0xb9, 0xf5, 0xb6, 0xf3, 0xcd, 0xce,
+	0xcf, 0xb7, 0xdf, 0xcc, 0xc2, 0x83, 0x4c, 0x28, 0x8d, 0xd4, 0xcb, 0x49, 0x6a, 0xc9, 0xed, 0x3c,
+	0x0e, 0x7f, 0x30, 0xf0, 0xde, 0xa0, 0x20, 0x1d, 0xa3, 0xd0, 0x11, 0x7e, 0x2a, 0x50, 0x69, 0xbe,
+	0x03, 0xf7, 0xf1, 0x0b, 0x8e, 0x0a, 0x2d, 0x69, 0x98, 0x26, 0x3e, 0xdb, 0x65, 0x7b, 0xed, 0x08,
+	0x6a, 0xe8, 0x38, 0xe1, 0x4f, 0x61, 0x83, 0x50, 0xc9, 0x82, 0x46, 0x38, 0x2c, 0x94, 0x18, 0xa3,
+	0x6f, 0x9b, 0x3b, 0xeb, 0x35, 0x7a, 0x5e, 0x82, 0xfc, 0x11, 0x74, 0x94, 0x16, 0xba, 0x50, 0xbe,
+	0x63, 0xdc, 0x95, 0xc5, 0xbb, 0xe0, 0xea, 0x34, 0x43, 0xa5, 0x45, 0x96, 0xfb, 0xad, 0x5d, 0xb6,
+	0xd7, 0x8a, 0xfe, 0x01, 0xdc, 0x03, 0x47, 0xeb, 0x89, 0xdf, 0x36, 0x78, 0x79, 0x0c, 0xcf, 0x61,
+	0x73, 0xa5, 0x47, 0x95, 0xcb, 0xa9, 0x42, 0xbe, 0x03, 0x0e, 0x12, 0x99, 0xe6, 0x36, 0xf6, 0xd7,
+	0x7b, 0x79, 0xdc, 0x3b, 0x22, 0x92, 0xd4, 0x97, 0x09, 0x46, 0xa5, 0xc7, 0xb0, 0x20, 0x1a, 0x66,
+	0xa8, 0x96, 0x1d, 0xba, 0x11, 0x20, 0xd1, 0x60, 0x81, 0x84, 0xdf, 0x19, 0x78, 0xef, 0x8a, 0x38,
+	0x4b, 0xf5, 0x89, 0x8c, 0x6b, 0xee, 0x2f, 0xc0, 0xd6, 0x79, 0x95, 0xb5, 0x5b, 0x66, 0x6d, 0xde,
+	0xe8, 0x9d, 0xc8, 0xf8, 0xfd, 0x55, 0x8e, 0x91, 0xad, 0xf3, 0x92, 0xe1, 0x48, 0x4e, 0x3f, 0xa4,
+	0xe3, 0x2a, 0x7d, 0x65, 0x71, 0x0e, 0xad, 0x42, 0x21, 0x19, 0xde, 0x6e, 0x64, 0xce, 0xe1, 0x33,
+	0x58, 0xab, 0x42, 0x79, 0x07, 0xec, 0xc3, 0x81, 0x67, 0xf1, 0x35, 0x70, 0xfa, 0x87, 0x7d, 0x8f,
+	0xf1, 0x75, 0x70, 0x0f, 0x70, 0x3a, 0xba, 0xc8, 0x04, 0x7d, 0xf4, 0xec, 0x70, 0x02, 0x9b, 0x2b,
+	0x65, 0xef, 0x8a, 0x30, 0xdf, 0x82, 0xce, 0xa5, 0x8c, 0x4b, 0x49, 0x17, 0x7a, 0xb4, 0x2f, 0x65,
+	0x7c, 0x9c, 0x84, 0x19, 0x3c, 0x8e, 0x70, 0x9c, 0x96, 0x93, 0x71, 0x54, 0x69, 0x5c, 0xbf, 0x86,
+	0x0f, 0x6b, 0x22, 0x49, 0x08, 0x95, 0x32, 0x75, 0xdd, 0xa8, 0x36, 0x4b, 0xcf, 0x67, 0x24, 0x95,
+	0xca, 0x69, 0x55, 0xa8, 0x36, 0x79, 0x00, 0x30, 0x12, 0xb9, 0x88, 0xd3, 0x49, 0xaa, 0xaf, 0x4c,
+	0x25, 0x27, 0x5a, 0x41, 0xc2, 0xaf, 0xe0, 0xdf, 0x2c, 0x77, 0x67, 0x1c, 0x1b, 0xb3, 0xeb, 0x34,
+	0x67, 0xf7, 0xf9, 0x4b, 0x70, 0x97, 0x39, 0xf9, 0x3d, 0x68, 0x9d, 0xca, 0x29, 0x7a, 0x56, 0xa9,
+	0xc0, 0xa9, 0xd4, 0x6f, 0x51, 0x24, 0x48, 0x1e, 0xe3, 0x2e, 0xb4, 0xcf, 0xf4, 0x05, 0x92, 0x67,
+	0xef, 0xff, 0x62, 0xd0, 0x19, 0x98, 0xbd, 0xe1, 0x67, 0xe0, 0x35, 0x5b, 0xe7, 0x4f, 0xca, 0x2e,
+	0xff, 0xf3, 0x7e, 0xdb, 0xdd, 0xdb, 0x9d, 0x0b, 0xb6, 0xa1, 0xc5, 0x5f, 0x83, 0xbb, 0x14, 0x9a,
+	0x3f, 0xbc, 0x6d, 0xdc, 0xb6, 0xb7, 0x1a, 0xe8, 0x6a, 0xec, 0x72, 0x2b, 0x16, 0xb1, 0xcd, 0x45,
+	0x5e, 0xc4, 0xde, 0x58, 0x9d, 0xd0, 0x3a, 0xf0, 0x7f, 0xce, 0x02, 0x76, 0x3d, 0x0b, 0xd8, 0x9f,
+	0x59, 0xc0, 0xbe, 0xcd, 0x03, 0xeb, 0x7a, 0x1e, 0x58, 0xbf, 0xe7, 0x81, 0x15, 0x77, 0xcc, 0xdf,
+	0xf0, 0xea, 0x6f, 0x00, 0x00, 0x00, 0xff, 0xff, 0x1f, 0x1a, 0xf4, 0x70, 0x2b, 0x04, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -751,19 +687,10 @@ func (m *HeartbeatRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i--
 		dAtA[i] = 0x20
 	}
-	if len(m.Tasks) > 0 {
-		for iNdEx := len(m.Tasks) - 1; iNdEx >= 0; iNdEx-- {
-			{
-				size, err := m.Tasks[iNdEx].MarshalToSizedBuffer(dAtA[:i])
-				if err != nil {
-					return 0, err
-				}
-				i -= size
-				i = encodeVarintMaster(dAtA, i, uint64(size))
-			}
-			i--
-			dAtA[i] = 0x1a
-		}
+	if m.Status != 0 {
+		i = encodeVarintMaster(dAtA, i, uint64(m.Status))
+		i--
+		dAtA[i] = 0x18
 	}
 	if m.ResourceUsage != 0 {
 		i = encodeVarintMaster(dAtA, i, uint64(m.ResourceUsage))
@@ -772,39 +699,6 @@ func (m *HeartbeatRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	}
 	if m.ExecutorId != 0 {
 		i = encodeVarintMaster(dAtA, i, uint64(m.ExecutorId))
-		i--
-		dAtA[i] = 0x8
-	}
-	return len(dAtA) - i, nil
-}
-
-func (m *TaskStatus) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *TaskStatus) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *TaskStatus) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	if m.ResourceUsage != 0 {
-		i = encodeVarintMaster(dAtA, i, uint64(m.ResourceUsage))
-		i--
-		dAtA[i] = 0x10
-	}
-	if m.TaskId != 0 {
-		i = encodeVarintMaster(dAtA, i, uint64(m.TaskId))
 		i--
 		dAtA[i] = 0x8
 	}
@@ -951,26 +845,19 @@ func (m *RegisterExecutorRequest) MarshalToSizedBuffer(dAtA []byte) (int, error)
 	if m.Capability != 0 {
 		i = encodeVarintMaster(dAtA, i, uint64(m.Capability))
 		i--
-		dAtA[i] = 0x20
+		dAtA[i] = 0x18
 	}
 	if len(m.Version) > 0 {
 		i -= len(m.Version)
 		copy(dAtA[i:], m.Version)
 		i = encodeVarintMaster(dAtA, i, uint64(len(m.Version)))
 		i--
-		dAtA[i] = 0x1a
+		dAtA[i] = 0x12
 	}
 	if len(m.Address) > 0 {
 		i -= len(m.Address)
 		copy(dAtA[i:], m.Address)
 		i = encodeVarintMaster(dAtA, i, uint64(len(m.Address)))
-		i--
-		dAtA[i] = 0x12
-	}
-	if len(m.Name) > 0 {
-		i -= len(m.Name)
-		copy(dAtA[i:], m.Name)
-		i = encodeVarintMaster(dAtA, i, uint64(len(m.Name)))
 		i--
 		dAtA[i] = 0xa
 	}
@@ -1040,32 +927,14 @@ func (m *HeartbeatRequest) Size() (n int) {
 	if m.ResourceUsage != 0 {
 		n += 1 + sovMaster(uint64(m.ResourceUsage))
 	}
-	if len(m.Tasks) > 0 {
-		for _, e := range m.Tasks {
-			l = e.Size()
-			n += 1 + l + sovMaster(uint64(l))
-		}
+	if m.Status != 0 {
+		n += 1 + sovMaster(uint64(m.Status))
 	}
 	if m.Timestamp != 0 {
 		n += 1 + sovMaster(uint64(m.Timestamp))
 	}
 	if m.Ttl != 0 {
 		n += 1 + sovMaster(uint64(m.Ttl))
-	}
-	return n
-}
-
-func (m *TaskStatus) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	if m.TaskId != 0 {
-		n += 1 + sovMaster(uint64(m.TaskId))
-	}
-	if m.ResourceUsage != 0 {
-		n += 1 + sovMaster(uint64(m.ResourceUsage))
 	}
 	return n
 }
@@ -1131,10 +1000,6 @@ func (m *RegisterExecutorRequest) Size() (n int) {
 	}
 	var l int
 	_ = l
-	l = len(m.Name)
-	if l > 0 {
-		n += 1 + l + sovMaster(uint64(l))
-	}
 	l = len(m.Address)
 	if l > 0 {
 		n += 1 + l + sovMaster(uint64(l))
@@ -1242,10 +1107,10 @@ func (m *HeartbeatRequest) Unmarshal(dAtA []byte) error {
 				}
 			}
 		case 3:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Tasks", wireType)
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Status", wireType)
 			}
-			var msglen int
+			m.Status = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowMaster
@@ -1255,26 +1120,11 @@ func (m *HeartbeatRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= int(b&0x7F) << shift
+				m.Status |= int32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			if msglen < 0 {
-				return ErrInvalidLengthMaster
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthMaster
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Tasks = append(m.Tasks, &TaskStatus{})
-			if err := m.Tasks[len(m.Tasks)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
 		case 4:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Timestamp", wireType)
@@ -1309,94 +1159,6 @@ func (m *HeartbeatRequest) Unmarshal(dAtA []byte) error {
 				b := dAtA[iNdEx]
 				iNdEx++
 				m.Ttl |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		default:
-			iNdEx = preIndex
-			skippy, err := skipMaster(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
-				return ErrInvalidLengthMaster
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *TaskStatus) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowMaster
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: TaskStatus: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: TaskStatus: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field TaskId", wireType)
-			}
-			m.TaskId = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMaster
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.TaskId |= int32(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 2:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ResourceUsage", wireType)
-			}
-			m.ResourceUsage = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMaster
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.ResourceUsage |= int32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1807,38 +1569,6 @@ func (m *RegisterExecutorRequest) Unmarshal(dAtA []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Name", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMaster
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthMaster
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthMaster
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Name = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 2:
-			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Address", wireType)
 			}
 			var stringLen uint64
@@ -1869,7 +1599,7 @@ func (m *RegisterExecutorRequest) Unmarshal(dAtA []byte) error {
 			}
 			m.Address = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
-		case 3:
+		case 2:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Version", wireType)
 			}
@@ -1901,7 +1631,7 @@ func (m *RegisterExecutorRequest) Unmarshal(dAtA []byte) error {
 			}
 			m.Version = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
-		case 4:
+		case 3:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Capability", wireType)
 			}

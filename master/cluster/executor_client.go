@@ -35,6 +35,7 @@ func newExecutorClient(addr string) (*executorClient, error) {
 	}
 	return &executorClient{
 		conn: conn,
+		client: pb.NewExecutorClient(conn),
 	}, nil
 }
 
