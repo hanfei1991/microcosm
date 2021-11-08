@@ -32,6 +32,13 @@ type ExecutorManager struct {
 	haStore ha.HAStore
 }
 
+func NewExecutorManager() *ExecutorManager {
+	return &ExecutorManager{
+		executors: make(map[model.ExecutorID]*Executor),
+		idAllocator: autoid.NewAllocator(),
+	}
+}
+
 func (e *ExecutorManager) RemoveExecutor(id model.ExecutorID) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -87,11 +94,11 @@ func (e *ExecutorManager) AddExecutor(req *pb.RegisterExecutorRequest) (*model.E
 		return nil, err
 	}
 	// Persistant
-	value, err := info.ToJSON()
-	if err != nil {
-		return nil, err
-	}
-	e.haStore.Put(info.EtcdKey(), value)	
+	//value, err := info.ToJSON()
+	//if err != nil {
+		//return nil, err
+	//}
+//	e.haStore.Put(info.EtcdKey(), value)	
 
 	e.mu.Lock()
 	e.executors[info.ID] = exec

@@ -63,7 +63,7 @@ func (s *Server) Start(ctx context.Context) error {
 	}()
 
 	// Register myself
-	s.cli, err = NewMasterClient(s.cfg)
+	s.cli, err = NewMasterClient(ctx, s.cfg)
 	if err != nil {
 		return err
 	}

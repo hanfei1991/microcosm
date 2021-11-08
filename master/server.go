@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/hanfei1991/microcosom/master/cluster"
+	"github.com/hanfei1991/microcosom/pkg/autoid"
 	"github.com/hanfei1991/microcosom/pkg/etcdutil"
 	"github.com/hanfei1991/microcosom/pkg/log"
 	"go.etcd.io/etcd/clientv3"
@@ -37,9 +38,10 @@ type Server struct {
 func NewServer(cfg *Config) (*Server, error) {
 	server := &Server {
 		cfg: cfg,
-		executorManager: &cluster.ExecutorManager{},
+		executorManager: cluster.NewExecutorManager(),
 	}
 	server.jobManager = &JobManager{
+		idAllocater: autoid.NewAllocator(),
 		dispatchJobQueue: make(chan JobMaster, 1024),
 		resourceMgr: server.executorManager,
 		executorClient: server.executorManager,
@@ -115,6 +117,8 @@ func (s *Server) Start(ctx context.Context) (err error) {
 	if err != nil {
 		return
 	}
+
+	log.L().Logger.Info("start etcd successfully")
 
 	// start grpc server
 
