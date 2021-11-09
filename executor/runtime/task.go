@@ -79,6 +79,7 @@ type taskContainer struct {
 }
 
 func (t *taskContainer) prepare() error {
+	t.cache = make([][]*Record, len(t.output))
 	return t.op.prepare()
 }
 

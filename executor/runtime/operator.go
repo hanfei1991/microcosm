@@ -8,13 +8,15 @@ import (
 
 	//"io/fs"
 	//"io/ioutil"
-	"github.com/hanfei1991/microcosom/pkg/workerpool"
 	"sync"
 	"time"
 
+	"github.com/hanfei1991/microcosom/pkg/log"
+	"github.com/hanfei1991/microcosom/pkg/workerpool"
 	"github.com/hanfei1991/microcosom/pb"
 
 	"google.golang.org/grpc"
+	"go.uber.org/zap"
 )
 
 type fileWriter struct {
@@ -68,6 +70,8 @@ type opReceive struct {
 
 func (o *opReceive) prepare() error {
 	// get connection
+	log.L().Logger.Info("dial to", zap.String("addr", o.addr))
+	o.cache = make([][]*Record, o.tableCnt)
 	conn, err := grpc.Dial(o.addr, grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {
 		return errors.New("conn failed")

@@ -6,6 +6,8 @@ import (
 
 	"github.com/hanfei1991/microcosom/model"
 	"github.com/hanfei1991/microcosom/pb"
+	"github.com/hanfei1991/microcosom/pkg/log"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
 
@@ -24,6 +26,9 @@ func (c *executorClient) send(ctx context.Context, req *ExecutorRequest) (*Execu
 	switch req.Cmd {
 	case CmdSubmitSubJob:
 		resp.Resp, err = c.client.SubmitSubJob(ctx, req.SubmitSubJob())
+	}
+	if err != nil {
+		log.L().Logger.Error("send req meet error", zap.Error(err))
 	}
 	return resp, err
 }

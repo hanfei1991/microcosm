@@ -46,6 +46,7 @@ func (j *JobManager) SubmitJob(req *pb.SubmitJobRequest) (*pb.SubmitJobResponse)
 		resp.ErrMessage = "unknown job type"
 		return resp
 	}
+	log.L().Logger.Info("finished build job")
 	err = jobMaster.DispatchJob()
 	if err != nil {
 		resp.ErrMessage = err.Error()

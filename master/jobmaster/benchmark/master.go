@@ -9,6 +9,8 @@ import (
 	"github.com/hanfei1991/microcosom/master/cluster"
 	"github.com/hanfei1991/microcosom/model"
 	"github.com/hanfei1991/microcosom/pb"
+	"github.com/hanfei1991/microcosom/pkg/log"
+	"go.uber.org/zap"
 )
 
 type Master struct {
@@ -51,27 +53,30 @@ func (m *Master) dispatch(tasks []*model.Task) error {
 			arrangement[task.ExecutorID] = []*model.Task{task}
 		} else {
 			subjob = append(subjob, task)
+			arrangement[task.ExecutorID] = subjob
 		}
 	}
 	// TODO: process the error cases.
 	for execID, taskList := range arrangement {
 		// construct sub job
 		job := &model.Job{
-			ID: m.job.ID,
+			ID:    m.job.ID,
 			Tasks: taskList,
 		}
 		reqPb := job.ToPB()
+		log.L().Logger.Info("submit sub job", zap.Int32("exec id", int32(execID)), zap.String("req pb", reqPb.String()))
 		request := &cluster.ExecutorRequest{
 			Cmd: cluster.CmdSubmitSubJob,
 			Req: reqPb,
 		}
 		resp, err := m.client.Send(context.Background(), execID, request)
 		if err != nil {
+			log.L().Logger.Info("Send meet error", zap.Error(err))
 			return err
 		}
-		respPb := resp.Resp.(*pb.SubmitJobResponse)
-		if respPb.ErrMessage != "" {
-			return errors.New(respPb.ErrMessage)
+		respPb := resp.Resp.(*pb.SubmitSubJobResponse)
+		if len(respPb.Errors) != 0 {
+			return errors.New(respPb.Errors[0].GetMsg())
 		}
 	}
 	return nil
@@ -107,6 +112,9 @@ func (m *Master) scheduleJobImpl() error {
 		return errors.New("not found job")
 	}
 	snapshot := m.resouceManager.GetResourceSnapshot()
+	if len(snapshot.Executors) == 0 {
+		return errors.New("resource not enough")
+	}
 	success, tasks := m.allocateTasksWithNaitiveStratgy(snapshot)
 	if !success {
 		return errors.New("resource not enough")

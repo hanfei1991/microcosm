@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/hanfei1991/microcosom/master/cluster"
+	"github.com/hanfei1991/microcosom/model"
 	"github.com/hanfei1991/microcosom/pkg/autoid"
 	"github.com/hanfei1991/microcosom/pkg/etcdutil"
 	"github.com/hanfei1991/microcosom/pkg/log"
@@ -41,6 +42,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		executorManager: cluster.NewExecutorManager(),
 	}
 	server.jobManager = &JobManager{
+		jobMasters: make(map[model.JobID]JobMaster),
 		idAllocater: autoid.NewAllocator(),
 		dispatchJobQueue: make(chan JobMaster, 1024),
 		resourceMgr: server.executorManager,

@@ -2,8 +2,12 @@ package runtime
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 
 	"github.com/hanfei1991/microcosom/model"
+	"github.com/hanfei1991/microcosom/pkg/log"
+	"go.uber.org/zap"
 )
 
 func newTaskContainer(task *model.Task, ctx *taskContext) *taskContainer {
@@ -23,6 +27,7 @@ func newReadTableOp(cfg *model.TableReaderOp) operator {
 	return &opReceive{
 		addr: cfg.Addr,
 		data: make(chan *Record, 1024),
+		tableCnt: cfg.TableNum,
 	}
 }
 
@@ -49,31 +54,45 @@ func (s *Scheduler) SubmitTasks(tasks []*model.Task) error {
 	taskSet := make(map[model.TaskID]*taskContainer)
 	for _, t := range tasks {
 		task := newTaskContainer(t, s.ctx)
+		log.L().Logger.Info("config", zap.ByteString("op", t.Op))
 		switch t.OpTp {
 		case model.TableReaderType:
 			op := &model.TableReaderOp {}
-			json.Unmarshal(t.Op, op)
+			err := json.Unmarshal(t.Op, op)
+			if err != nil {
+				return err
+			}
 			task.op = newReadTableOp(op)
 			task.setRunnable()
 		case model.HashType:
 			op := &model.HashOp {}
-			json.Unmarshal(t.Op, op)
+			err := json.Unmarshal(t.Op, op)
+			if err != nil {
+				return err
+			}
 			task.op = newHashOp(op)
 			task.tryBlock()
 		case model.TableSinkType:
 			op := &model.TableSinkOp{}
-			json.Unmarshal(t.Op, op)
+			err := json.Unmarshal(t.Op, op)
+			if err != nil {
+				return err
+			}
 			task.op = newSinkOp(op)
 			task.tryBlock()
 		}
 		taskSet[task.id] = task
 	}
 
+	log.L().Logger.Info("begin to connect tasks")
+
 	for _, t := range taskSet {
 		for _, tid := range t.cfg.Outputs {
 			dst, ok := taskSet[tid]
-			if !ok {
+			if ok {
 				s.connectTasks(t, dst)
+			} else {
+				return errors.New(fmt.Sprintf("cannot find task %d", tid))
 			}
 		}
 		err := t.prepare()
@@ -82,6 +101,7 @@ func (s *Scheduler) SubmitTasks(tasks []*model.Task) error {
 		}
 	}
 	
+	log.L().Logger.Info("begin to push")
 	// add to queue, begin to run.
 	for _, t := range taskSet {
 		if t.status == int32(Runnable) {

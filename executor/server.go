@@ -46,12 +46,16 @@ func (s *Server) SubmitSubJob(ctx context.Context, req *pb.SubmitSubJobRequest) 
 		for _, id := range pbTask.Outputs {
 			task.Outputs = append(task.Outputs, model.TaskID(id))
 		}
+		tasks = append(tasks, task)
 	}
+	log.L().Logger.Info("executor receive submit sub job", zap.Int("task", len(tasks)))
+	resp := &pb.SubmitSubJobResponse{}
 	err := s.sch.SubmitTasks(tasks)
 	if err != nil {
 		log.L().Logger.Error("submit subjob error", zap.Error(err))
+		resp.Errors = []*pb.TaskError{{Msg: err.Error()}}
 	}
-	return &pb.SubmitSubJobResponse{}, err
+	return resp, nil
 }
 
 func (s *Server) CancelSubJob(ctx context.Context, req *pb.CancelSubJobRequest) (*pb.CancelSubJobResponse, error) {
