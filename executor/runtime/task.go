@@ -5,6 +5,8 @@ import (
 	//"log"
 	"sync/atomic"
 	"time"
+
+	"github.com/hanfei1991/microcosom/model"
 )
 
 type TaskStatus int32
@@ -65,7 +67,8 @@ func (c *Channel) writeBatch(records []*Record) ([]*Record, bool) {
 }
 
 type taskContainer struct {
-	id     int
+	cfg    *model.Task
+	id     model.TaskID 
 	status int32
 	cache  [][]*Record
 	op     operator
@@ -75,8 +78,8 @@ type taskContainer struct {
 	ctx *taskContext
 }
 
-func (t *taskContainer) prepare(ctx *taskContext) error {
-	return t.op.prepare(ctx)
+func (t *taskContainer) prepare() error {
+	return t.op.prepare()
 }
 
 func (t *taskContainer) tryAwake() bool {

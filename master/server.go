@@ -55,7 +55,7 @@ func (s *Server) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest)  (*pb.
 
 // SubmitJob passes request onto "JobManager".
 func (s *Server) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) (*pb.SubmitJobResponse, error) {
-	return &pb.SubmitJobResponse{}, nil
+	return s.jobManager.SubmitJob(req), nil
 }
 
 // RegisterExecutor implements grpc interface, and passes request onto executor manager.

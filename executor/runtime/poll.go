@@ -2,14 +2,10 @@ package runtime
 
 import (
 	"context"
-	"fmt"
 	"log"
 
-	"github.com/hanfei1991/microcosom/config"
 	"github.com/hanfei1991/microcosom/pkg/workerpool"
 	"sync"
-
-	"github.com/pingcap/errors"
 )
 
 type queue struct {
@@ -56,22 +52,12 @@ func (s *Scheduler) ShowStats(sec int) {
 	}
 }
 
-func (s *Scheduler) connectTasks(sender, receiver *taskContainer) {
-	ch := &Channel{
-		innerChan: make(chan *Record, 1024),
-		sendWaker: s.getWaker(sender),
-		recvWaker: s.getWaker(receiver),
-	}
-	sender.output = append(sender.output, ch)
-	receiver.inputs = append(receiver.inputs, ch)
-}
-
-func (s *Scheduler) Run(ctx context.Context) error {
+func (s *Scheduler) Run(ctx context.Context)  {
 	//log.Printf("scheduler running")
 	for {
 		select {
 		case <-ctx.Done():
-			return nil
+			return 
 		default:
 		}
 		t := s.q.pop()
@@ -91,70 +77,66 @@ func (s *Scheduler) Run(ctx context.Context) error {
 	}
 }
 
-func BuildScheduler(cfg *config.Config) (*Scheduler, error) {
+func NewScheduler() (*Scheduler) {
 	ctx := &taskContext{
 		ioPool:   workerpool.NewDefaultAsyncPool(20),
-		tableCnt: int32(cfg.TableNum),
-		stats :   make([]tableStats, cfg.TableNum),
+		//stats :   make([]tableStats, cfg.TableNum),
 	}
-	go func() {
-		ctx.ioPool.Run(context.Background())
-	}()
 	s := &Scheduler{ctx : ctx}
-	receiveTasks := make([]*taskContainer, 0)
-	taskID := 0
-	for _, addr := range cfg.Servers {
-		op := &opReceive{
-			addr:  addr,
-			data:  make(chan *Record, 4096),
-			cache: make([][]*Record, cfg.TableNum),
-		}
-		err := op.prepare(ctx)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		receiveTasks = append(receiveTasks, &taskContainer{
-			id:     taskID,
-			ctx:    ctx,
-			op:     op,
-			status: int32(Runnable),
-		})
-		taskID++
-	}
+	return s
+	//receiveTasks := make([]*taskContainer, 0)
+	//taskID := 0
+	//for _, addr := range cfg.Servers {
+	//	op := &opReceive{
+	//		addr:  addr,
+	//		data:  make(chan *Record, 4096),
+	//		cache: make([][]*Record, cfg.TableNum),
+	//	}
+	//	err := op.prepare(ctx)
+	//	if err != nil {
+	//		return nil, errors.Trace(err)
+	//	}
+	//	receiveTasks = append(receiveTasks, &taskContainer{
+	//		id:     taskID,
+	//		ctx:    ctx,
+	//		op:     op,
+	//		status: int32(Runnable),
+	//	})
+	//	taskID++
+	//}
 	//log.Printf("finish construct receive tasks")
-	s.q = queue{
-		tasks: receiveTasks,
-	}
+	//s.q = queue{
+	//	tasks: receiveTasks,
+	//}
 
-	for i := 0; i < cfg.TableNum; i++ {
-		hashTask := &taskContainer{
-			id:     taskID,
-			op:     &opHash{},
-			ctx:    ctx,
-			status: int32(Blocked),
-		}
-		for _, task := range receiveTasks {
-			s.connectTasks(task, hashTask)
-		}
-		taskID++
-		sinkTask := &taskContainer{
-			id: taskID,
-			op: &opSink{
-				writer: fileWriter{
-					filePath: fmt.Sprintf("t_%d.txt", i),
-					tid: i,
-				},
-			},
-			ctx:    ctx,
-			status: int32(Blocked),
-		}
-		taskID++
-		s.connectTasks(hashTask, sinkTask)
-		hashTask.prepare(ctx)
-		err := sinkTask.prepare(ctx)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-	}
-	return s, nil
+	//for i := 0; i < cfg.TableNum; i++ {
+	//	hashTask := &taskContainer{
+	//		id:     taskID,
+	//		op:     &opHash{},
+	//		ctx:    ctx,
+	//		status: int32(Blocked),
+	//	}
+	//	for _, task := range receiveTasks {
+	//		s.connectTasks(task, hashTask)
+	//	}
+	//	taskID++
+	//	sinkTask := &taskContainer{
+	//		id: taskID,
+	//		op: &opSink{
+	//			writer: fileWriter{
+	//				filePath: fmt.Sprintf("t_%d.txt", i),
+	//				tid: i,
+	//			},
+	//		},
+	//		ctx:    ctx,
+	//		status: int32(Blocked),
+	//	}
+	//	taskID++
+	//	s.connectTasks(hashTask, sinkTask)
+	//	hashTask.prepare(ctx)
+	//	err := sinkTask.prepare(ctx)
+	//	if err != nil {
+	//		return nil, errors.Trace(err)
+	//	}
+	//}
 }

@@ -6,6 +6,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/hanfei1991/microcosom/executor/runtime"
 	"github.com/hanfei1991/microcosom/model"
 	"github.com/hanfei1991/microcosom/pb"
 	"github.com/hanfei1991/microcosom/pkg/log"
@@ -18,6 +19,7 @@ type Server struct {
 
 	srv *grpc.Server
 	cli *MasterClient
+	sch *runtime.Scheduler
 	ID  model.ExecutorID
 
 	lastHearbeatTime time.Time
@@ -31,7 +33,25 @@ func NewServer(cfg *Config) *Server {
 }
 
 func (s *Server) SubmitSubJob(ctx context.Context, req *pb.SubmitSubJobRequest) (*pb.SubmitSubJobResponse, error) {
-	return &pb.SubmitSubJobResponse{}, nil
+	tasks := make([]*model.Task, 0, len(req.Tasks))
+	for _, pbTask := range req.Tasks {
+		task := &model.Task{
+			ID: model.TaskID(pbTask.Id),
+			Op: pbTask.Op,
+			OpTp: model.OperatorType(pbTask.OpTp),
+		}
+		for _, id := range pbTask.Inputs {
+			task.Inputs = append(task.Inputs, model.TaskID(id))
+		}
+		for _, id := range pbTask.Outputs {
+			task.Outputs = append(task.Outputs, model.TaskID(id))
+		}
+	}
+	err := s.sch.SubmitTasks(tasks)
+	if err != nil {
+		log.L().Logger.Error("submit subjob error", zap.Error(err))
+	}
+	return &pb.SubmitSubJobResponse{}, err
 }
 
 func (s *Server) CancelSubJob(ctx context.Context, req *pb.CancelSubJobRequest) (*pb.CancelSubJobResponse, error) {
@@ -52,14 +72,20 @@ func (s *Server) Start(ctx context.Context) error {
 	s.srv = grpc.NewServer()
 	pb.RegisterExecutorServer(s.srv, s)
 
-	grpcExitCh := make(chan struct{}, 1)
+	exitCh := make(chan struct{}, 1)
 
 	go func() {
 		err1 := s.srv.Serve(rootLis)
 		if err1 != nil {
 			log.L().Logger.Error("start grpc server failed", zap.Error(err))
 		}
-		grpcExitCh <- struct{}{}
+		exitCh <- struct{}{}
+	}()
+
+	s.sch = runtime.NewScheduler()
+	go func() {
+		s.sch.Run(ctx)
+		exitCh <- struct{}{}
 	}()
 
 	// Register myself
@@ -86,7 +112,7 @@ func (s *Server) Start(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return nil
-		case <- grpcExitCh:
+		case <- exitCh:
 			return nil
 		case t := <-ticker.C:
 			req := &pb.HeartbeatRequest{

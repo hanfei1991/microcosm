@@ -21,7 +21,7 @@ type fileWriter struct {
 	mu       sync.Mutex
 	filePath string
 	fd       *os.File
-	tid      int
+	tid      int32
 }
 
 func (f *fileWriter) prepare() error {
@@ -35,8 +35,8 @@ func (f *fileWriter) write(ctx *taskContext, r *Record) {
 	str := []byte(r.toString())
 //	f.mu.Lock()
 //	defer f.mu.Unlock()
-	ctx.stats[f.tid].recordCnt ++
-	ctx.stats[f.tid].totalLag += r.end.Sub(r.start)
+	//ctx.stats[f.tid].recordCnt ++
+	//ctx.stats[f.tid].totalLag += r.end.Sub(r.start)
 	_, err := f.fd.Write(str)
 	if err != nil {
 		panic(err)
@@ -56,16 +56,17 @@ type taskContext struct {
 
 type operator interface {
 	next(ctx *taskContext, r []*Record) ([][]*Record, bool)
-	prepare(ctx *taskContext) error
+	prepare() error
 }
 
 type opReceive struct {
 	addr  string
+	tableCnt int32
 	data  chan *Record
 	cache [][]*Record
 }
 
-func (o *opReceive) prepare(ctx *taskContext) error {
+func (o *opReceive) prepare() error {
 	// get connection
 	conn, err := grpc.Dial(o.addr, grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {
@@ -73,7 +74,7 @@ func (o *opReceive) prepare(ctx *taskContext) error {
 	}
 	client := pb.NewTmpServiceClient(conn)
 	// start receiving data
-	stream, err := client.EventFeed(context.Background(), &pb.Request{MaxTid: ctx.tableCnt})
+	stream, err := client.EventFeed(context.Background(), &pb.Request{MaxTid: o.tableCnt})
 	if err != nil {
 		return errors.New("conn failed")
 	}
@@ -121,7 +122,7 @@ func (o *opReceive) next(ctx *taskContext, _ []*Record) ([][]*Record, bool) {
 type opHash struct {
 }
 
-func (o *opHash) prepare(ctx *taskContext) error { return nil }
+func (o *opHash) prepare() error { return nil }
 
 func (o *opHash) next(ctx *taskContext, records []*Record) ([][]*Record, bool) {
 	for _, record := range records {
@@ -134,7 +135,7 @@ type opSink struct {
 	writer fileWriter
 }
 
-func (o *opSink) prepare(_ *taskContext) error {
+func (o *opSink) prepare() error {
 	return o.writer.prepare()
 }
 

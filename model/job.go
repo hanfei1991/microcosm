@@ -23,11 +23,12 @@ func (j *Job) ToPB() (*pb.SubmitSubJobRequest) {
 type Task struct {
 	ID TaskID 
 	JobID JobID
-	outputChannels []*Channel
-	intputChannels []*Channel
+	Outputs []TaskID
+	Inputs []TaskID
 
 	// TODO: operator or operator tree
-	op Operator	
+	OpTp OperatorType
+	Op Operator	
 	Cost int
 	PreferedLocation string
 
@@ -47,28 +48,14 @@ const (
 func (t *Task) ToPB() *pb.TaskRequest {
 	req := &pb.TaskRequest{
 		Id : int32(t.ID),
-		PlanDescription: string(t.op),
+		Op: t.Op,
+		OpTp: int32(t.OpTp),
 	}
-	for _, c := range t.intputChannels {
-		req.Inputs = append(req.Inputs, c.ToPB())
+	for _, c := range t.Inputs {
+		req.Inputs = append(req.Inputs, int32(c))
 	}
-	for _, c := range t.outputChannels {
-		req.Outputs = append(req.Outputs, c.ToPB())
+	for _, c := range t.Outputs {
+		req.Outputs = append(req.Outputs, int32(c))
 	}
 	return req
 }
-
-type Channel struct {
-	// Channel Type
-	src *Task
-	dst *Task
-}
-
-func (c *Channel) ToPB() *pb.Channel {
-	return &pb.Channel{
-		SrcId: int32(c.src.ID),
-		DstId: int32(c.dst.ID),
-	}
-}
-
-type Operator string 

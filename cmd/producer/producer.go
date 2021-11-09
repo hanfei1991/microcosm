@@ -1,11 +1,11 @@
-package main 
+package main
 
 import (
 	"log"
-	pb "microcosom/proto"
 	"net"
 	"time"
 
+	"github.com/hanfei1991/microcosom/pb"
 	"google.golang.org/grpc"
 )
 

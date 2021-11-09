@@ -49,7 +49,7 @@ message SubmitJobRequest {
         Benchmark = 2;
     }
     JobType tp = 1;
-    string config = 2;
+    bytes config = 2;
     // User name, token, etc...
     string user = 3;
     // TODO: Resource Limit
