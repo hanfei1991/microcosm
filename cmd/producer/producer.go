@@ -32,7 +32,7 @@ func (s *server) EventFeed(in *pb.Request, server pb.TmpService_EventFeedServer)
 			log.Printf("meet error %v", err)
 			return err
 		}
-		i = (i+1) % tid
+		i = (i + 1) % tid
 	}
 }
 

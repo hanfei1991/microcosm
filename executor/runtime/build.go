@@ -13,7 +13,7 @@ import (
 func newTaskContainer(task *model.Task, ctx *taskContext) *taskContainer {
 	t := &taskContainer{
 		cfg: task,
-		id : task.ID,
+		id:  task.ID,
 		ctx: ctx,
 	}
 	return t
@@ -25,8 +25,8 @@ func newHashOp(cfg *model.HashOp) operator {
 
 func newReadTableOp(cfg *model.TableReaderOp) operator {
 	return &opReceive{
-		addr: cfg.Addr,
-		data: make(chan *Record, 1024),
+		addr:     cfg.Addr,
+		data:     make(chan *Record, 1024),
 		tableCnt: cfg.TableNum,
 	}
 }
@@ -34,8 +34,8 @@ func newReadTableOp(cfg *model.TableReaderOp) operator {
 func newSinkOp(cfg *model.TableSinkOp) operator {
 	return &opSink{
 		writer: fileWriter{
-			filePath : cfg.File,
-			tid : cfg.TableID,
+			filePath: cfg.File,
+			tid:      cfg.TableID,
 		},
 	}
 }
@@ -49,7 +49,6 @@ func (s *Scheduler) connectTasks(sender, receiver *taskContainer) {
 	receiver.inputs = append(receiver.inputs, ch)
 }
 
-
 func (s *Scheduler) SubmitTasks(tasks []*model.Task) error {
 	taskSet := make(map[model.TaskID]*taskContainer)
 	for _, t := range tasks {
@@ -57,7 +56,7 @@ func (s *Scheduler) SubmitTasks(tasks []*model.Task) error {
 		log.L().Logger.Info("config", zap.ByteString("op", t.Op))
 		switch t.OpTp {
 		case model.TableReaderType:
-			op := &model.TableReaderOp {}
+			op := &model.TableReaderOp{}
 			err := json.Unmarshal(t.Op, op)
 			if err != nil {
 				return err
@@ -65,7 +64,7 @@ func (s *Scheduler) SubmitTasks(tasks []*model.Task) error {
 			task.op = newReadTableOp(op)
 			task.setRunnable()
 		case model.HashType:
-			op := &model.HashOp {}
+			op := &model.HashOp{}
 			err := json.Unmarshal(t.Op, op)
 			if err != nil {
 				return err
@@ -100,7 +99,7 @@ func (s *Scheduler) SubmitTasks(tasks []*model.Task) error {
 			return err
 		}
 	}
-	
+
 	log.L().Logger.Info("begin to push")
 	// add to queue, begin to run.
 	for _, t := range taskSet {

@@ -38,7 +38,7 @@ func main() {
 		Format: cfg.LogFormat,
 	})
 	if err != nil {
-//		common.PrintLinesf("init logger error %s", terror.Message(err))
+		//		common.PrintLinesf("init logger error %s", terror.Message(err))
 		os.Exit(2)
 	}
 

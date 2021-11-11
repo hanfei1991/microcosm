@@ -26,7 +26,7 @@ type Server struct {
 }
 
 func NewServer(cfg *Config) *Server {
-	s := Server {
+	s := Server{
 		cfg: cfg,
 	}
 	return &s
@@ -36,8 +36,8 @@ func (s *Server) SubmitSubJob(ctx context.Context, req *pb.SubmitSubJobRequest) 
 	tasks := make([]*model.Task, 0, len(req.Tasks))
 	for _, pbTask := range req.Tasks {
 		task := &model.Task{
-			ID: model.TaskID(pbTask.Id),
-			Op: pbTask.Op,
+			ID:   model.TaskID(pbTask.Id),
+			Op:   pbTask.Op,
 			OpTp: model.OperatorType(pbTask.OpTp),
 		}
 		for _, id := range pbTask.Inputs {
@@ -65,7 +65,7 @@ func (s *Server) CancelSubJob(ctx context.Context, req *pb.CancelSubJobRequest) 
 func (s *Server) Start(ctx context.Context) error {
 	// Start grpc server
 
-	rootLis, err := net.Listen("tcp", "127.0.0.1:10241")
+	rootLis, err := net.Listen("tcp", s.cfg.WorkerAddr)
 
 	if err != nil {
 		return err
@@ -99,7 +99,7 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	log.L().Logger.Info("master client init successful")
 	registerReq := &pb.RegisterExecutorRequest{
-		Address: s.cfg.WorkerAddr,
+		Address:    s.cfg.WorkerAddr,
 		Capability: 100,
 	}
 
@@ -116,14 +116,14 @@ func (s *Server) Start(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return nil
-		case <- exitCh:
+		case <-exitCh:
 			return nil
 		case t := <-ticker.C:
 			req := &pb.HeartbeatRequest{
 				ExecutorId: int32(s.ID),
-				Status: int32(model.Running),
-				Timestamp: uint64(t.Unix()),
-				Ttl: uint64(s.cfg.KeepAliveTTL),
+				Status:     int32(model.Running),
+				Timestamp:  uint64(t.Unix()),
+				Ttl:        uint64(s.cfg.KeepAliveTTL),
 			}
 			resp, err := s.cli.SendHeartbeat(ctx, req)
 			if err != nil {
@@ -136,7 +136,7 @@ func (s *Server) Start(ctx context.Context) error {
 			if resp.ErrMessage != "" {
 				return errors.New(resp.ErrMessage)
 			}
-			log.L().Error("heartbeat success")
+			log.L().Info("heartbeat success")
 			s.lastHearbeatTime = t
 		}
 	}

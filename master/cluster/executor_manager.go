@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -12,7 +13,6 @@ import (
 	"github.com/hanfei1991/microcosom/pkg/ha"
 	"github.com/hanfei1991/microcosom/pkg/log"
 	"github.com/pingcap/errors"
-	"go.etcd.io/etcd/clientv3"
 	"go.uber.org/zap"
 )
 
@@ -21,46 +21,50 @@ var _ ResourceMgr = &ExecutorManager{}
 
 // ExecutorManager holds all the executors info, including liveness, status, resource usage.
 type ExecutorManager struct {
-
-	// TODO: We should abstract a ha store to handle.
-	etcdCli *clientv3.Client
-
-	mu        sync.Mutex
-	executors map[model.ExecutorID]*Executor
+	mu          sync.Mutex
+	executors   map[model.ExecutorID]*Executor
+	offExecutor chan model.ExecutorID
 
 	idAllocator *autoid.Allocator
-	haStore     ha.HAStore
+
+	// TODO: complete ha store.
+	haStore ha.HAStore
 }
 
-func NewExecutorManager() *ExecutorManager {
+func NewExecutorManager(offExec chan model.ExecutorID) *ExecutorManager {
 	return &ExecutorManager{
 		executors:   make(map[model.ExecutorID]*Executor),
 		idAllocator: autoid.NewAllocator(),
+		offExecutor: offExec,
 	}
 }
 
 func (e *ExecutorManager) RemoveExecutor(id model.ExecutorID) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	log.L().Logger.Info("begin to remove executor", zap.Int32("id", int32(id)))
 	exec, ok := e.executors[id]
 	if !ok {
 		return errors.New("cannot find executor")
 	}
 	delete(e.executors, id)
-	err := e.haStore.Del(exec.EtcdKey())
-	if err != nil {
-		return err
-	}
-	return nil
+	//err := e.haStore.Del(exec.EtcdKey())
+	//if err != nil {
+	//	return err
+	//}
+	e.offExecutor <- id
+	log.L().Logger.Info("notify to offline exec")
+	return exec.close()
 }
 
 func (e *ExecutorManager) HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
-	log.L().Logger.Info("handle heart beat")
+	log.L().Logger.Info("handle heart beat", zap.Int32("id", req.ExecutorId))
+	defer log.L().Logger.Info("end handle heart beat", zap.Int32("id", req.ExecutorId))
 	e.mu.Lock()
 	exec, ok := e.executors[model.ExecutorID(req.ExecutorId)]
 	if !ok {
 		e.mu.Unlock()
-		return &pb.HeartbeatResponse{ErrMessage: "not found executor"}, nil
+		return &pb.HeartbeatResponse{ErrMessage: fmt.Sprintf("can't not find executor %d", req.ExecutorId)}, nil
 	}
 	e.mu.Unlock()
 	exec.mu.Lock()
@@ -90,9 +94,9 @@ func (e *ExecutorManager) AddExecutor(req *pb.RegisterExecutorRequest) (*model.E
 
 	// Following part is to bootstrap the executor.
 	exec := &Executor{
-		ExecutorInfo: *info, 
+		ExecutorInfo: *info,
 		resource: ExecutorResource{
-			ID: info.ID,
+			ID:       info.ID,
 			Capacity: ResourceUsage(info.Capability),
 		},
 		Status: model.Running,
@@ -128,20 +132,45 @@ type Executor struct {
 	client *executorClient
 }
 
+func (e *Executor) close() error {
+	return e.client.close()
+}
+
 func (e *Executor) checkAlive() bool {
+	log.L().Logger.Info("check alive", zap.Int32("exec", int32(e.ExecutorInfo.ID)))
+	defer log.L().Logger.Info("end check alive", zap.Int32("exec", int32(e.ExecutorInfo.ID)))
 	if atomic.LoadInt32((*int32)(&e.Status)) == int32(model.Tombstone) {
 		return false
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if e.lastUpdateTime.Add(e.heartbeatTTL).Before(time.Now()) {
+	if !e.lastUpdateTime.IsZero() && e.lastUpdateTime.Add(e.heartbeatTTL).Before(time.Now()) {
 		atomic.StoreInt32((*int32)(&e.Status), int32(model.Tombstone))
 		return false
 	}
 	return true
 }
 
-func (e *ExecutorManager) check() error {
+func (e *ExecutorManager) Start(ctx context.Context) {
+	go e.checkAlive(ctx)
+}
+
+func (e *ExecutorManager) checkAlive(ctx context.Context) {
+	tick := time.NewTicker(1 * time.Second)
+	defer func() { log.L().Logger.Info("check alive finished") }()
+	for {
+		select {
+		case <-tick.C:
+			err := e.checkAliveImpl()
+			if err != nil {
+				log.L().Logger.Info("check alive meet error", zap.Error(err))
+			}
+		case <-ctx.Done():
+		}
+	}
+}
+
+func (e *ExecutorManager) checkAliveImpl() error {
 	e.mu.Lock()
 	for id, exec := range e.executors {
 		if !exec.checkAlive() {

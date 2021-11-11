@@ -12,15 +12,15 @@ const (
 
 // benchmark operators
 type TableReaderOp struct {
-	Addr string      `json:"address"`
-	TableNum int32      `json:"table-num"`
+	Addr     string `json:"address"`
+	TableNum int32  `json:"table-num"`
 }
 
 type HashOp struct {
-	TableID int32   `json:"id"`
+	TableID int32 `json:"id"`
 }
 
 type TableSinkOp struct {
-	TableID int32   `json:"id"`
-	File string   `json:"file"`
+	TableID int32  `json:"id"`
+	File    string `json:"file"`
 }

@@ -14,14 +14,14 @@ import (
 type MasterClient struct {
 	cfg *Config
 
-	urls []string
+	urls   []string
 	leader string
-	conn *grpc.ClientConn
+	conn   *grpc.ClientConn
 	client pb.MasterClient
 }
 
 func getJoinURLs(addrs string) []string {
-	return strings.Split(addrs,",")
+	return strings.Split(addrs, ",")
 }
 
 func NewMasterClient(ctx context.Context, cfg *Config) (*MasterClient, error) {

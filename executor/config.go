@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package executor 
+package executor
 
 import (
 	"bytes"
@@ -128,7 +128,6 @@ func (c *Config) Parse(arguments []string) error {
 		return terror.ErrWorkerParseFlagSet.Delegate(err)
 	}
 
-
 	if c.printSampleConfig {
 		fmt.Println(SampleConfigFile)
 		return flag.ErrHelp
@@ -154,7 +153,6 @@ func (c *Config) Parse(arguments []string) error {
 
 	return nil
 }
-
 
 // configFromFile loads config from file.
 func (c *Config) configFromFile(path string) error {

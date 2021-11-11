@@ -73,7 +73,6 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.PeerUrls, "peer-urls", defaultPeerUrls, "URLs for peer traffic")
 	fs.StringVar(&cfg.AdvertisePeerUrls, "advertise-peer-urls", "", `advertise URLs for peer traffic (default "${peer-urls}")`)
 
-
 	return cfg
 }
 
@@ -94,13 +93,13 @@ type Config struct {
 	// etcd relative config items
 	// NOTE: we use `MasterAddr` to generate `ClientUrls` and `AdvertiseClientUrls`
 	// NOTE: more items will be add when adding leader election
-	Name                    string `toml:"name" json:"name"`
-	DataDir                 string `toml:"data-dir" json:"data-dir"`
-	PeerUrls                string `toml:"peer-urls" json:"peer-urls"`
-	AdvertisePeerUrls       string `toml:"advertise-peer-urls" json:"advertise-peer-urls"`
-	InitialCluster          string `toml:"initial-cluster" json:"initial-cluster"`
-	InitialClusterState     string `toml:"initial-cluster-state" json:"initial-cluster-state"`
-	Join                    string `toml:"join" json:"join"`
+	Name                string `toml:"name" json:"name"`
+	DataDir             string `toml:"data-dir" json:"data-dir"`
+	PeerUrls            string `toml:"peer-urls" json:"peer-urls"`
+	AdvertisePeerUrls   string `toml:"advertise-peer-urls" json:"advertise-peer-urls"`
+	InitialCluster      string `toml:"initial-cluster" json:"initial-cluster"`
+	InitialClusterState string `toml:"initial-cluster-state" json:"initial-cluster-state"`
+	Join                string `toml:"join" json:"join"`
 
 	printVersion      bool
 	printSampleConfig bool
@@ -208,7 +207,6 @@ func (c *Config) configFromFile(path string) error {
 	}
 	return nil
 }
-
 
 // genEmbedEtcdConfig generates the configuration needed by embed etcd.
 // This method should be called after logger initialized and before any concurrent gRPC calls.

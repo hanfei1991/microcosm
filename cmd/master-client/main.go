@@ -21,13 +21,13 @@ func main() {
 		flag1 := os.Args[2]
 		if flag1 != "--master-addr" {
 			fmt.Printf("no master address found")
-			os.Exit(1)	
+			os.Exit(1)
 		}
 		addr = os.Args[3]
 
 	case "help":
 		fmt.Printf("submit-job --config configFile")
-		os.Exit(0)	
+		os.Exit(0)
 	}
 
 	conn, err := grpc.Dial(addr, grpc.WithInsecure())
@@ -54,10 +54,10 @@ func main() {
 		fmt.Printf("err2: %v", err)
 	}
 
-	req := &pb.SubmitJobRequest {
-		Tp: pb.SubmitJobRequest_Benchmark,
+	req := &pb.SubmitJobRequest{
+		Tp:     pb.SubmitJobRequest_Benchmark,
 		Config: configJson,
-		User: "hanfei",
+		User:   "hanfei",
 	}
 
 	resp, err := clt.SubmitJob(context.Background(), req)

@@ -11,12 +11,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hanfei1991/microcosom/pb"
 	"github.com/hanfei1991/microcosom/pkg/log"
 	"github.com/hanfei1991/microcosom/pkg/workerpool"
-	"github.com/hanfei1991/microcosom/pb"
 
-	"google.golang.org/grpc"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
 )
 
 type fileWriter struct {
@@ -27,7 +27,7 @@ type fileWriter struct {
 }
 
 func (f *fileWriter) prepare() error {
-	file, err := os.OpenFile(f.filePath, os.O_APPEND| os.O_CREATE| os.O_WRONLY, 0777)
+	file, err := os.OpenFile(f.filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0777)
 	f.fd = file
 	return err
 }
@@ -35,8 +35,8 @@ func (f *fileWriter) prepare() error {
 func (f *fileWriter) write(ctx *taskContext, r *Record) {
 	r.end = time.Now()
 	str := []byte(r.toString())
-//	f.mu.Lock()
-//	defer f.mu.Unlock()
+	//	f.mu.Lock()
+	//	defer f.mu.Unlock()
 	//ctx.stats[f.tid].recordCnt ++
 	//ctx.stats[f.tid].totalLag += r.end.Sub(r.start)
 	_, err := f.fd.Write(str)
@@ -51,9 +51,9 @@ type tableStats struct {
 }
 
 type taskContext struct {
-	ioPool workerpool.AsyncPool
+	ioPool   workerpool.AsyncPool
 	tableCnt int32
-	stats []tableStats
+	stats    []tableStats
 }
 
 type operator interface {
@@ -62,10 +62,10 @@ type operator interface {
 }
 
 type opReceive struct {
-	addr  string
+	addr     string
 	tableCnt int32
-	data  chan *Record
-	cache [][]*Record
+	data     chan *Record
+	cache    [][]*Record
 }
 
 func (o *opReceive) prepare() error {
@@ -117,7 +117,7 @@ func (o *opReceive) next(ctx *taskContext, _ []*Record) ([][]*Record, bool) {
 		}
 	}
 	if i == 0 {
-		return nil, false 
+		return nil, false
 	} else {
 		return o.cache, false
 	}
@@ -148,9 +148,9 @@ func (o *opSink) next(ctx *taskContext, records []*Record) ([][]*Record, bool) {
 		return nil, true
 	}
 	//ctx.ioPool.Go(context.Background(), func() {
-		for _, r := range records {
-			o.writer.write(ctx, r)
-		}
+	for _, r := range records {
+		o.writer.write(ctx, r)
+	}
 	//})
 	return nil, false
 }

@@ -4,7 +4,7 @@ import "sync"
 
 type Allocator struct {
 	sync.Mutex
-	id int32 
+	id int32
 }
 
 func NewAllocator() *Allocator {
@@ -14,6 +14,6 @@ func NewAllocator() *Allocator {
 func (a *Allocator) AllocID() int32 {
 	a.Lock()
 	defer a.Unlock()
-	a.id ++
+	a.id++
 	return a.id
 }

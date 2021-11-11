@@ -1,4 +1,4 @@
-package benchmark 
+package benchmark
 
 import (
 	"encoding/json"
@@ -18,13 +18,13 @@ func NewConfig() *Config {
 }
 
 type Config struct {
-	*flag.FlagSet     `json:"-"`
+	*flag.FlagSet `json:"-"`
 
 	TableNum int      `toml: "table-cnt" json: "table-cnt"`
 	Servers  []string `toml: "servers"   json: "server-addrs"`
 	Timeout  int      `toml: "timeout"   json: "timeout"`
 
-	configFile string  `json:"-"`
+	configFile string `json:"-"`
 }
 
 // configFromFile loads config from file.

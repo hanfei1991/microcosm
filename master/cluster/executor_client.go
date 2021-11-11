@@ -16,8 +16,12 @@ type ExecutorClient interface {
 }
 
 type executorClient struct {
-	conn *grpc.ClientConn
+	conn   *grpc.ClientConn
 	client pb.ExecutorClient
+}
+
+func (c *executorClient) close() error {
+	return c.conn.Close()
 }
 
 func (c *executorClient) send(ctx context.Context, req *ExecutorRequest) (*ExecutorResponse, error) {
@@ -39,7 +43,7 @@ func newExecutorClient(addr string) (*executorClient, error) {
 		return nil, errors.New("cannot build conn")
 	}
 	return &executorClient{
-		conn: conn,
+		conn:   conn,
 		client: pb.NewExecutorClient(conn),
 	}, nil
 }

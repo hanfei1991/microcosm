@@ -32,7 +32,7 @@ func (q *queue) push(t *taskContainer) {
 
 type Scheduler struct {
 	ctx *taskContext
-	q queue
+	q   queue
 }
 
 func (s *Scheduler) getWaker(task *taskContainer) func() {
@@ -48,16 +48,16 @@ func (s *Scheduler) getWaker(task *taskContainer) func() {
 
 func (s *Scheduler) ShowStats(sec int) {
 	for tid, stats := range s.ctx.stats {
-		log.Printf("tid %d qps %d avgLag %d ms", tid, stats.recordCnt / sec, stats.totalLag.Milliseconds() / int64(stats.recordCnt))
+		log.Printf("tid %d qps %d avgLag %d ms", tid, stats.recordCnt/sec, stats.totalLag.Milliseconds()/int64(stats.recordCnt))
 	}
 }
 
-func (s *Scheduler) Run(ctx context.Context)  {
+func (s *Scheduler) Run(ctx context.Context) {
 	//log.Printf("scheduler running")
 	for {
 		select {
 		case <-ctx.Done():
-			return 
+			return
 		default:
 		}
 		t := s.q.pop()
@@ -77,12 +77,12 @@ func (s *Scheduler) Run(ctx context.Context)  {
 	}
 }
 
-func NewScheduler() (*Scheduler) {
+func NewScheduler() *Scheduler {
 	ctx := &taskContext{
-		ioPool:   workerpool.NewDefaultAsyncPool(20),
+		ioPool: workerpool.NewDefaultAsyncPool(20),
 		//stats :   make([]tableStats, cfg.TableNum),
 	}
-	s := &Scheduler{ctx : ctx}
+	s := &Scheduler{ctx: ctx}
 	return s
 	//receiveTasks := make([]*taskContainer, 0)
 	//taskID := 0

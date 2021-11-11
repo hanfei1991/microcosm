@@ -6,5 +6,6 @@ import (
 
 type JobMaster interface {
 	DispatchJob() error
-	ID() model.JobID 
+	OfflineExecutor(eid model.ExecutorID)
+	ID() model.JobID
 }

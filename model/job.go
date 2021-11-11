@@ -2,53 +2,41 @@ package model
 
 import "github.com/hanfei1991/microcosom/pb"
 
-type JobID  int32
+type JobID int32
 type TaskID int32
 
 type Job struct {
-	ID    JobID 
+	ID    JobID
 	Tasks []*Task
 }
 
-func (j *Job) ToPB() (*pb.SubmitSubJobRequest) {
+func (j *Job) ToPB() *pb.SubmitSubJobRequest {
 	req := &pb.SubmitSubJobRequest{
 		JobId: int32(j.ID),
 	}
-	for _, t:= range j.Tasks {
+	for _, t := range j.Tasks {
 		req.Tasks = append(req.Tasks, t.ToPB())
 	}
 	return req
 }
 
 type Task struct {
-	ID TaskID 
-	JobID JobID
+	ID      TaskID
+	JobID   JobID
 	Outputs []TaskID
-	Inputs []TaskID
+	Inputs  []TaskID
 
 	// TODO: operator or operator tree
-	OpTp OperatorType
-	Op Operator	
-	Cost int
+	OpTp             OperatorType
+	Op               Operator
+	Cost             int
 	PreferedLocation string
-
-	ExecutorID ExecutorID
-	Status   TaskStatus
 }
-
-type TaskStatus int
-const (
-	TaskScheduling TaskStatus = iota
-	TaskPreparing
-	TaskRunning
-	TaskCanceling
-	TaskClosed
-)
 
 func (t *Task) ToPB() *pb.TaskRequest {
 	req := &pb.TaskRequest{
-		Id : int32(t.ID),
-		Op: t.Op,
+		Id:   int32(t.ID),
+		Op:   t.Op,
 		OpTp: int32(t.OpTp),
 	}
 	for _, c := range t.Inputs {

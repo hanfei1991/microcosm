@@ -21,9 +21,9 @@ func BuildBenchmarkJobMaster(rawConfig string, idAllocator *autoid.Allocator, re
 	}
 
 	tableTasks := make([]*model.Task, 0)
-	for _, addr := range config.Servers{
-		tableOp := model.TableReaderOp {
-			Addr : addr,
+	for _, addr := range config.Servers {
+		tableOp := model.TableReaderOp{
+			Addr:     addr,
 			TableNum: int32(config.TableNum),
 		}
 		js, err := json.Marshal(tableOp)
@@ -32,10 +32,10 @@ func BuildBenchmarkJobMaster(rawConfig string, idAllocator *autoid.Allocator, re
 		}
 		t := &model.Task{
 			JobID: job.ID,
-			ID: model.TaskID(idAllocator.AllocID()),
-			Cost: 1,
-			Op: js,
-			OpTp: model.TableReaderType,
+			ID:    model.TaskID(idAllocator.AllocID()),
+			Cost:  1,
+			Op:    js,
+			OpTp:  model.TableReaderType,
 		}
 		tableTasks = append(tableTasks, t)
 	}
@@ -43,36 +43,36 @@ func BuildBenchmarkJobMaster(rawConfig string, idAllocator *autoid.Allocator, re
 	job.Tasks = tableTasks
 	hashTasks := make([]*model.Task, 0)
 	sinkTasks := make([]*model.Task, 0)
-	for i:=1; i <= config.TableNum; i++ {
-		hashOp := model.HashOp {
+	for i := 1; i <= config.TableNum; i++ {
+		hashOp := model.HashOp{
 			TableID: int32(i),
 		}
 		js, err := json.Marshal(hashOp)
 		if err != nil {
 			return nil, err
 		}
-		hashTask := &model.Task {
+		hashTask := &model.Task{
 			JobID: job.ID,
-			ID: model.TaskID(idAllocator.AllocID()),
-			Cost: 1,
-			Op: js,
-			OpTp: model.HashType,
+			ID:    model.TaskID(idAllocator.AllocID()),
+			Cost:  1,
+			Op:    js,
+			OpTp:  model.HashType,
 		}
 		hashTasks = append(hashTasks, hashTask)
 
-		sinkOp := model.TableSinkOp {
-			File : fmt.Sprintf("/tmp/table_%d", i),
+		sinkOp := model.TableSinkOp{
+			File: fmt.Sprintf("/tmp/table_%d", i),
 		}
 		js, err = json.Marshal(sinkOp)
 		if err != nil {
 			return nil, err
 		}
-		sinkTask := &model.Task {
+		sinkTask := &model.Task{
 			JobID: job.ID,
-			ID: model.TaskID(idAllocator.AllocID()),
-			Cost: 1,
-			Op: js,
-			OpTp: model.TableSinkType,
+			ID:    model.TaskID(idAllocator.AllocID()),
+			Cost:  1,
+			Op:    js,
+			OpTp:  model.TableSinkType,
 		}
 		sinkTasks = append(sinkTasks, sinkTask)
 		connectTwoTask(hashTask, sinkTask)
@@ -85,10 +85,16 @@ func BuildBenchmarkJobMaster(rawConfig string, idAllocator *autoid.Allocator, re
 	job.Tasks = append(job.Tasks, hashTasks...)
 	job.Tasks = append(job.Tasks, sinkTasks...)
 	master := &Master{
-		Config: config,
-		job: job,
+		Config:         config,
+		job:            job,
 		resouceManager: resourceMgr,
-		client: client,
+		client:         client,
+
+		offExecutors:         make(chan model.ExecutorID, 100),
+		scheduleWaitingTasks: make(chan scheduleGroup, 1024),
+
+		execTasks:    make(map[model.ExecutorID][]*model.Task),
+		runningTasks: make(map[model.TaskID]*Task),
 	}
 	return master, nil
 }

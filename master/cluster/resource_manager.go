@@ -8,7 +8,7 @@ import (
 
 // ResouceManager manages the resources of the clusters.
 type ResourceMgr interface {
-	GetResourceSnapshot() (*ResourceSnapshot)
+	GetResourceSnapshot() *ResourceSnapshot
 }
 
 // Resource is the min unit of resource that we count.
@@ -24,7 +24,7 @@ type ExecutorResource struct {
 
 func (e *ExecutorResource) getSnapShot() *ExecutorResource {
 	r := &ExecutorResource{
-		ID: e.ID,
+		ID:       e.ID,
 		Capacity: e.Capacity,
 		Reserved: e.Reserved,
 		Used:     e.Used,
@@ -44,7 +44,7 @@ func (r *ExecutorManager) GetResourceSnapshot() *ResourceSnapshot {
 	defer r.mu.Unlock()
 	for _, exec := range r.executors {
 		log.L().Logger.Info("executor status", zap.Int32("cap", int32(exec.resource.Capacity)))
-		if exec.Status == model.Running && exec.resource.Capacity > exec.resource.Reserved && exec.resource.Capacity > exec.resource.Used{
+		if exec.Status == model.Running && exec.resource.Capacity > exec.resource.Reserved && exec.resource.Capacity > exec.resource.Used {
 			snapshot.Executors = append(snapshot.Executors, exec.resource.getSnapShot())
 		}
 	}

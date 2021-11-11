@@ -22,36 +22,37 @@ import (
 // Server handles PRC requests for df master.
 
 type Server struct {
-
 	etcd *embed.Etcd
 
 	etcdClient *clientv3.Client
 	//election *election.Election
 
 	// sched scheduler
-	executorManager  *cluster.ExecutorManager
-	jobManager *JobManager
-	// 
+	executorManager *cluster.ExecutorManager
+	jobManager      *JobManager
+	//
 
 	cfg *Config
 }
 
 func NewServer(cfg *Config) (*Server, error) {
-	server := &Server {
-		cfg: cfg,
-		executorManager: cluster.NewExecutorManager(),
+	executorNotifier := make(chan model.ExecutorID, 100)
+	server := &Server{
+		cfg:             cfg,
+		executorManager: cluster.NewExecutorManager(executorNotifier),
 	}
 	server.jobManager = &JobManager{
-		jobMasters: make(map[model.JobID]JobMaster),
-		idAllocater: autoid.NewAllocator(),
+		jobMasters:       make(map[model.JobID]JobMaster),
+		idAllocater:      autoid.NewAllocator(),
 		dispatchJobQueue: make(chan JobMaster, 1024),
-		resourceMgr: server.executorManager,
-		executorClient: server.executorManager,
+		resourceMgr:      server.executorManager,
+		executorClient:   server.executorManager,
+		offExecutors:     executorNotifier,
 	}
 	return server, nil
 }
 
-func (s *Server) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest)  (*pb.HeartbeatResponse, error) {
+func (s *Server) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
 	return s.executorManager.HandleHeartbeat(req)
 }
 
@@ -68,7 +69,7 @@ func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorR
 	if err != nil {
 		log.L().Logger.Error("add executor failed", zap.Error(err))
 		return &pb.RegisterExecutorResponse{
-			Err: pb.ErrorCode_Other,
+			Err:        pb.ErrorCode_Other,
 			ErrMessage: err.Error(),
 		}, nil
 	}
@@ -102,8 +103,8 @@ func (s *Server) Start(ctx context.Context) (err error) {
 		return
 	}
 
-	gRPCSvr := func(gs *grpc.Server) { 
-		pb.RegisterMasterServer(gs, s) 
+	gRPCSvr := func(gs *grpc.Server) {
+		pb.RegisterMasterServer(gs, s)
 		// TODO: register msg server
 	}
 
@@ -112,7 +113,6 @@ func (s *Server) Start(ctx context.Context) (err error) {
 	//if err != nil {
 	//	return
 	//}
-
 
 	// generate grpcServer
 	s.etcd, err = startEtcd(etcdCfg, gRPCSvr, nil, time.Minute)
@@ -132,8 +132,10 @@ func (s *Server) Start(ctx context.Context) (err error) {
 	// start leader election
 	// TODO: Consider election. And Notify workers when leader changes.
 	//s.election, err = election.NewElection(ctx, )
-	
+
 	// start keep alive
+	s.executorManager.Start(ctx)
+	s.jobManager.Start(ctx)
 	return nil
 }
 

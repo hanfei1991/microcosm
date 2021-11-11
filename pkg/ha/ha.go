@@ -20,7 +20,7 @@ func NewMockStore() HAStore {
 
 type mockStore struct {
 	sync.Mutex
-    kv map[string]string
+	kv map[string]string
 }
 
 func (s *mockStore) Put(k, v string) error {
@@ -49,5 +49,5 @@ func (s *mockStore) Get(k string) (string, error) {
 	if !ok {
 		return "", errors.New("not found k")
 	}
-	return v, nil 
+	return v, nil
 }
