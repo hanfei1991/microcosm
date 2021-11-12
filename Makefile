@@ -1,4 +1,7 @@
-all: df-master df-executor df-master-client producer
+all: df-proto df-master df-executor df-master-client producer
+
+df-proto:
+	./generate-proto.sh
 
 df-master:
 	go build -o bin/master ./cmd/master
