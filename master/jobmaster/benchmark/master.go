@@ -12,9 +12,11 @@ import (
 	"go.uber.org/zap"
 )
 
+// Master implements the master of benchmark workload.
 type Master struct {
 	*Config
 	job *model.Job
+	ctx context.Context
 
 	resouceManager cluster.ResourceMgr
 	client         cluster.ExecutorClient
@@ -28,17 +30,22 @@ type Master struct {
 	scheduleWaitingTasks chan scheduleGroup
 }
 
-// tasks in same group have to be scheduled in the same node.
+// scheduleGroup is the min unit of scheduler, and the tasks in the same group have to be scheduled in the same node.
 type scheduleGroup []*Task
 
+// TaskStatus represents the current status of the task.
 type TaskStatus int32
 
 const (
+	// Running means the task is running.
 	Running TaskStatus = iota
+	// Stopped means the task has been stopped by any means.
 	Stopped
+	// Finished means the task has finished its job.
 	Finished
 )
 
+// Task is the container of a dispatched tasks,  and records its status.
 type Task struct {
 	*model.Task
 
@@ -46,10 +53,12 @@ type Task struct {
 	status TaskStatus
 }
 
+// ID implements JobMaster interface.
 func (m *Master) ID() model.JobID {
 	return m.job.ID
 }
 
+// master dispatches a set of task.
 func (m *Master) dispatch(tasks []*Task) error {
 	arrangement := make(map[model.ExecutorID][]*model.Task)
 	for _, task := range tasks {
@@ -61,6 +70,7 @@ func (m *Master) dispatch(tasks []*Task) error {
 			arrangement[task.exec] = subjob
 		}
 	}
+
 	// TODO: process the error cases.
 	for execID, taskList := range arrangement {
 		// construct sub job
@@ -74,7 +84,7 @@ func (m *Master) dispatch(tasks []*Task) error {
 			Cmd: cluster.CmdSubmitSubJob,
 			Req: reqPb,
 		}
-		resp, err := m.client.Send(context.Background(), execID, request)
+		resp, err := m.client.Send(m.ctx, execID, request)
 		if err != nil {
 			log.L().Logger.Info("Send meet error", zap.Error(err))
 			return err
@@ -84,6 +94,8 @@ func (m *Master) dispatch(tasks []*Task) error {
 			return errors.New(respPb.Errors[0].GetMsg())
 		}
 	}
+
+	// apply the new arrangement. 
 	m.mu.Lock()
 	for eid, taskList := range arrangement {
 		originTasks, ok := m.execTasks[eid]
@@ -171,6 +183,7 @@ func (m *Master) scheduleJobImpl() error {
 	return nil
 }
 
+// DispatchJob implements JobMaster interface.
 func (m *Master) DispatchJob() error {
 	retry := 1
 	for i := 1; i <= retry; i++ {
@@ -217,10 +230,13 @@ func (m *Master) monitorSchedulingTasks() {
 				// FIXME: this will cause deadlock problem
 				m.scheduleWaitingTasks <- group
 			}
+		case <- m.ctx.Done():
+			return
 		}
 	}
 }
 
+// OfflineExecutor implements JobMaster interface.
 func (m *Master) OfflineExecutor(id model.ExecutorID) {
 	m.offExecutors <- id
 	log.L().Logger.Info("executor is offlined", zap.Int32("eid", int32(id)))
@@ -241,8 +257,6 @@ func (m *Master) monitorExecutorOffline() {
 			delete(m.execTasks, execID)
 			m.mu.Unlock()
 
-			log.L().Logger.Info("task number is", zap.Int("task num", len(taskList)))
-
 			var group scheduleGroup
 			for _, task := range taskList {
 				t, ok := m.runningTasks[task.ID]
@@ -254,6 +268,8 @@ func (m *Master) monitorExecutorOffline() {
 				group = append(group, t)
 			}
 			m.scheduleWaitingTasks <- group
+		case <- m.ctx.Done():
+			return
 		}
 	}
 }

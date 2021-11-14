@@ -11,7 +11,7 @@ executor-server is in charge of:
 
 The task runtime has some important struct and implements the interface:
 
-- **scheduler**, the (singleton) instance organizes and executes tasks.
+- **runtime**, the (singleton) instance organizes and executes tasks.
   - **Run** function that actually drives the execution of the tasks and is thread-safe.
   - *Queue* field that contains the runnable tasks.
 - **task**, also called *taskContainer*, wraps the logic of operator and maintains the status and input/output channels.

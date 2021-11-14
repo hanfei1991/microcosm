@@ -20,7 +20,6 @@ import (
 )
 
 // Server handles PRC requests for df master.
-
 type Server struct {
 	etcd *embed.Etcd
 
@@ -35,6 +34,7 @@ type Server struct {
 	cfg *Config
 }
 
+// NewServer creates a new master-server.
 func NewServer(cfg *Config) (*Server, error) {
 	executorNotifier := make(chan model.ExecutorID, 100)
 	server := &Server{
@@ -44,7 +44,6 @@ func NewServer(cfg *Config) (*Server, error) {
 	server.jobManager = &JobManager{
 		jobMasters:       make(map[model.JobID]JobMaster),
 		idAllocater:      autoid.NewAllocator(),
-		dispatchJobQueue: make(chan JobMaster, 1024),
 		resourceMgr:      server.executorManager,
 		executorClient:   server.executorManager,
 		offExecutors:     executorNotifier,
@@ -52,13 +51,14 @@ func NewServer(cfg *Config) (*Server, error) {
 	return server, nil
 }
 
+// Heartbeat implements pb interface.
 func (s *Server) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
 	return s.executorManager.HandleHeartbeat(req)
 }
 
 // SubmitJob passes request onto "JobManager".
 func (s *Server) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) (*pb.SubmitJobResponse, error) {
-	return s.jobManager.SubmitJob(req), nil
+	return s.jobManager.SubmitJob(ctx, req), nil
 }
 
 // RegisterExecutor implements grpc interface, and passes request onto executor manager.
@@ -78,10 +78,12 @@ func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorR
 	}, nil
 }
 
+// DeleteExecutor deletes an executor, but have yet implemented.
 func (s *Server) DeleteExecutor() {
 	// To implement
 }
 
+// Start the master-server.
 func (s *Server) Start(ctx context.Context) (err error) {
 	etcdCfg := genEmbedEtcdConfigWithLogger(s.cfg.LogLevel)
 	// prepare to join an existing etcd cluster.

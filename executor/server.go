@@ -19,7 +19,7 @@ type Server struct {
 
 	srv *grpc.Server
 	cli *MasterClient
-	sch *runtime.Scheduler
+	sch *runtime.Runtime
 	ID  model.ExecutorID
 
 	lastHearbeatTime time.Time
@@ -32,6 +32,7 @@ func NewServer(cfg *Config) *Server {
 	return &s
 }
 
+// SubmitSubJob implements the pb interface.
 func (s *Server) SubmitSubJob(ctx context.Context, req *pb.SubmitSubJobRequest) (*pb.SubmitSubJobResponse, error) {
 	tasks := make([]*model.Task, 0, len(req.Tasks))
 	for _, pbTask := range req.Tasks {
@@ -86,7 +87,7 @@ func (s *Server) Start(ctx context.Context) error {
 		exitCh <- struct{}{}
 	}()
 
-	s.sch = runtime.NewScheduler()
+	s.sch = runtime.NewRuntime()
 	go func() {
 		s.sch.Run(ctx)
 		exitCh <- struct{}{}

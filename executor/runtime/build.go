@@ -39,7 +39,7 @@ func newSinkOp(cfg *model.TableSinkOp) operator {
 		},
 	}
 }
-func (s *Scheduler) connectTasks(sender, receiver *taskContainer) {
+func (s *Runtime) connectTasks(sender, receiver *taskContainer) {
 	ch := &Channel{
 		innerChan: make(chan *Record, 1024),
 		sendWaker: s.getWaker(sender),
@@ -49,7 +49,7 @@ func (s *Scheduler) connectTasks(sender, receiver *taskContainer) {
 	receiver.inputs = append(receiver.inputs, ch)
 }
 
-func (s *Scheduler) SubmitTasks(tasks []*model.Task) error {
+func (s *Runtime) SubmitTasks(tasks []*model.Task) error {
 	taskSet := make(map[model.TaskID]*taskContainer)
 	for _, t := range tasks {
 		task := newTaskContainer(t, s.ctx)

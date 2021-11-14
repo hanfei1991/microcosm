@@ -13,11 +13,10 @@ import (
 	"go.uber.org/zap"
 )
 
+// JobManager manages all the job masters, and notifys the offline executor to them.
 type JobManager struct {
 	mu                sync.Mutex
 	jobMasters        map[model.JobID]JobMaster
-	dispatchJobQueue  chan JobMaster
-	scheduleTaskQueue chan *model.Task
 
 	idAllocater    *autoid.Allocator
 	resourceMgr    cluster.ResourceMgr
@@ -26,6 +25,7 @@ type JobManager struct {
 	offExecutors chan model.ExecutorID
 }
 
+// Start the deamon gouroutine.
 func (j *JobManager) Start(ctx context.Context) {
 	go j.startImpl(ctx)
 }
@@ -46,7 +46,7 @@ func (j *JobManager) startImpl(ctx context.Context) {
 }
 
 // SubmitJob processes "SubmitJobRequest".
-func (j *JobManager) SubmitJob(req *pb.SubmitJobRequest) *pb.SubmitJobResponse {
+func (j *JobManager) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *pb.SubmitJobResponse {
 	info := model.JobInfo{
 		Config:   string(req.Config),
 		UserName: req.User,
@@ -58,7 +58,7 @@ func (j *JobManager) SubmitJob(req *pb.SubmitJobRequest) *pb.SubmitJobResponse {
 	switch req.Tp {
 	case pb.SubmitJobRequest_Benchmark:
 		info.Type = model.JobBenchmark
-		jobMaster, err = benchmark.BuildBenchmarkJobMaster(info.Config, j.idAllocater, j.resourceMgr, j.executorClient)
+		jobMaster, err = benchmark.BuildBenchmarkJobMaster(ctx, info.Config, j.idAllocater, j.resourceMgr, j.executorClient)
 		if err != nil {
 			resp.ErrMessage = err.Error()
 			return resp
