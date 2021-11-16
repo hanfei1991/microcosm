@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/hanfei1991/microcosom/master/cluster"
+	"github.com/hanfei1991/microcosom/master/jobmaster"
 	"github.com/hanfei1991/microcosom/model"
-	"github.com/hanfei1991/microcosom/pkg/autoid"
 	"github.com/hanfei1991/microcosom/pkg/etcdutil"
 	"github.com/hanfei1991/microcosom/pkg/log"
 	"github.com/hanfei1991/microcosom/pkg/terror"
@@ -29,7 +29,7 @@ type Server struct {
 
 	// sched scheduler
 	executorManager *cluster.ExecutorManager
-	jobManager      *JobManager
+	jobManager      *jobmaster.JobManager
 	//
 
 	cfg *Config
@@ -38,16 +38,12 @@ type Server struct {
 // NewServer creates a new master-server.
 func NewServer(cfg *Config) (*Server, error) {
 	executorNotifier := make(chan model.ExecutorID, 100)
+	executorManager := cluster.NewExecutorManager(executorNotifier)
+	jobManager := jobmaster.NewJobManager(executorManager, executorManager, executorNotifier)
 	server := &Server{
 		cfg:             cfg,
-		executorManager: cluster.NewExecutorManager(executorNotifier),
-	}
-	server.jobManager = &JobManager{
-		jobMasters:     make(map[model.JobID]JobMaster),
-		idAllocater:    autoid.NewAllocator(),
-		resourceMgr:    server.executorManager,
-		executorClient: server.executorManager,
-		offExecutors:   executorNotifier,
+		executorManager: executorManager,
+		jobManager: jobManager,
 	}
 	return server, nil
 }

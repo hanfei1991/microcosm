@@ -1,4 +1,4 @@
-package master
+package jobmaster
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// JobManager manages all the job masters, and notifys the offline executor to them.
+// JobManager manages all the job masters, and notify the offline executor to them.
 type JobManager struct {
 	mu         sync.Mutex
 	jobMasters map[model.JobID]JobMaster
@@ -26,7 +26,7 @@ type JobManager struct {
 	offExecutors chan model.ExecutorID
 }
 
-// Start the deamon gouroutine.
+// Start the deamon goroutine.
 func (j *JobManager) Start(ctx context.Context) {
 	go j.startImpl(ctx)
 }
@@ -81,4 +81,14 @@ func (j *JobManager) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *p
 
 	resp.JobId = int32(jobMaster.ID())
 	return resp
+}
+
+func NewJobManager(resource cluster.ResourceMgr, clt cluster.ExecutorClient, executorNotifier chan model.ExecutorID) *JobManager {
+	return &JobManager{
+		jobMasters:     make(map[model.JobID]JobMaster),
+		idAllocater:    autoid.NewAllocator(),
+		resourceMgr:    resource,
+		executorClient: clt,
+		offExecutors:   executorNotifier,
+	}
 }
