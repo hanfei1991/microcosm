@@ -65,8 +65,8 @@ func main() {
 		fmt.Printf("err: %v", err)
 		return
 	}
-	if resp.ErrMessage != "" {
-		fmt.Printf("err: %v", resp.ErrMessage)
+	if resp.Err != nil {
+		fmt.Printf("err: %v", resp.Err.Message)
 		return
 	}
 	fmt.Print("submit job successful")

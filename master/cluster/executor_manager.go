@@ -2,9 +2,7 @@ package cluster
 
 import (
 	"context"
-	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/hanfei1991/microcosom/model"
@@ -12,6 +10,7 @@ import (
 	"github.com/hanfei1991/microcosom/pkg/autoid"
 	"github.com/hanfei1991/microcosom/pkg/ha"
 	"github.com/hanfei1991/microcosom/pkg/log"
+	"github.com/hanfei1991/microcosom/pkg/terror"
 	"github.com/pingcap/errors"
 	"go.uber.org/zap"
 )
@@ -39,13 +38,14 @@ func NewExecutorManager(offExec chan model.ExecutorID) *ExecutorManager {
 	}
 }
 
-func (e *ExecutorManager) RemoveExecutor(id model.ExecutorID) error {
+func (e *ExecutorManager) removeExecutorImpl(id model.ExecutorID) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	log.L().Logger.Info("begin to remove executor", zap.Int32("id", int32(id)))
 	exec, ok := e.executors[id]
 	if !ok {
-		return errors.New("cannot find executor")
+		// This executor has been removed
+		return terror.ErrUnknownExecutorID.Generatef("executor id is %d", id)
 	}
 	delete(e.executors, id)
 	//err := e.haStore.Del(exec.EtcdKey())
@@ -57,22 +57,31 @@ func (e *ExecutorManager) RemoveExecutor(id model.ExecutorID) error {
 	return exec.close()
 }
 
+// HandleHeartbeat implements pb interface,
 func (e *ExecutorManager) HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
 	log.L().Logger.Info("handle heart beat", zap.Int32("id", req.ExecutorId))
-	defer log.L().Logger.Info("end handle heart beat", zap.Int32("id", req.ExecutorId))
 	e.mu.Lock()
 	exec, ok := e.executors[model.ExecutorID(req.ExecutorId)]
+
+	// executor not exists
 	if !ok {
 		e.mu.Unlock()
-		return &pb.HeartbeatResponse{ErrMessage: fmt.Sprintf("can't not find executor %d", req.ExecutorId)}, nil
+		err := terror.ErrUnknownExecutorID.Generatef("executor id is %d", req.ExecutorId)
+		return &pb.HeartbeatResponse{Err: terror.ToPBError(err)}, nil
 	}
 	e.mu.Unlock()
+
+	// exists and apply the resource usage.
 	exec.mu.Lock()
+	defer exec.mu.Unlock()
+	if exec.Status == model.Tombstone {
+		err := terror.ErrTombstoneExecutor.Generatef("executor %d has been dead", req.ExecutorId)
+		return &pb.HeartbeatResponse{Err: terror.ToPBError(err)}, nil
+	}
 	exec.lastUpdateTime = time.Unix(int64(req.Timestamp), 0)
 	exec.heartbeatTTL = time.Duration(req.Ttl) * time.Millisecond
 	usage := ResourceUsage(req.ResourceUsage)
 	exec.resource.Used = usage
-	exec.mu.Unlock()
 	resp := &pb.HeartbeatResponse{}
 	return resp, nil
 }
@@ -119,6 +128,7 @@ func (e *ExecutorManager) AddExecutor(req *pb.RegisterExecutorRequest) (*model.E
 	return info, nil
 }
 
+// Executor records the status of an executor instance.
 type Executor struct {
 	model.ExecutorInfo
 	Status   model.ExecutorStatus
@@ -138,23 +148,25 @@ func (e *Executor) close() error {
 
 func (e *Executor) checkAlive() bool {
 	log.L().Logger.Info("check alive", zap.Int32("exec", int32(e.ExecutorInfo.ID)))
-	defer log.L().Logger.Info("end check alive", zap.Int32("exec", int32(e.ExecutorInfo.ID)))
-	if atomic.LoadInt32((*int32)(&e.Status)) == int32(model.Tombstone) {
-		return false
-	}
+
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if e.Status == model.Tombstone {
+		return false
+	}
 	if !e.lastUpdateTime.IsZero() && e.lastUpdateTime.Add(e.heartbeatTTL).Before(time.Now()) {
-		atomic.StoreInt32((*int32)(&e.Status), int32(model.Tombstone))
+		e.Status = model.Tombstone
 		return false
 	}
 	return true
 }
 
+// Start check alive goroutine.
 func (e *ExecutorManager) Start(ctx context.Context) {
 	go e.checkAlive(ctx)
 }
 
+// checkAlive goroutine checks whether all the executors are alive periodically.
 func (e *ExecutorManager) checkAlive(ctx context.Context) {
 	tick := time.NewTicker(1 * time.Second)
 	defer func() { log.L().Logger.Info("check alive finished") }()
@@ -175,7 +187,7 @@ func (e *ExecutorManager) checkAliveImpl() error {
 	for id, exec := range e.executors {
 		if !exec.checkAlive() {
 			e.mu.Unlock()
-			err := e.RemoveExecutor(id)
+			err := e.removeExecutorImpl(id)
 			return err
 		}
 	}
@@ -183,6 +195,7 @@ func (e *ExecutorManager) checkAliveImpl() error {
 	return nil
 }
 
+// Send implements ExecutorClient interface.
 func (e *ExecutorManager) Send(ctx context.Context, id model.ExecutorID, req *ExecutorRequest) (*ExecutorResponse, error) {
 	e.mu.Lock()
 	exec, ok := e.executors[id]
@@ -193,7 +206,11 @@ func (e *ExecutorManager) Send(ctx context.Context, id model.ExecutorID, req *Ex
 	e.mu.Unlock()
 	resp, err := exec.client.send(ctx, req)
 	if err != nil {
-		atomic.CompareAndSwapInt32((*int32)(&exec.Status), int32(model.Running), int32(model.Disconnected))
+		exec.mu.Lock()
+		if exec.Status == model.Running {
+			exec.Status = model.Disconnected
+		}
+		exec.mu.Unlock()
 		return resp, err
 	}
 	return resp, nil

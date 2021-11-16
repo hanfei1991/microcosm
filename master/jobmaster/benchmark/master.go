@@ -2,13 +2,13 @@ package benchmark
 
 import (
 	"context"
-	"errors"
 	"sync"
 
 	"github.com/hanfei1991/microcosom/master/cluster"
 	"github.com/hanfei1991/microcosom/model"
 	"github.com/hanfei1991/microcosom/pb"
 	"github.com/hanfei1991/microcosom/pkg/log"
+	"github.com/hanfei1991/microcosom/pkg/terror"
 	"go.uber.org/zap"
 )
 
@@ -16,10 +16,12 @@ import (
 type Master struct {
 	*Config
 	job *model.Job
-	ctx context.Context
 
-	resouceManager cluster.ResourceMgr
-	client         cluster.ExecutorClient
+	ctx context.Context
+	cancel func()
+
+	resourceManager cluster.ResourceMgr
+	client          cluster.ExecutorClient
 
 	offExecutors chan model.ExecutorID
 
@@ -28,6 +30,10 @@ type Master struct {
 	runningTasks map[model.TaskID]*Task
 
 	scheduleWaitingTasks chan scheduleGroup
+}
+
+func (m *Master) Cancel() {
+	m.cancel()
 }
 
 // scheduleGroup is the min unit of scheduler, and the tasks in the same group have to be scheduled in the same node.
@@ -59,7 +65,7 @@ func (m *Master) ID() model.JobID {
 }
 
 // master dispatches a set of task.
-func (m *Master) dispatch(tasks []*Task) error {
+func (m *Master) dispatch(ctx context.Context, tasks []*Task) error {
 	arrangement := make(map[model.ExecutorID][]*model.Task)
 	for _, task := range tasks {
 		subjob, ok := arrangement[task.exec]
@@ -71,7 +77,6 @@ func (m *Master) dispatch(tasks []*Task) error {
 		}
 	}
 
-	// TODO: process the error cases.
 	for execID, taskList := range arrangement {
 		// construct sub job
 		job := &model.Job{
@@ -84,18 +89,18 @@ func (m *Master) dispatch(tasks []*Task) error {
 			Cmd: cluster.CmdSubmitSubJob,
 			Req: reqPb,
 		}
-		resp, err := m.client.Send(m.ctx, execID, request)
+		resp, err := m.client.Send(ctx, execID, request)
 		if err != nil {
 			log.L().Logger.Info("Send meet error", zap.Error(err))
 			return err
 		}
 		respPb := resp.Resp.(*pb.SubmitSubJobResponse)
-		if len(respPb.Errors) != 0 {
-			return errors.New(respPb.Errors[0].GetMsg())
+		if respPb.Err != nil {
+			return terror.ErrSubJobFailed.Generatef("executor %id job %d", execID, m.ID())
 		}
 	}
 
-	// apply the new arrangement. 
+	// apply the new arrangement.
 	m.mu.Lock()
 	for eid, taskList := range arrangement {
 		originTasks, ok := m.execTasks[eid]
@@ -114,7 +119,7 @@ func (m *Master) dispatch(tasks []*Task) error {
 }
 
 // TODO: Implement different allocate task logic.
-func (m *Master) allocateTasksWithNaitiveStratgy(snapshot *cluster.ResourceSnapshot, taskInfos []*model.Task) (bool, []*Task) {
+func (m *Master) allocateTasksWithNaiveStrategy(snapshot *cluster.ResourceSnapshot, taskInfos []*model.Task) (bool, []*Task) {
 	var idx int = 0
 	tasks := make([]*Task, 0, len(taskInfos))
 	for _, task := range taskInfos {
@@ -145,49 +150,46 @@ func (m *Master) allocateTasksWithNaitiveStratgy(snapshot *cluster.ResourceSnaps
 }
 
 func (m *Master) reScheduleTask(group scheduleGroup) error {
-	snapshot := m.resouceManager.GetResourceSnapshot()
+	snapshot := m.resourceManager.GetResourceSnapshot()
 	if len(snapshot.Executors) == 0 {
-		return errors.New("resource not enough")
+		return terror.ErrClusterResourceNotEnough
 	}
 	taskInfos := make([]*model.Task, 0, len(group))
 	for _, t := range group {
 		taskInfos = append(taskInfos, t.Task)
 	}
-	success, tasks := m.allocateTasksWithNaitiveStratgy(snapshot, taskInfos)
+	success, tasks := m.allocateTasksWithNaiveStrategy(snapshot, taskInfos)
 	if !success {
-		return errors.New("resource not enough")
+		return terror.ErrClusterResourceNotEnough
 	}
-	if err := m.dispatch(tasks); err != nil {
+	if err := m.dispatch(m.ctx, tasks); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (m *Master) scheduleJobImpl() error {
-	if m.job == nil {
-		return errors.New("not found job")
-	}
-	snapshot := m.resouceManager.GetResourceSnapshot()
+func (m *Master) scheduleJobImpl(ctx context.Context) error {
+	snapshot := m.resourceManager.GetResourceSnapshot()
 	if len(snapshot.Executors) == 0 {
-		return errors.New("resource not enough")
+		return terror.ErrClusterResourceNotEnough
 	}
-	success, tasks := m.allocateTasksWithNaitiveStratgy(snapshot, m.job.Tasks)
+	success, tasks := m.allocateTasksWithNaiveStrategy(snapshot, m.job.Tasks)
 	if !success {
-		return errors.New("resource not enough")
+		return terror.ErrClusterResourceNotEnough
 	}
 
 	m.start() // go
-	if err := m.dispatch(tasks); err != nil {
+	if err := m.dispatch(ctx, tasks); err != nil {
 		return err
 	}
 	return nil
 }
 
 // DispatchJob implements JobMaster interface.
-func (m *Master) DispatchJob() error {
+func (m *Master) DispatchJob(ctx context.Context) error {
 	retry := 1
 	for i := 1; i <= retry; i++ {
-		if err := m.scheduleJobImpl(); err == nil {
+		if err := m.scheduleJobImpl(ctx); err == nil {
 			return nil
 		} else if i == retry {
 			return err
@@ -230,7 +232,7 @@ func (m *Master) monitorSchedulingTasks() {
 				// FIXME: this will cause deadlock problem
 				m.scheduleWaitingTasks <- group
 			}
-		case <- m.ctx.Done():
+		case <-m.ctx.Done():
 			return
 		}
 	}
@@ -268,7 +270,7 @@ func (m *Master) monitorExecutorOffline() {
 				group = append(group, t)
 			}
 			m.scheduleWaitingTasks <- group
-		case <- m.ctx.Done():
+		case <-m.ctx.Done():
 			return
 		}
 	}

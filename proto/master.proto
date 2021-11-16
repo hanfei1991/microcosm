@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package pb;
 
+import "error.proto";
+
 // I'm trying to phase out the communication protocal.
 // - system level
 //   - Register Executor. After a executor bootstrapped, it has to register itself to join the cluster.
@@ -37,8 +39,7 @@ message HeartbeatRequest {
 }
 
 message HeartbeatResponse {
-    ErrorCode err = 1;
-    string err_message = 2;
+    Error err = 1;
 }
 
 message SubmitJobRequest {
@@ -55,16 +56,9 @@ message SubmitJobRequest {
     // TODO: Resource Limit
 }
 
-enum ErrorCode {
-    None = 0;
-    NotLeader = 1;
-    Other = 2;
-}
-
 message SubmitJobResponse {
-    ErrorCode err = 1;
-    string err_message = 2;
-    int32 job_id = 3;
+    Error err = 1;
+    int32 job_id = 2;
 }
 
 message RegisterExecutorRequest {
@@ -76,7 +70,6 @@ message RegisterExecutorRequest {
 }
 
 message RegisterExecutorResponse {
-    ErrorCode err = 1;
-    string err_message = 2;
-    int32  executor_id = 3;
+    Error err = 1;
+    int32  executor_id = 2;
 }

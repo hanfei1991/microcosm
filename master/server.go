@@ -11,6 +11,7 @@ import (
 	"github.com/hanfei1991/microcosom/pkg/autoid"
 	"github.com/hanfei1991/microcosom/pkg/etcdutil"
 	"github.com/hanfei1991/microcosom/pkg/log"
+	"github.com/hanfei1991/microcosom/pkg/terror"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/embed"
 	"go.uber.org/zap"
@@ -42,11 +43,11 @@ func NewServer(cfg *Config) (*Server, error) {
 		executorManager: cluster.NewExecutorManager(executorNotifier),
 	}
 	server.jobManager = &JobManager{
-		jobMasters:       make(map[model.JobID]JobMaster),
-		idAllocater:      autoid.NewAllocator(),
-		resourceMgr:      server.executorManager,
-		executorClient:   server.executorManager,
-		offExecutors:     executorNotifier,
+		jobMasters:     make(map[model.JobID]JobMaster),
+		idAllocater:    autoid.NewAllocator(),
+		resourceMgr:    server.executorManager,
+		executorClient: server.executorManager,
+		offExecutors:   executorNotifier,
 	}
 	return server, nil
 }
@@ -69,8 +70,7 @@ func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorR
 	if err != nil {
 		log.L().Logger.Error("add executor failed", zap.Error(err))
 		return &pb.RegisterExecutorResponse{
-			Err:        pb.ErrorCode_Other,
-			ErrMessage: err.Error(),
+			Err: terror.ToPBError(err),
 		}, nil
 	}
 	return &pb.RegisterExecutorResponse{

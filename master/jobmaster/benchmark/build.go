@@ -11,7 +11,7 @@ import (
 )
 
 // BuildBenchmarkJobMaster for benchmark workload.
-func BuildBenchmarkJobMaster(ctx context.Context, rawConfig string, idAllocator *autoid.Allocator, resourceMgr cluster.ResourceMgr, client cluster.ExecutorClient) (*Master, error) {
+func BuildBenchmarkJobMaster( rawConfig string, idAllocator *autoid.Allocator, resourceMgr cluster.ResourceMgr, client cluster.ExecutorClient) (*Master, error) {
 	config, err := configFromJson(rawConfig)
 	if err != nil {
 		return nil, err
@@ -86,10 +86,10 @@ func BuildBenchmarkJobMaster(ctx context.Context, rawConfig string, idAllocator 
 	job.Tasks = append(job.Tasks, hashTasks...)
 	job.Tasks = append(job.Tasks, sinkTasks...)
 	master := &Master{
-		Config:         config,
-		job:            job,
-		resouceManager: resourceMgr,
-		client:         client,
+		Config:          config,
+		job:             job,
+		resourceManager: resourceMgr,
+		client:          client,
 
 		offExecutors:         make(chan model.ExecutorID, 100),
 		scheduleWaitingTasks: make(chan scheduleGroup, 1024),
@@ -97,6 +97,7 @@ func BuildBenchmarkJobMaster(ctx context.Context, rawConfig string, idAllocator 
 		execTasks:    make(map[model.ExecutorID][]*model.Task),
 		runningTasks: make(map[model.TaskID]*Task),
 	}
+	master.ctx, master.cancel = context.WithCancel(context.Background())
 	return master, nil
 }
 

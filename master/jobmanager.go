@@ -10,13 +10,14 @@ import (
 	"github.com/hanfei1991/microcosom/pb"
 	"github.com/hanfei1991/microcosom/pkg/autoid"
 	"github.com/hanfei1991/microcosom/pkg/log"
+	"github.com/hanfei1991/microcosom/pkg/terror"
 	"go.uber.org/zap"
 )
 
 // JobManager manages all the job masters, and notifys the offline executor to them.
 type JobManager struct {
-	mu                sync.Mutex
-	jobMasters        map[model.JobID]JobMaster
+	mu         sync.Mutex
+	jobMasters map[model.JobID]JobMaster
 
 	idAllocater    *autoid.Allocator
 	resourceMgr    cluster.ResourceMgr
@@ -58,21 +59,22 @@ func (j *JobManager) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *p
 	switch req.Tp {
 	case pb.SubmitJobRequest_Benchmark:
 		info.Type = model.JobBenchmark
-		jobMaster, err = benchmark.BuildBenchmarkJobMaster(ctx, info.Config, j.idAllocater, j.resourceMgr, j.executorClient)
+		jobMaster, err = benchmark.BuildBenchmarkJobMaster(info.Config, j.idAllocater, j.resourceMgr, j.executorClient)
 		if err != nil {
-			resp.ErrMessage = err.Error()
+			resp.Err = terror.ToPBError(err)
 			return resp
 		}
 	default:
-		resp.ErrMessage = "unknown job type"
+		err = terror.ErrBuildJobFailed.Generatef("unknown job type")
+		resp.Err = terror.ToPBError(err)
 		return resp
 	}
 	log.L().Logger.Info("finished build job")
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	err = jobMaster.DispatchJob()
+	err = jobMaster.DispatchJob(ctx)
 	if err != nil {
-		resp.ErrMessage = err.Error()
+		resp.Err = terror.ToPBError(err)
 		return resp
 	}
 	j.jobMasters[jobMaster.ID()] = jobMaster

@@ -2,23 +2,11 @@
 syntax = "proto3";
 
 package pb;
+import "error.proto";
 
 service Executor {
     rpc SubmitSubJob(SubmitSubJobRequest) returns (SubmitSubJobResponse) {}
-    //rpc LaunchSubJob(LaunchSubJobRequest) returns (LaunchSubJobResponse) {}
     rpc CancelSubJob(CancelSubJobRequest) returns (CancelSubJobResponse) {}
-}
-
-message TaskError {
-    string msg = 1; 
-}
-
-message LaunchSubJobRequest {
-    int32 job_id = 1;
-}
-
-message LaunchSubJobResponse {
-    repeated TaskError errors = 1;
 }
 
 message CancelSubJobRequest {
@@ -26,7 +14,7 @@ message CancelSubJobRequest {
 }
 
 message CancelSubJobResponse {
-    repeated TaskError errors = 1;
+    Error err = 1;
 }
 
 message SubmitSubJobRequest {
@@ -43,5 +31,5 @@ message TaskRequest {
 }
 
 message SubmitSubJobResponse {
-    repeated TaskError errors = 1;
+    Error err = 1;
 }

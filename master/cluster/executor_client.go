@@ -2,11 +2,11 @@ package cluster
 
 import (
 	"context"
-	"errors"
 
 	"github.com/hanfei1991/microcosom/model"
 	"github.com/hanfei1991/microcosom/pb"
 	"github.com/hanfei1991/microcosom/pkg/log"
+	"github.com/hanfei1991/microcosom/pkg/terror"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
@@ -40,7 +40,7 @@ func (c *executorClient) send(ctx context.Context, req *ExecutorRequest) (*Execu
 func newExecutorClient(addr string) (*executorClient, error) {
 	conn, err := grpc.Dial(addr, grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {
-		return nil, errors.New("cannot build conn")
+		return nil, terror.ErrDBBadConn.Generatef("cannot build conn with %s", addr)
 	}
 	return &executorClient{
 		conn:   conn,

@@ -10,6 +10,7 @@ import (
 	"github.com/hanfei1991/microcosom/model"
 	"github.com/hanfei1991/microcosom/pb"
 	"github.com/hanfei1991/microcosom/pkg/log"
+	"github.com/hanfei1991/microcosom/pkg/terror"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
@@ -54,7 +55,7 @@ func (s *Server) SubmitSubJob(ctx context.Context, req *pb.SubmitSubJobRequest) 
 	err := s.sch.SubmitTasks(tasks)
 	if err != nil {
 		log.L().Logger.Error("submit subjob error", zap.Error(err))
-		resp.Errors = []*pb.TaskError{{Msg: err.Error()}}
+		resp.Err = terror.ToPBError(err)
 	}
 	return resp, nil
 }
@@ -126,19 +127,25 @@ func (s *Server) Start(ctx context.Context) error {
 				Timestamp:  uint64(t.Unix()),
 				Ttl:        uint64(s.cfg.KeepAliveTTL),
 			}
+			// FIXME: set timeout
 			resp, err := s.cli.SendHeartbeat(ctx, req)
 			if err != nil {
-				log.L().Error("heartbeat meet error")
+				log.L().Error("heartbeat meet error", zap.Error(err))
 				if s.lastHearbeatTime.Add(time.Duration(s.cfg.KeepAliveTTL) * time.Millisecond).Before(time.Now()) {
 					return err
 				}
 				continue
 			}
-			if resp.ErrMessage != "" {
-				return errors.New(resp.ErrMessage)
+			if resp.Err != nil {
+				log.L().Error("heartbeat meet error")
+				switch resp.Err.Code {
+				case pb.ErrorCode_UnknownExecutor, pb.ErrorCode_TombstoneExecutor:
+					return errors.New(resp.Err.Message)
+				}
+				continue
 			}
-			log.L().Info("heartbeat success")
 			s.lastHearbeatTime = t
+			log.L().Info("heartbeat success")
 		}
 	}
 }
