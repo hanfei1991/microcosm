@@ -10,10 +10,8 @@ type Job struct {
 	Tasks []*Task
 }
 
-func (j *Job) ToPB() *pb.SubmitSubJobRequest {
-	req := &pb.SubmitSubJobRequest{
-		JobId: int32(j.ID),
-	}
+func (j *Job) ToPB() *pb.SubmitBatchTasksRequest {
+	req := &pb.SubmitBatchTasksRequest{}
 	for _, t := range j.Tasks {
 		req.Tasks = append(req.Tasks, t.ToPB())
 	}

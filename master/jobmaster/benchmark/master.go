@@ -86,7 +86,7 @@ func (m *Master) dispatch(ctx context.Context, tasks []*Task) error {
 		reqPb := job.ToPB()
 		log.L().Logger.Info("submit sub job", zap.Int32("exec id", int32(execID)), zap.String("req pb", reqPb.String()))
 		request := &cluster.ExecutorRequest{
-			Cmd: cluster.CmdSubmitSubJob,
+			Cmd: cluster.CmdSubmitBatchTasks,
 			Req: reqPb,
 		}
 		resp, err := m.client.Send(ctx, execID, request)
@@ -94,7 +94,7 @@ func (m *Master) dispatch(ctx context.Context, tasks []*Task) error {
 			log.L().Logger.Info("Send meet error", zap.Error(err))
 			return err
 		}
-		respPb := resp.Resp.(*pb.SubmitSubJobResponse)
+		respPb := resp.Resp.(*pb.SubmitBatchTasksResponse)
 		if respPb.Err != nil {
 			return terror.ErrSubJobFailed.Generatef("executor %id job %d", execID, m.ID())
 		}

@@ -30,7 +30,7 @@ func NewMasterClient(ctx context.Context, cfg *Config) (*MasterClient, error) {
 	}
 	client.urls = getJoinURLs(cfg.Join)
 	client.leader = client.urls[0]
-	log.L().Logger.Info("dailing master", zap.String("leader", client.leader))
+	log.L().Logger.Info("dialing master", zap.String("leader", client.leader))
 	var err error
 	client.conn, err = grpc.DialContext(ctx, client.leader, grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {

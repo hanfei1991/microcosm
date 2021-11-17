@@ -5,20 +5,15 @@ package pb;
 import "error.proto";
 
 service Executor {
-    rpc SubmitSubJob(SubmitSubJobRequest) returns (SubmitSubJobResponse) {}
-    rpc CancelSubJob(CancelSubJobRequest) returns (CancelSubJobResponse) {}
+    rpc SubmitBatchTasks(SubmitBatchTasksRequest) returns (SubmitBatchTasksResponse) {}
+    rpc CancelBatchTasks(CancelBatchTasksRequest) returns (CancelBatchTasksResponse) {}
 }
 
-message CancelSubJobRequest {
-    int32 job_id = 1;
+message CancelBatchTasksRequest {
+    repeated int32 task_id_list = 1;
 }
 
-message CancelSubJobResponse {
-    Error err = 1;
-}
-
-message SubmitSubJobRequest {
-    int32 job_id = 1;
+message SubmitBatchTasksRequest {
     repeated TaskRequest tasks = 2;
 }
 
@@ -30,6 +25,10 @@ message TaskRequest {
     int32 op_tp = 5;
 }
 
-message SubmitSubJobResponse {
+message SubmitBatchTasksResponse {
+    Error err = 1;
+}
+
+message CancelBatchTasksResponse {
     Error err = 1;
 }

@@ -28,8 +28,8 @@ func (c *executorClient) send(ctx context.Context, req *ExecutorRequest) (*Execu
 	resp := &ExecutorResponse{}
 	var err error
 	switch req.Cmd {
-	case CmdSubmitSubJob:
-		resp.Resp, err = c.client.SubmitSubJob(ctx, req.SubmitSubJob())
+	case CmdSubmitBatchTasks:
+		resp.Resp, err = c.client.SubmitBatchTasks(ctx, req.SubmitBatchTasks())
 	}
 	if err != nil {
 		log.L().Logger.Error("send req meet error", zap.Error(err))
@@ -51,7 +51,7 @@ func newExecutorClient(addr string) (*executorClient, error) {
 type CmdType uint16
 
 const (
-	CmdSubmitSubJob CmdType = 1 + iota
+	CmdSubmitBatchTasks CmdType = 1 + iota
 )
 
 type ExecutorRequest struct {
@@ -59,8 +59,8 @@ type ExecutorRequest struct {
 	Req interface{}
 }
 
-func (e *ExecutorRequest) SubmitSubJob() *pb.SubmitSubJobRequest {
-	return e.Req.(*pb.SubmitSubJobRequest)
+func (e *ExecutorRequest) SubmitBatchTasks() *pb.SubmitBatchTasksRequest {
+	return e.Req.(*pb.SubmitBatchTasksRequest)
 }
 
 type ExecutorResponse struct {

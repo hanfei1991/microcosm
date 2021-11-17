@@ -33,8 +33,8 @@ func NewServer(cfg *Config) *Server {
 	return &s
 }
 
-// SubmitSubJob implements the pb interface.
-func (s *Server) SubmitSubJob(ctx context.Context, req *pb.SubmitSubJobRequest) (*pb.SubmitSubJobResponse, error) {
+// SubmitBatchTasks implements the pb interface.
+func (s *Server) SubmitBatchTasks(ctx context.Context, req *pb.SubmitBatchTasksRequest) (*pb.SubmitBatchTasksResponse, error) {
 	tasks := make([]*model.Task, 0, len(req.Tasks))
 	for _, pbTask := range req.Tasks {
 		task := &model.Task{
@@ -51,7 +51,7 @@ func (s *Server) SubmitSubJob(ctx context.Context, req *pb.SubmitSubJobRequest) 
 		tasks = append(tasks, task)
 	}
 	log.L().Logger.Info("executor receive submit sub job", zap.Int("task", len(tasks)))
-	resp := &pb.SubmitSubJobResponse{}
+	resp := &pb.SubmitBatchTasksResponse{}
 	err := s.sch.SubmitTasks(tasks)
 	if err != nil {
 		log.L().Logger.Error("submit subjob error", zap.Error(err))
@@ -60,8 +60,9 @@ func (s *Server) SubmitSubJob(ctx context.Context, req *pb.SubmitSubJobRequest) 
 	return resp, nil
 }
 
-func (s *Server) CancelSubJob(ctx context.Context, req *pb.CancelSubJobRequest) (*pb.CancelSubJobResponse, error) {
-	return &pb.CancelSubJobResponse{}, nil
+// CancelBatchTasks implements pb interface.
+func (s *Server) CancelBatchTasks(ctx context.Context, req *pb.CancelBatchTasksRequest) (*pb.CancelBatchTasksResponse, error) {
+	return &pb.CancelBatchTasksResponse{}, nil
 }
 
 func (s *Server) Start(ctx context.Context) error {
@@ -127,7 +128,7 @@ func (s *Server) Start(ctx context.Context) error {
 				Timestamp:  uint64(t.Unix()),
 				Ttl:        uint64(s.cfg.KeepAliveTTL),
 			}
-			// FIXME: set timeout
+			// FIXME: set timeout.
 			resp, err := s.cli.SendHeartbeat(ctx, req)
 			if err != nil {
 				log.L().Error("heartbeat meet error", zap.Error(err))
