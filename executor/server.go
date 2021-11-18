@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/hanfei1991/microcosom/executor/runtime"
@@ -96,7 +97,7 @@ func (s *Server) Start(ctx context.Context) error {
 	}()
 
 	// Register myself
-	s.cli, err = NewMasterClient(ctx, s.cfg)
+	s.cli, err = NewMasterClient(ctx, getJoinURLs(s.cfg.Join))
 	if err != nil {
 		return err
 	}
@@ -106,7 +107,7 @@ func (s *Server) Start(ctx context.Context) error {
 		Capability: 100,
 	}
 
-	resp, err := s.cli.RegisterExecutor(ctx, registerReq)
+	resp, err := s.cli.RegisterExecutor(ctx, registerReq, s.cfg.RPCTimeout)
 	if err != nil {
 		return err
 	}
@@ -114,7 +115,8 @@ func (s *Server) Start(ctx context.Context) error {
 	log.L().Logger.Info("register successful", zap.Int32("id", int32(s.ID)))
 
 	// Start Heartbeat
-	ticker := time.NewTicker(time.Duration(s.cfg.KeepAliveInterval) * time.Millisecond)
+	ticker := time.NewTicker(s.cfg.KeepAliveInterval)
+	s.lastHearbeatTime = time.Now()
 	for {
 		select {
 		case <-ctx.Done():
@@ -122,17 +124,20 @@ func (s *Server) Start(ctx context.Context) error {
 		case <-exitCh:
 			return nil
 		case t := <-ticker.C:
+			if s.lastHearbeatTime.Add(s.cfg.KeepAliveTTL).Before(time.Now()) {
+				return errors.New("heartbeat timeout")
+			}
 			req := &pb.HeartbeatRequest{
 				ExecutorId: int32(s.ID),
 				Status:     int32(model.Running),
 				Timestamp:  uint64(t.Unix()),
-				Ttl:        uint64(s.cfg.KeepAliveTTL),
+				// We set longer ttl for master.
+				Ttl:        uint64(s.cfg.KeepAliveTTL.Milliseconds() + s.cfg.RPCTimeout.Milliseconds()),
 			}
-			// FIXME: set timeout.
-			resp, err := s.cli.SendHeartbeat(ctx, req)
+			resp, err := s.cli.SendHeartbeat(ctx, req, s.cfg.RPCTimeout)
 			if err != nil {
 				log.L().Error("heartbeat meet error", zap.Error(err))
-				if s.lastHearbeatTime.Add(time.Duration(s.cfg.KeepAliveTTL) * time.Millisecond).Before(time.Now()) {
+				if s.lastHearbeatTime.Add(s.cfg.KeepAliveTTL).Before(time.Now()) {
 					return err
 				}
 				continue
@@ -149,4 +154,8 @@ func (s *Server) Start(ctx context.Context) error {
 			log.L().Info("heartbeat success")
 		}
 	}
+}
+
+func getJoinURLs(addrs string) []string {
+	return strings.Split(addrs, ",")
 }
