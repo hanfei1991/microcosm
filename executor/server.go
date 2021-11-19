@@ -138,7 +138,7 @@ func (s *Server) Start(ctx context.Context) error {
 			if err != nil {
 				log.L().Error("heartbeat meet error", zap.Error(err))
 				if s.lastHearbeatTime.Add(s.cfg.KeepAliveTTL).Before(time.Now()) {
-					return err
+					return terror.ErrHeartbeat.Generatef("rpc error %s", err.Error())
 				}
 				continue
 			}
@@ -146,7 +146,7 @@ func (s *Server) Start(ctx context.Context) error {
 				log.L().Error("heartbeat meet error")
 				switch resp.Err.Code {
 				case pb.ErrorCode_UnknownExecutor, pb.ErrorCode_TombstoneExecutor:
-					return errors.New(resp.Err.Message)
+					return terror.ErrHeartbeat.Generatef("logic error %s", resp.Err.Message)
 				}
 				continue
 			}
