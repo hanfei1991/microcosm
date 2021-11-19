@@ -1296,5 +1296,5 @@ var (
 	ErrSubJobFailed             = New(codeDFSubJobSubmitError, ClassNotSet, ScopeNotSet, LevelMedium, "submit sub job failed", "")
 	ErrClusterResourceNotEnough = New(codeDFClusterResourceNotEnough, ClassNotSet, ScopeNotSet, LevelMedium, "resource not enough", "please scale out the cluster")
 	ErrBuildJobFailed           = New(codeDFBuildJobFailed, ClassNotSet, ScopeNotSet, LevelMedium, "build job failed", "")
-	ErrHeartbeat 				= New(codeDFHeartbeatFault, ClassNotSet, ScopeNotSet, LevelHigh, "heartbeat meet error. Server will quit.", "")
+	ErrHeartbeat                = New(codeDFHeartbeatFault, ClassNotSet, ScopeNotSet, LevelHigh, "heartbeat meet error. Server will quit.", "")
 )

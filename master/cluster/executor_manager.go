@@ -24,8 +24,8 @@ type ExecutorManager struct {
 	executors   map[model.ExecutorID]*Executor
 	offExecutor chan model.ExecutorID
 
-	idAllocator *autoid.Allocator
-	initHeartbeatTTL time.Duration
+	idAllocator       *autoid.Allocator
+	initHeartbeatTTL  time.Duration
 	keepAliveInterval time.Duration
 
 	// TODO: complete ha store.
@@ -34,10 +34,10 @@ type ExecutorManager struct {
 
 func NewExecutorManager(offExec chan model.ExecutorID, initHeartbeatTTL, keepAliveInterval time.Duration) *ExecutorManager {
 	return &ExecutorManager{
-		executors:   make(map[model.ExecutorID]*Executor),
-		idAllocator: autoid.NewAllocator(),
-		offExecutor: offExec,
-		initHeartbeatTTL: initHeartbeatTTL,
+		executors:         make(map[model.ExecutorID]*Executor),
+		idAllocator:       autoid.NewAllocator(),
+		offExecutor:       offExec,
+		initHeartbeatTTL:  initHeartbeatTTL,
 		keepAliveInterval: keepAliveInterval,
 	}
 }
@@ -114,8 +114,8 @@ func (e *ExecutorManager) AddExecutor(req *pb.RegisterExecutorRequest) (*model.E
 			Capacity: ResourceUsage(info.Capability),
 		},
 		lastUpdateTime: time.Now(),
-		heartbeatTTL: e.initHeartbeatTTL,
-		Status: model.Initing,
+		heartbeatTTL:   e.initHeartbeatTTL,
+		Status:         model.Initing,
 	}
 	var err error
 	exec.client, err = newExecutorClient(info.Addr)

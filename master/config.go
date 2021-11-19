@@ -34,7 +34,7 @@ import (
 const (
 	defaultKeepAliveTTL      = "20s"
 	defaultKeepAliveInterval = "500ms"
-	defaultRPCTimeout =        "3s"
+	defaultRPCTimeout        = "3s"
 
 	defaultNamePrefix              = "dm-master"
 	defaultDataDirPrefix           = "default"

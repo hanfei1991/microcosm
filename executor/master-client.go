@@ -20,7 +20,7 @@ type MasterClient struct {
 
 func NewMasterClient(ctx context.Context, join []string) (*MasterClient, error) {
 	client := &MasterClient{
-		urls : join,
+		urls: join,
 	}
 	client.leader = client.urls[0]
 	log.L().Logger.Info("dialing master", zap.String("leader", client.leader))

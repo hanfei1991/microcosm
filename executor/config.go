@@ -34,7 +34,7 @@ var SampleConfigFile string
 var (
 	defaultKeepAliveTTL      = "20s"
 	defaultKeepAliveInterval = "500ms"
-	defaultRPCTimeout =        "3s"
+	defaultRPCTimeout        = "3s"
 )
 
 // NewConfig creates a new base config for worker.

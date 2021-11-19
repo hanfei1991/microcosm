@@ -43,7 +43,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	server := &Server{
 		cfg:             cfg,
 		executorManager: executorManager,
-		jobManager: jobManager,
+		jobManager:      jobManager,
 	}
 	return server, nil
 }

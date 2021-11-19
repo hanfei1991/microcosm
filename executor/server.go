@@ -131,8 +131,9 @@ func (s *Server) Start(ctx context.Context) error {
 				ExecutorId: int32(s.ID),
 				Status:     int32(model.Running),
 				Timestamp:  uint64(t.Unix()),
-				// We set longer ttl for master.
-				Ttl:        uint64(s.cfg.KeepAliveTTL.Milliseconds() + s.cfg.RPCTimeout.Milliseconds()),
+				// We set longer ttl for master, which is "ttl + rpc timeout", to avoid that
+				// executor actually wait for a timeout when ttl is nearly up.
+				Ttl: uint64(s.cfg.KeepAliveTTL.Milliseconds() + s.cfg.RPCTimeout.Milliseconds()),
 			}
 			resp, err := s.cli.SendHeartbeat(ctx, req, s.cfg.RPCTimeout)
 			if err != nil {
@@ -150,6 +151,12 @@ func (s *Server) Start(ctx context.Context) error {
 				}
 				continue
 			}
+			// We aim to keep lastHbTime of executor consistant with lastHbTime of Master. 
+			// If we set the heartbeat time of executor to the start time of rpc, it will 
+			// be a little bit earlier than the heartbeat time of master, which is safe. 
+			// In contrast, if we set it to the end time of rpc, it might be a little bit 
+			// later than master's, which might cause that master wait for less time than executor. 
+			// This gap is unsafe.
 			s.lastHearbeatTime = t
 			log.L().Info("heartbeat success")
 		}

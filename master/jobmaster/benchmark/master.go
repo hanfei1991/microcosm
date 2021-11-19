@@ -17,7 +17,7 @@ type Master struct {
 	*Config
 	job *model.Job
 
-	ctx context.Context
+	ctx    context.Context
 	cancel func()
 
 	resourceManager cluster.ResourceMgr
