@@ -10,6 +10,8 @@ import (
 	"github.com/hanfei1991/microcosom/master/jobmaster"
 	"github.com/hanfei1991/microcosom/model"
 	"github.com/hanfei1991/microcosom/pkg/terror"
+	"github.com/hanfei1991/microcosom/test/mock"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/dm/pkg/etcdutil"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"go.etcd.io/etcd/clientv3"
@@ -31,8 +33,10 @@ type Server struct {
 	executorManager *cluster.ExecutorManager
 	jobManager      *jobmaster.JobManager
 	//
-
 	cfg *Config
+
+	// mocked server for test
+	mockGrpcServer mock.GrpcServer
 }
 
 // NewServer creates a new master-server.
@@ -77,6 +81,26 @@ func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorR
 // DeleteExecutor deletes an executor, but have yet implemented.
 func (s *Server) DeleteExecutor() {
 	// To implement
+}
+
+func (s *Server) StartForTest(ctx context.Context) (err error) {
+	// TODO: implement mock-etcd and leader election
+
+	s.mockGrpcServer, err = mock.NewMasterServer(s.cfg.MasterAddr, s)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	s.executorManager.Start(ctx)
+	s.jobManager.Start(ctx)
+
+	return nil
+}
+
+func (s *Server) StopForTest() {
+	if s.mockGrpcServer != nil {
+		s.mockGrpcServer.Stop()
+	}
 }
 
 // Start the master-server.

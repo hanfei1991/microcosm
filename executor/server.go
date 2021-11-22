@@ -11,6 +11,8 @@ import (
 	"github.com/hanfei1991/microcosom/model"
 	"github.com/hanfei1991/microcosom/pb"
 	"github.com/hanfei1991/microcosom/pkg/terror"
+	"github.com/hanfei1991/microcosom/test"
+	"github.com/hanfei1991/microcosom/test/mock"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -25,6 +27,8 @@ type Server struct {
 	ID  model.ExecutorID
 
 	lastHearbeatTime time.Time
+
+	mockSrv mock.GrpcServer
 }
 
 func NewServer(cfg *Config) *Server {
@@ -66,11 +70,39 @@ func (s *Server) CancelBatchTasks(ctx context.Context, req *pb.CancelBatchTasksR
 	return &pb.CancelBatchTasksResponse{}, nil
 }
 
+func (s *Server) Stop() {
+	if s.srv != nil {
+		s.srv.Stop()
+	}
+
+	if s.mockSrv != nil {
+		s.mockSrv.Stop()
+	}
+}
+
+func (s *Server) startForTest(ctx context.Context) (err error) {
+	s.mockSrv, err = mock.NewExecutorServer(s.cfg.WorkerAddr, s)
+	exitCh := make(chan struct{}, 1)
+
+	s.sch = runtime.NewRuntime()
+	go func() {
+		s.sch.Run(ctx)
+		exitCh <- struct{}{}
+	}()
+
+	err = s.selfRegister(ctx)
+	if err != nil {
+		return err
+	}
+	return s.listenHeartbeat(ctx, exitCh)
+}
+
 func (s *Server) Start(ctx context.Context) error {
+	if test.GlobalTestFlag {
+		return s.startForTest(ctx)
+	}
 	// Start grpc server
-
 	rootLis, err := net.Listen("tcp", s.cfg.WorkerAddr)
-
 	if err != nil {
 		return err
 	}
@@ -96,6 +128,16 @@ func (s *Server) Start(ctx context.Context) error {
 		exitCh <- struct{}{}
 	}()
 
+	err = s.selfRegister(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Start Heartbeat
+	return s.listenHeartbeat(ctx, exitCh)
+}
+
+func (s *Server) selfRegister(ctx context.Context) (err error) {
 	// Register myself
 	s.cli, err = NewMasterClient(ctx, getJoinURLs(s.cfg.Join))
 	if err != nil {
@@ -113,8 +155,10 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	s.ID = model.ExecutorID(resp.ExecutorId)
 	log.L().Logger.Info("register successful", zap.Int32("id", int32(s.ID)))
+	return nil
+}
 
-	// Start Heartbeat
+func (s *Server) listenHeartbeat(ctx context.Context, exitCh chan struct{}) error {
 	ticker := time.NewTicker(s.cfg.KeepAliveInterval)
 	s.lastHearbeatTime = time.Now()
 	for {
@@ -151,11 +195,11 @@ func (s *Server) Start(ctx context.Context) error {
 				}
 				continue
 			}
-			// We aim to keep lastHbTime of executor consistant with lastHbTime of Master. 
-			// If we set the heartbeat time of executor to the start time of rpc, it will 
-			// be a little bit earlier than the heartbeat time of master, which is safe. 
-			// In contrast, if we set it to the end time of rpc, it might be a little bit 
-			// later than master's, which might cause that master wait for less time than executor. 
+			// We aim to keep lastHbTime of executor consistant with lastHbTime of Master.
+			// If we set the heartbeat time of executor to the start time of rpc, it will
+			// be a little bit earlier than the heartbeat time of master, which is safe.
+			// In contrast, if we set it to the end time of rpc, it might be a little bit
+			// later than master's, which might cause that master wait for less time than executor.
 			// This gap is unsafe.
 			s.lastHearbeatTime = t
 			log.L().Info("heartbeat success")

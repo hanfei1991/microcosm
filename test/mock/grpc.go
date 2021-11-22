@@ -13,35 +13,37 @@ var container *grpcContainer
 
 func init() {
 	container = &grpcContainer{
-		servers: make(map[string]grpcServer),
+		servers: make(map[string]GrpcServer),
 	}
 }
 
 const (
 	registerExecutorMethod = "registerExecutor"
-	submitJobMethod = "submitJob"
-	heartbeatMethod = "heartbeat"
+	submitJobMethod        = "submitJob"
+	heartbeatMethod        = "heartbeat"
 	submitBatchTasksMethod = "submitBatchTasks"
 	cancelBatchTasksMethod = "cancelBatchTasks"
 )
 
 type grpcContainer struct {
-	mu sync.Mutex
-	servers map[string]grpcServer
+	mu      sync.Mutex
+	servers map[string]GrpcServer
 }
 
-type grpcServer interface {
+// GrpcServer implements a mock grpc server.
+type GrpcServer interface {
 	dial() (Conn, error)
+	Stop()
 }
 
 type masterServer struct {
+	*baseServer
 	pb.MasterServer
 }
 
 func (s *masterServer) dial() (Conn, error) {
 	return &masterServerConn{s}, nil
 }
-
 
 type masterServerConn struct {
 	server *masterServer
@@ -87,6 +89,7 @@ func NewMasterClient(conn Conn) pb.MasterClient {
 }
 
 type executorServer struct {
+	*baseServer
 	pb.ExecutorServer
 }
 
@@ -96,6 +99,19 @@ type executorServerConn struct {
 
 type executorClient struct {
 	conn Conn
+}
+
+type baseServer struct {
+	addr string
+}
+
+func (s *baseServer) Stop() {
+	container.mu.Lock()
+	defer container.mu.Unlock()
+	_, ok := container.servers[s.addr]
+	if ok {
+		delete(container.servers, s.addr)
+	}
 }
 
 func (s *executorServer) dial() (Conn, error) {
@@ -138,6 +154,28 @@ func Dial(addr string) (Conn, error) {
 		return nil, errors.New("no server found")
 	}
 	return server.dial()
+}
+
+// NewMasterServer creates a master grpc server and listened the address.
+// We try to make things simple, so we design the "NewMasterServer" to register only one type of pb server.
+func NewMasterServer(addr string, server pb.MasterServer) (GrpcServer, error) {
+	container.mu.Lock()
+	defer container.mu.Unlock()
+	_, ok := container.servers[addr]
+	if ok {
+		return nil, errors.New("addr " + addr + " has been listened")
+	}
+	return &masterServer{&baseServer{addr}, server}, nil
+}
+
+func NewExecutorServer(addr string, server pb.ExecutorServer) (GrpcServer, error) {
+	container.mu.Lock()
+	defer container.mu.Unlock()
+	_, ok := container.servers[addr]
+	if ok {
+		return nil, errors.New("addr " + addr + " has been listened")
+	}
+	return &executorServer{&baseServer{addr}, server}, nil
 }
 
 type Conn interface {
