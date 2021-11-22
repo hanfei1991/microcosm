@@ -273,6 +273,7 @@ func (m *Master) monitorSchedulingTasks() {
 						timer.Stop()
 					}
 				}
+				// FIXME: this could cause deadlock problem if scheduleWaitingTasks channel is full
 				m.scheduleWaitingTasks <- group
 			}
 		case <-m.ctx.Done():
