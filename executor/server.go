@@ -20,6 +20,7 @@ import (
 
 type Server struct {
 	cfg *Config
+	testCtx *test.Context
 
 	srv *grpc.Server
 	cli *MasterClient
@@ -31,9 +32,10 @@ type Server struct {
 	mockSrv mock.GrpcServer
 }
 
-func NewServer(cfg *Config) *Server {
+func NewServer(cfg *Config, ctx *test.Context) *Server {
 	s := Server{
 		cfg: cfg,
+		testCtx: ctx,
 	}
 	return &s
 }
@@ -161,6 +163,14 @@ func (s *Server) selfRegister(ctx context.Context) (err error) {
 func (s *Server) listenHeartbeat(ctx context.Context, exitCh chan struct{}) error {
 	ticker := time.NewTicker(s.cfg.KeepAliveInterval)
 	s.lastHearbeatTime = time.Now()
+	defer func() {
+		if test.GlobalTestFlag {
+			s.testCtx.NotifyExecutorChange(&test.ExecutorChangeEvent{
+				Tp: test.Delete,
+				Time: time.Now(),
+			})
+		}
+	}()
 	for {
 		select {
 		case <-ctx.Done():

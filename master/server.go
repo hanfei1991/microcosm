@@ -10,6 +10,7 @@ import (
 	"github.com/hanfei1991/microcosom/master/jobmaster"
 	"github.com/hanfei1991/microcosom/model"
 	"github.com/hanfei1991/microcosom/pkg/terror"
+	"github.com/hanfei1991/microcosom/test"
 	"github.com/hanfei1991/microcosom/test/mock"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/dm/pkg/etcdutil"
@@ -40,9 +41,9 @@ type Server struct {
 }
 
 // NewServer creates a new master-server.
-func NewServer(cfg *Config) (*Server, error) {
+func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 	executorNotifier := make(chan model.ExecutorID, 100)
-	executorManager := cluster.NewExecutorManager(executorNotifier, cfg.KeepAliveTTL, cfg.KeepAliveInterval)
+	executorManager := cluster.NewExecutorManager(executorNotifier, cfg.KeepAliveTTL, cfg.KeepAliveInterval, ctx)
 	jobManager := jobmaster.NewJobManager(executorManager, executorManager, executorNotifier)
 	server := &Server{
 		cfg:             cfg,
@@ -83,7 +84,7 @@ func (s *Server) DeleteExecutor() {
 	// To implement
 }
 
-func (s *Server) StartForTest(ctx context.Context) (err error) {
+func (s *Server) startForTest(ctx context.Context) (err error) {
 	// TODO: implement mock-etcd and leader election
 
 	s.mockGrpcServer, err = mock.NewMasterServer(s.cfg.MasterAddr, s)
@@ -97,7 +98,9 @@ func (s *Server) StartForTest(ctx context.Context) (err error) {
 	return nil
 }
 
-func (s *Server) StopForTest() {
+// Stop and clean resources.
+// TODO: implement stop gracefully.
+func (s *Server) Stop() {
 	if s.mockGrpcServer != nil {
 		s.mockGrpcServer.Stop()
 	}

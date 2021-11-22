@@ -10,6 +10,7 @@ import (
 	"github.com/hanfei1991/microcosom/pkg/autoid"
 	"github.com/hanfei1991/microcosom/pkg/ha"
 	"github.com/hanfei1991/microcosom/pkg/terror"
+	"github.com/hanfei1991/microcosom/test"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"go.uber.org/zap"
@@ -20,6 +21,8 @@ var _ ResourceMgr = &ExecutorManager{}
 
 // ExecutorManager holds all the executors info, including liveness, status, resource usage.
 type ExecutorManager struct {
+	testContext *test.Context
+	
 	mu          sync.Mutex
 	executors   map[model.ExecutorID]*Executor
 	offExecutor chan model.ExecutorID
@@ -32,8 +35,9 @@ type ExecutorManager struct {
 	haStore ha.HAStore
 }
 
-func NewExecutorManager(offExec chan model.ExecutorID, initHeartbeatTTL, keepAliveInterval time.Duration) *ExecutorManager {
+func NewExecutorManager(offExec chan model.ExecutorID, initHeartbeatTTL, keepAliveInterval time.Duration, ctx *test.Context) *ExecutorManager {
 	return &ExecutorManager{
+		testContext:       ctx,
 		executors:         make(map[model.ExecutorID]*Executor),
 		idAllocator:       autoid.NewAllocator(),
 		offExecutor:       offExec,
@@ -58,6 +62,11 @@ func (e *ExecutorManager) removeExecutorImpl(id model.ExecutorID) error {
 	//}
 	e.offExecutor <- id
 	log.L().Logger.Info("notify to offline exec")
+	if test.GlobalTestFlag {
+		e.testContext.NotifyExecutorChange(&test.ExecutorChangeEvent{
+			Tp: test.Delete, 
+			Time: time.Now()})
+	}
 	return exec.close()
 }
 
