@@ -49,11 +49,11 @@ func ToPBError(err error) *pb.Error {
 	return pbErr
 }
 
-// WrapError generates a new error based on given `*errors.Error`, wraps the err
-// as cause error.
+// Wrap generates a new error based on given `*errors.Error`, wraps the err as
+// cause error.
 // If given `err` is nil, returns a nil error, which a the different behavior
 // against `Wrap` function in pingcap/errors.
-func WrapError(rfcError *errors.Error, err error, args ...interface{}) error {
+func Wrap(rfcError *errors.Error, err error, args ...interface{}) error {
 	if err == nil {
 		return nil
 	}

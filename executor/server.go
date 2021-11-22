@@ -138,7 +138,7 @@ func (s *Server) Start(ctx context.Context) error {
 			if err != nil {
 				log.L().Error("heartbeat meet error", zap.Error(err))
 				if s.lastHearbeatTime.Add(s.cfg.KeepAliveTTL).Before(time.Now()) {
-					return errors.WrapError(errors.ErrHeartbeat, err, "rpc")
+					return errors.Wrap(errors.ErrHeartbeat, err, "rpc")
 				}
 				continue
 			}

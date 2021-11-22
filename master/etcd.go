@@ -44,7 +44,7 @@ func startEtcd(etcdCfg *embed.Config,
 
 	e, err := embed.StartEtcd(etcdCfg)
 	if err != nil {
-		return nil, errors.WrapError(errors.ErrMasterStartEmbedEtcdFail, err)
+		return nil, errors.Wrap(errors.ErrMasterStartEmbedEtcdFail, err)
 	}
 
 	select {
