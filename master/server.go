@@ -9,9 +9,9 @@ import (
 	"github.com/hanfei1991/microcosom/master/cluster"
 	"github.com/hanfei1991/microcosom/master/jobmaster"
 	"github.com/hanfei1991/microcosom/model"
-	"github.com/hanfei1991/microcosom/pkg/etcdutil"
-	"github.com/hanfei1991/microcosom/pkg/log"
 	"github.com/hanfei1991/microcosom/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/etcdutil"
+	"github.com/pingcap/ticdc/dm/pkg/log"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/embed"
 	"go.uber.org/zap"
@@ -38,12 +38,12 @@ type Server struct {
 // NewServer creates a new master-server.
 func NewServer(cfg *Config) (*Server, error) {
 	executorNotifier := make(chan model.ExecutorID, 100)
-	executorManager := cluster.NewExecutorManager(executorNotifier)
+	executorManager := cluster.NewExecutorManager(executorNotifier, cfg.KeepAliveTTL, cfg.KeepAliveInterval)
 	jobManager := jobmaster.NewJobManager(executorManager, executorManager, executorNotifier)
 	server := &Server{
 		cfg:             cfg,
 		executorManager: executorManager,
-		jobManager: jobManager,
+		jobManager:      jobManager,
 	}
 	return server, nil
 }
