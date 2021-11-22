@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-
 	"github.com/hanfei1991/microcosom/pkg/log"
 	"github.com/hanfei1991/microcosom/pkg/terror"
 )
