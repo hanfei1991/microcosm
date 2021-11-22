@@ -4,8 +4,9 @@ import (
 	"context"
 	"log"
 
-	"github.com/hanfei1991/microcosom/pkg/workerpool"
 	"sync"
+
+	"github.com/hanfei1991/microcosom/pkg/workerpool"
 )
 
 type queue struct {
