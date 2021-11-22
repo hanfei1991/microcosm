@@ -23,8 +23,9 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"github.com/hanfei1991/microcosom/pkg/log"
+	"github.com/pingcap/failpoint"
 	"github.com/hanfei1991/microcosom/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/log"
 )
 
 // SampleConfigFile is sample config file of dm-worker.
