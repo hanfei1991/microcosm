@@ -44,19 +44,18 @@ func main() {
 	case flag.ErrHelp:
 		os.Exit(0)
 	default:
-		//common.PrintLinesf("parse cmd flags err: %s", terror.Message(err))
 		fmt.Printf("err1: %v", err)
 		os.Exit(2)
 	}
 
-	configJson, err := json.Marshal(cfg)
+	configJSON, err := json.Marshal(cfg)
 	if err != nil {
 		fmt.Printf("err2: %v", err)
 	}
 
 	req := &pb.SubmitJobRequest{
 		Tp:     pb.SubmitJobRequest_Benchmark,
-		Config: configJson,
+		Config: configJSON,
 		User:   "hanfei",
 	}
 

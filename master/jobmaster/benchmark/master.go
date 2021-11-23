@@ -3,13 +3,15 @@ package benchmark
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/hanfei1991/microcosom/master/cluster"
 	"github.com/hanfei1991/microcosom/model"
 	"github.com/hanfei1991/microcosom/pb"
-	"github.com/hanfei1991/microcosom/pkg/terror"
+	"github.com/hanfei1991/microcosom/pkg/errors"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"go.uber.org/zap"
+	"golang.org/x/time/rate"
 )
 
 // Master implements the master of benchmark workload.
@@ -30,6 +32,34 @@ type Master struct {
 	runningTasks map[model.TaskID]*Task
 
 	scheduleWaitingTasks chan scheduleGroup
+	// rate limit for rescheduling when error happens
+	scheduleRateLimit *rate.Limiter
+}
+
+// New creates a master instance
+func New(
+	parentCtx context.Context,
+	config *Config,
+	job *model.Job,
+	resourceMgr cluster.ResourceMgr,
+	client cluster.ExecutorClient,
+) *Master {
+	ctx, cancel := context.WithCancel(parentCtx)
+	return &Master{
+		ctx:             ctx,
+		cancel:          cancel,
+		Config:          config,
+		job:             job,
+		resourceManager: resourceMgr,
+		client:          client,
+
+		offExecutors:         make(chan model.ExecutorID, 100),
+		scheduleWaitingTasks: make(chan scheduleGroup, 1024),
+		scheduleRateLimit:    rate.NewLimiter(rate.Every(time.Second), 1),
+
+		execTasks:    make(map[model.ExecutorID][]*model.Task),
+		runningTasks: make(map[model.TaskID]*Task),
+	}
 }
 
 func (m *Master) Cancel() {
@@ -96,7 +126,7 @@ func (m *Master) dispatch(ctx context.Context, tasks []*Task) error {
 		}
 		respPb := resp.Resp.(*pb.SubmitBatchTasksResponse)
 		if respPb.Err != nil {
-			return terror.ErrSubJobFailed.Generatef("executor %id job %d", execID, m.ID())
+			return errors.ErrSubJobFailed.GenWithStackByArgs(execID, m.ID())
 		}
 	}
 
@@ -152,7 +182,7 @@ func (m *Master) allocateTasksWithNaiveStrategy(snapshot *cluster.ResourceSnapsh
 func (m *Master) reScheduleTask(group scheduleGroup) error {
 	snapshot := m.resourceManager.GetResourceSnapshot()
 	if len(snapshot.Executors) == 0 {
-		return terror.ErrClusterResourceNotEnough
+		return errors.ErrClusterResourceNotEnough.GenWithStackByArgs()
 	}
 	taskInfos := make([]*model.Task, 0, len(group))
 	for _, t := range group {
@@ -160,29 +190,25 @@ func (m *Master) reScheduleTask(group scheduleGroup) error {
 	}
 	success, tasks := m.allocateTasksWithNaiveStrategy(snapshot, taskInfos)
 	if !success {
-		return terror.ErrClusterResourceNotEnough
+		return errors.ErrClusterResourceNotEnough.GenWithStackByArgs()
 	}
-	if err := m.dispatch(m.ctx, tasks); err != nil {
-		return err
-	}
-	return nil
+	err := m.dispatch(m.ctx, tasks)
+	return err
 }
 
 func (m *Master) scheduleJobImpl(ctx context.Context) error {
 	snapshot := m.resourceManager.GetResourceSnapshot()
 	if len(snapshot.Executors) == 0 {
-		return terror.ErrClusterResourceNotEnough
+		return errors.ErrClusterResourceNotEnough.GenWithStackByArgs()
 	}
 	success, tasks := m.allocateTasksWithNaiveStrategy(snapshot, m.job.Tasks)
 	if !success {
-		return terror.ErrClusterResourceNotEnough
+		return errors.ErrClusterResourceNotEnough.GenWithStackByArgs()
 	}
 
 	m.start() // go
-	if err := m.dispatch(ctx, tasks); err != nil {
-		return err
-	}
-	return nil
+	err := m.dispatch(ctx, tasks)
+	return err
 }
 
 // DispatchJob implements JobMaster interface.
@@ -226,10 +252,24 @@ func (m *Master) monitorSchedulingTasks() {
 			// cancel it
 			//}
 
-			log.L().Logger.Info("begin to reschedule task group")
+			log.L().Logger.Info("begin to reschedule task group", zap.Any("group", group))
 			if err := m.reScheduleTask(group); err != nil {
 				log.L().Logger.Error("cant reschedule task", zap.Error(err))
-				// FIXME: this will cause deadlock problem
+
+				// Use a global rate limit for task rescheduling
+				delay := m.scheduleRateLimit.Reserve().Delay()
+				if delay != 0 {
+					log.L().Logger.Warn("reschedule task rate limit", zap.Duration("delay", delay))
+					timer := time.NewTimer(delay)
+					select {
+					case <-m.ctx.Done():
+						timer.Stop()
+						return
+					case <-timer.C:
+						timer.Stop()
+					}
+				}
+				// FIXME: this could cause deadlock problem if scheduleWaitingTasks channel is full
 				m.scheduleWaitingTasks <- group
 			}
 		case <-m.ctx.Done():

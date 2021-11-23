@@ -2,11 +2,10 @@ package executor
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/hanfei1991/microcosom/pb"
-	"github.com/hanfei1991/microcosom/pkg/terror"
+	"github.com/hanfei1991/microcosom/pkg/errors"
 	"github.com/hanfei1991/microcosom/test"
 	"github.com/hanfei1991/microcosom/test/mock"
 	"github.com/pingcap/ticdc/dm/pkg/log"
@@ -29,7 +28,7 @@ func (c *MasterClient) init(ctx context.Context) error {
 	log.L().Logger.Info("dialing master", zap.String("leader", c.leader))
 	conn, err := grpc.DialContext(ctx, c.leader, grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {
-		return errors.New("cannot build conn")
+		return errors.ErrGrpcBuildConn.GenWithStackByArgs(c.leader)
 	}
 	c.client = pb.NewMasterClient(conn)
 	c.conn = conn
@@ -40,7 +39,7 @@ func (c *MasterClient) initForTest(ctx context.Context) error {
 	log.L().Logger.Info("dialing master", zap.String("leader", c.leader))
 	conn, err := mock.Dial(c.leader)
 	if err != nil {
-		return terror.ErrDBBadConn.Generatef("cannot build conn with %s", c.leader)
+		return errors.ErrGrpcBuildConn.GenWithStackByArgs(c.leader)
 	}
 	c.client = mock.NewMasterClient(conn)
 	c.conn = conn

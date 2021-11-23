@@ -2,7 +2,6 @@ package executor
 
 import (
 	"context"
-	"errors"
 	"net"
 	"strings"
 	"time"
@@ -10,7 +9,7 @@ import (
 	"github.com/hanfei1991/microcosom/executor/runtime"
 	"github.com/hanfei1991/microcosom/model"
 	"github.com/hanfei1991/microcosom/pb"
-	"github.com/hanfei1991/microcosom/pkg/terror"
+	"github.com/hanfei1991/microcosom/pkg/errors"
 	"github.com/hanfei1991/microcosom/test"
 	"github.com/hanfei1991/microcosom/test/mock"
 	"github.com/pingcap/ticdc/dm/pkg/log"
@@ -62,7 +61,7 @@ func (s *Server) SubmitBatchTasks(ctx context.Context, req *pb.SubmitBatchTasksR
 	err := s.sch.SubmitTasks(tasks)
 	if err != nil {
 		log.L().Logger.Error("submit subjob error", zap.Error(err))
-		resp.Err = terror.ToPBError(err)
+		resp.Err = errors.ToPBError(err)
 	}
 	return resp, nil
 }
@@ -179,7 +178,7 @@ func (s *Server) listenHeartbeat(ctx context.Context, exitCh chan struct{}) erro
 			return nil
 		case t := <-ticker.C:
 			if s.lastHearbeatTime.Add(s.cfg.KeepAliveTTL).Before(time.Now()) {
-				return errors.New("heartbeat timeout")
+				return errors.ErrHeartbeat.GenWithStack("heartbeat timeout")
 			}
 			req := &pb.HeartbeatRequest{
 				ExecutorId: int32(s.ID),
@@ -193,7 +192,7 @@ func (s *Server) listenHeartbeat(ctx context.Context, exitCh chan struct{}) erro
 			if err != nil {
 				log.L().Error("heartbeat meet error", zap.Error(err))
 				if s.lastHearbeatTime.Add(s.cfg.KeepAliveTTL).Before(time.Now()) {
-					return terror.ErrHeartbeat.Generatef("rpc error %s", err.Error())
+					return errors.Wrap(errors.ErrHeartbeat, err, "rpc")
 				}
 				continue
 			}
@@ -201,7 +200,7 @@ func (s *Server) listenHeartbeat(ctx context.Context, exitCh chan struct{}) erro
 				log.L().Error("heartbeat meet error")
 				switch resp.Err.Code {
 				case pb.ErrorCode_UnknownExecutor, pb.ErrorCode_TombstoneExecutor:
-					return terror.ErrHeartbeat.Generatef("logic error %s", resp.Err.Message)
+					return errors.ErrHeartbeat.GenWithStack("logic error: %s", resp.Err.GetMessage())
 				}
 				continue
 			}

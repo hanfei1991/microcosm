@@ -20,7 +20,7 @@ type ExecutorInfo struct {
 	// TODO: So we should enrich the cap dimensions in the future.
 	Capability int `json:"cap"`
 	// What kind of information do we need?
-	//LastHeartbeatTime int64
+	// LastHeartbeatTime int64
 }
 
 func (e *ExecutorInfo) EtcdKey() string {
@@ -56,8 +56,8 @@ type JobInfo struct {
 //
 //}
 
-func (i ExecutorInfo) ToJSON() (string, error) {
-	data, err := json.Marshal(i)
+func (e *ExecutorInfo) ToJSON() (string, error) {
+	data, err := json.Marshal(e)
 	if err != nil {
 		return "", err
 	}

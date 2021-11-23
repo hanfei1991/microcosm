@@ -4,15 +4,13 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"time"
 
 	"github.com/hanfei1991/microcosom/master/cluster"
 	"github.com/hanfei1991/microcosom/master/jobmaster"
 	"github.com/hanfei1991/microcosom/model"
-	"github.com/hanfei1991/microcosom/pkg/terror"
 	"github.com/hanfei1991/microcosom/test"
 	"github.com/hanfei1991/microcosom/test/mock"
-	"github.com/pingcap/errors"
+	"github.com/hanfei1991/microcosom/pkg/errors"
 	"github.com/pingcap/ticdc/dm/pkg/etcdutil"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"go.etcd.io/etcd/clientv3"
@@ -28,7 +26,7 @@ type Server struct {
 	etcd *embed.Etcd
 
 	etcdClient *clientv3.Client
-	//election *election.Election
+	// election *election.Election
 
 	// sched scheduler
 	executorManager *cluster.ExecutorManager
@@ -71,7 +69,7 @@ func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorR
 	if err != nil {
 		log.L().Logger.Error("add executor failed", zap.Error(err))
 		return &pb.RegisterExecutorResponse{
-			Err: terror.ToPBError(err),
+			Err: errors.ToPBError(err),
 		}, nil
 	}
 	return &pb.RegisterExecutorResponse{
@@ -89,7 +87,7 @@ func (s *Server) startForTest(ctx context.Context) (err error) {
 
 	s.mockGrpcServer, err = mock.NewMasterServer(s.cfg.MasterAddr, s)
 	if err != nil {
-		return errors.Trace(err)
+		return err
 	}
 
 	s.executorManager.Start(ctx)
@@ -143,7 +141,7 @@ func (s *Server) Start(ctx context.Context) (err error) {
 	//}
 
 	// generate grpcServer
-	s.etcd, err = startEtcd(etcdCfg, gRPCSvr, nil, time.Minute)
+	s.etcd, err = startEtcd(etcdCfg, gRPCSvr, nil, etcdStartTimeout)
 	if err != nil {
 		return
 	}
@@ -159,7 +157,7 @@ func (s *Server) Start(ctx context.Context) (err error) {
 
 	// start leader election
 	// TODO: Consider election. And Notify workers when leader changes.
-	//s.election, err = election.NewElection(ctx, )
+	// s.election, err = election.NewElection(ctx, )
 
 	// start keep alive
 	s.executorManager.Start(ctx)
