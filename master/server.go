@@ -108,6 +108,9 @@ func (s *Server) Stop() {
 
 // Start the master-server.
 func (s *Server) Start(ctx context.Context) (err error) {
+	if test.GlobalTestFlag {
+		return s.startForTest(ctx)
+	}
 	etcdCfg := genEmbedEtcdConfigWithLogger(s.cfg.LogLevel)
 	// prepare to join an existing etcd cluster.
 	//err = prepareJoinEtcd(s.cfg)

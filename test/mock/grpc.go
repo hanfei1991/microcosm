@@ -17,14 +17,6 @@ func init() {
 	}
 }
 
-const (
-	registerExecutorMethod = "registerExecutor"
-	submitJobMethod        = "submitJob"
-	heartbeatMethod        = "heartbeat"
-	submitBatchTasksMethod = "submitBatchTasks"
-	cancelBatchTasksMethod = "cancelBatchTasks"
-)
-
 type grpcContainer struct {
 	mu      sync.Mutex
 	servers map[string]GrpcServer
@@ -53,14 +45,14 @@ func (s *masterServerConn) Close() error {
 	return nil
 }
 
-func (s *masterServerConn) sendRequest(ctx context.Context, method string, req interface{}) (interface{}, error) {
-	switch method {
-	case registerExecutorMethod:
-		return s.server.RegisterExecutor(ctx, req.(*pb.RegisterExecutorRequest))
-	case submitJobMethod:
-		return s.server.SubmitJob(ctx, req.(*pb.SubmitJobRequest))
-	case heartbeatMethod:
-		return s.server.Heartbeat(ctx, req.(*pb.HeartbeatRequest))
+func (s *masterServerConn) sendRequest(ctx context.Context, req interface{}) (interface{}, error) {
+	switch x := req.(type) {
+	case *pb.RegisterExecutorRequest:
+		return s.server.RegisterExecutor(ctx, x)
+	case *pb.SubmitJobRequest:
+		return s.server.SubmitJob(ctx, x)
+	case *pb.HeartbeatRequest:
+		return s.server.Heartbeat(ctx, x)
 	}
 	return nil, errors.New("unknown request")
 }
@@ -70,17 +62,17 @@ type masterServerClient struct {
 }
 
 func (c *masterServerClient) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorRequest, opts ...grpc.CallOption) (*pb.RegisterExecutorResponse, error) {
-	resp, err := c.conn.sendRequest(ctx, registerExecutorMethod, req)
+	resp, err := c.conn.sendRequest(ctx, req)
 	return resp.(*pb.RegisterExecutorResponse), err
 }
 
 func (c *masterServerClient) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest, opts ...grpc.CallOption) (*pb.SubmitJobResponse, error) {
-	resp, err := c.conn.sendRequest(ctx, registerExecutorMethod, req)
+	resp, err := c.conn.sendRequest(ctx, req)
 	return resp.(*pb.SubmitJobResponse), err
 }
 
 func (c *masterServerClient) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest, opts ...grpc.CallOption) (*pb.HeartbeatResponse, error) {
-	resp, err := c.conn.sendRequest(ctx, registerExecutorMethod, req)
+	resp, err := c.conn.sendRequest(ctx, req)
 	return resp.(*pb.HeartbeatResponse), err
 }
 
@@ -119,12 +111,12 @@ func (s *executorServer) dial() (Conn, error) {
 }
 
 func (c *executorClient) SubmitBatchTasks(ctx context.Context, req *pb.SubmitBatchTasksRequest, opts ...grpc.CallOption) (*pb.SubmitBatchTasksResponse, error) {
-	resp, err := c.conn.sendRequest(ctx, submitBatchTasksMethod, req)
+	resp, err := c.conn.sendRequest(ctx, req)
 	return resp.(*pb.SubmitBatchTasksResponse), err
 }
 
 func (c *executorClient) CancelBatchTasks(ctx context.Context, req *pb.CancelBatchTasksRequest, opts ...grpc.CallOption) (*pb.CancelBatchTasksResponse, error) {
-	resp, err := c.conn.sendRequest(ctx, submitBatchTasksMethod, req)
+	resp, err := c.conn.sendRequest(ctx, req)
 	return resp.(*pb.CancelBatchTasksResponse), err
 }
 
@@ -136,12 +128,12 @@ func NewExecutorClient(conn Conn) pb.ExecutorClient {
 	return &executorClient{conn}
 }
 
-func (s *executorServerConn) sendRequest(ctx context.Context, method string, req interface{}) (interface{}, error) {
-	switch method {
-	case submitBatchTasksMethod:
-		return s.server.SubmitBatchTasks(ctx, req.(*pb.SubmitBatchTasksRequest))
-	case cancelBatchTasksMethod:
-		return s.server.CancelBatchTasks(ctx, req.(*pb.CancelBatchTasksRequest))
+func (s *executorServerConn) sendRequest(ctx context.Context, req interface{}) (interface{}, error) {
+	switch x := req.(type) {
+	case *pb.SubmitBatchTasksRequest:
+		return s.server.SubmitBatchTasks(ctx, x) 
+	case *pb.CancelBatchTasksRequest:
+		return s.server.CancelBatchTasks(ctx, x)
 	}
 	return nil, errors.New("unknown request")
 }
@@ -165,7 +157,9 @@ func NewMasterServer(addr string, server pb.MasterServer) (GrpcServer, error) {
 	if ok {
 		return nil, errors.New("addr " + addr + " has been listened")
 	}
-	return &masterServer{&baseServer{addr}, server}, nil
+	newServer := &masterServer{&baseServer{addr}, server}
+	container.servers[addr] = newServer
+	return newServer, nil
 }
 
 func NewExecutorServer(addr string, server pb.ExecutorServer) (GrpcServer, error) {
@@ -175,10 +169,12 @@ func NewExecutorServer(addr string, server pb.ExecutorServer) (GrpcServer, error
 	if ok {
 		return nil, errors.New("addr " + addr + " has been listened")
 	}
-	return &executorServer{&baseServer{addr}, server}, nil
+	newServer := &executorServer{&baseServer{addr}, server}
+	container.servers[addr] = newServer
+	return newServer, nil
 }
 
 type Conn interface {
 	Close() error
-	sendRequest(ctx context.Context, method string, req interface{}) (interface{}, error)
+	sendRequest(ctx context.Context, req interface{}) (interface{}, error)
 }

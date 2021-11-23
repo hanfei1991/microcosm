@@ -9,12 +9,20 @@ import (
 	"github.com/hanfei1991/microcosom/master"
 	"github.com/hanfei1991/microcosom/test"
 	. "github.com/pingcap/check"
+	"github.com/pingcap/ticdc/dm/pkg/log"
 )
 
 func TestT(t *testing.T) {
+	log.InitLogger(&log.Config{
+		Level: "debug",
+		Format: "text",
+	})
+
 	test.GlobalTestFlag = true
 	TestingT(t)
 }
+
+var _ = SerialSuites(&testHeartbeatSuite{})
 
 type testHeartbeatSuite struct{
 	master *master.Server
@@ -22,16 +30,26 @@ type testHeartbeatSuite struct{
 
 	masterCtx *test.Context
 	executorCtx *test.Context
+
+	keepAliveTTL time.Duration
+	keepAliveInterval time.Duration
+	rpcTimeout time.Duration
 }
 
 func (t *testHeartbeatSuite) SetUpSuite(c *C) {
+	t.keepAliveTTL = 3 * time.Second
+	t.keepAliveInterval = 500 * time.Millisecond
+	t.rpcTimeout = 6 * time.Second
+}
+
+func (t *testHeartbeatSuite) SetUpTest(c *C) {
 	masterCfg := &master.Config{
 		Name : "master1",
 		MasterAddr: "127.0.0.1:1991",
 		DataDir: "/tmp/df",
-		KeepAliveTTLStr: "3s",
-		KeepAliveIntervalStr: "500ms",
-		RPCTimeoutStr: "6s",
+		KeepAliveTTL: t.keepAliveTTL,
+		KeepAliveInterval: t.keepAliveInterval,
+		RPCTimeout: t.rpcTimeout,
 	}
 	var err error
 	t.masterCtx = test.NewContext()
@@ -41,22 +59,35 @@ func (t *testHeartbeatSuite) SetUpSuite(c *C) {
 	executorCfg := &executor.Config{
 		Join: "127.0.0.1:1991",
 		WorkerAddr: "127.0.0.1:1992",
+		KeepAliveTTL: t.keepAliveTTL,
+		KeepAliveInterval: t.keepAliveInterval,
+		RPCTimeout: t.rpcTimeout,
 	}
 	t.executorCtx = test.NewContext()
 	t.executor = executor.NewServer(executorCfg, t.executorCtx)
 }
 
+func (t *testHeartbeatSuite) TearDownTest(c *C) {
+	t.master.Stop()
+	t.executor.Stop()
+}
+
 func (t *testHeartbeatSuite) TestHeartbeatExecutorCrush(c *C) {
 	ctx := context.Background()
-	masterCtx, _ := context.WithCancel(ctx)
-	t.master.Start(masterCtx)
+	masterCtx, masterCancel := context.WithCancel(ctx)
+	defer masterCancel()
+	err := t.master.Start(masterCtx)
+	c.Assert(err, IsNil)
 	execCtx, execCancel := context.WithCancel(ctx)
-	t.executor.Start(execCtx)
+	go func() {
+		err = t.executor.Start(execCtx)
+		c.Assert(err, IsNil)
+	}()
 
 	time.Sleep(2 * time.Second)
 	execCancel()
 
 	executorEvent := <- t.executorCtx.ExcutorChange()
 	masterEvent := <- t.masterCtx.ExcutorChange()
-	c.Assert(executorEvent.Time.Add(3 * time.Second), Less, masterEvent.Time)
+	c.Assert(executorEvent.Time.Add(t.keepAliveTTL), Less, masterEvent.Time)
 }
