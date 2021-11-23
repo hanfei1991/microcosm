@@ -22,7 +22,7 @@ var _ ResourceMgr = &ExecutorManager{}
 // ExecutorManager holds all the executors info, including liveness, status, resource usage.
 type ExecutorManager struct {
 	testContext *test.Context
-	
+
 	mu          sync.Mutex
 	executors   map[model.ExecutorID]*Executor
 	offExecutor chan model.ExecutorID
@@ -64,7 +64,7 @@ func (e *ExecutorManager) removeExecutorImpl(id model.ExecutorID) error {
 	log.L().Logger.Info("notify to offline exec")
 	if test.GlobalTestFlag {
 		e.testContext.NotifyExecutorChange(&test.ExecutorChangeEvent{
-			Tp: test.Delete, 
+			Tp:   test.Delete,
 			Time: time.Now()})
 	}
 	return exec.close()

@@ -19,7 +19,7 @@ import (
 )
 
 type Server struct {
-	cfg *Config
+	cfg     *Config
 	testCtx *test.Context
 
 	srv *grpc.Server
@@ -34,7 +34,7 @@ type Server struct {
 
 func NewServer(cfg *Config, ctx *test.Context) *Server {
 	s := Server{
-		cfg: cfg,
+		cfg:     cfg,
 		testCtx: ctx,
 	}
 	return &s
@@ -166,7 +166,7 @@ func (s *Server) listenHeartbeat(ctx context.Context, exitCh chan struct{}) erro
 	defer func() {
 		if test.GlobalTestFlag {
 			s.testCtx.NotifyExecutorChange(&test.ExecutorChangeEvent{
-				Tp: test.Delete,
+				Tp:   test.Delete,
 				Time: time.Now(),
 			})
 		}

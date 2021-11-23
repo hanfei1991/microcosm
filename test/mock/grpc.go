@@ -131,7 +131,7 @@ func NewExecutorClient(conn Conn) pb.ExecutorClient {
 func (s *executorServerConn) sendRequest(ctx context.Context, req interface{}) (interface{}, error) {
 	switch x := req.(type) {
 	case *pb.SubmitBatchTasksRequest:
-		return s.server.SubmitBatchTasks(ctx, x) 
+		return s.server.SubmitBatchTasks(ctx, x)
 	case *pb.CancelBatchTasksRequest:
 		return s.server.CancelBatchTasks(ctx, x)
 	}

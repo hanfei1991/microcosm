@@ -14,7 +14,7 @@ import (
 
 func TestT(t *testing.T) {
 	log.InitLogger(&log.Config{
-		Level: "debug",
+		Level:  "debug",
 		Format: "text",
 	})
 
@@ -24,16 +24,16 @@ func TestT(t *testing.T) {
 
 var _ = SerialSuites(&testHeartbeatSuite{})
 
-type testHeartbeatSuite struct{
-	master *master.Server
+type testHeartbeatSuite struct {
+	master   *master.Server
 	executor *executor.Server
 
-	masterCtx *test.Context
+	masterCtx   *test.Context
 	executorCtx *test.Context
 
-	keepAliveTTL time.Duration
+	keepAliveTTL      time.Duration
 	keepAliveInterval time.Duration
-	rpcTimeout time.Duration
+	rpcTimeout        time.Duration
 }
 
 func (t *testHeartbeatSuite) SetUpSuite(c *C) {
@@ -44,12 +44,12 @@ func (t *testHeartbeatSuite) SetUpSuite(c *C) {
 
 func (t *testHeartbeatSuite) SetUpTest(c *C) {
 	masterCfg := &master.Config{
-		Name : "master1",
-		MasterAddr: "127.0.0.1:1991",
-		DataDir: "/tmp/df",
-		KeepAliveTTL: t.keepAliveTTL,
+		Name:              "master1",
+		MasterAddr:        "127.0.0.1:1991",
+		DataDir:           "/tmp/df",
+		KeepAliveTTL:      t.keepAliveTTL,
 		KeepAliveInterval: t.keepAliveInterval,
-		RPCTimeout: t.rpcTimeout,
+		RPCTimeout:        t.rpcTimeout,
 	}
 	var err error
 	t.masterCtx = test.NewContext()
@@ -57,11 +57,11 @@ func (t *testHeartbeatSuite) SetUpTest(c *C) {
 	c.Assert(err, IsNil)
 	// one master + one executor
 	executorCfg := &executor.Config{
-		Join: "127.0.0.1:1991",
-		WorkerAddr: "127.0.0.1:1992",
-		KeepAliveTTL: t.keepAliveTTL,
+		Join:              "127.0.0.1:1991",
+		WorkerAddr:        "127.0.0.1:1992",
+		KeepAliveTTL:      t.keepAliveTTL,
 		KeepAliveInterval: t.keepAliveInterval,
-		RPCTimeout: t.rpcTimeout,
+		RPCTimeout:        t.rpcTimeout,
 	}
 	t.executorCtx = test.NewContext()
 	t.executor = executor.NewServer(executorCfg, t.executorCtx)
@@ -87,7 +87,7 @@ func (t *testHeartbeatSuite) TestHeartbeatExecutorCrush(c *C) {
 	time.Sleep(2 * time.Second)
 	execCancel()
 
-	executorEvent := <- t.executorCtx.ExcutorChange()
-	masterEvent := <- t.masterCtx.ExcutorChange()
+	executorEvent := <-t.executorCtx.ExcutorChange()
+	masterEvent := <-t.masterCtx.ExcutorChange()
 	c.Assert(executorEvent.Time.Add(t.keepAliveTTL), Less, masterEvent.Time)
 }

@@ -9,7 +9,7 @@ const (
 )
 
 type ExecutorChangeEvent struct {
-	Tp ExecutorChangeType
+	Tp   ExecutorChangeType
 	Time time.Time
 }
 
