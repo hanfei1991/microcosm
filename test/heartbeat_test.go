@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanfei1991/microcosom/executor"
-	"github.com/hanfei1991/microcosom/master"
-	"github.com/hanfei1991/microcosom/test"
+	"github.com/hanfei1991/microcosm/executor"
+	"github.com/hanfei1991/microcosm/master"
+	"github.com/hanfei1991/microcosm/test"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 )

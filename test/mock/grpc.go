@@ -5,7 +5,7 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/hanfei1991/microcosom/pb"
+	"github.com/hanfei1991/microcosm/pb"
 	"google.golang.org/grpc"
 )
 
