@@ -2,6 +2,7 @@ package util
 
 import (
 	"github.com/hanfei1991/microcosm/model"
+	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 )
@@ -39,14 +40,15 @@ func (w *DAGWalker) doWalk(node *model.Node, depth int) error {
 	if node == nil {
 		log.Panic("unexpected nil node")
 	}
-	if depth > w.maximalDepth {
-		// TODO add a custom error
-		return errors.Errorf("exceed maximal depth %d", w.maximalDepth)
-	}
 
 	if _, ok := w.visited[node.ID]; ok {
 		return nil
 	}
+
+	if depth > w.maximalDepth {
+		return derror.ErrPlannerDAGDepthExceeded.GenWithStackByArgs(depth)
+	}
+
 	if err := w.onVertex(node); err != nil {
 		return errors.Trace(err)
 	}
