@@ -1,8 +1,9 @@
 package runtime
 
 import (
-	"fmt"
+	//	"fmt"
 	//"log"
+	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -20,19 +21,18 @@ const (
 type Record struct {
 	start   time.Time
 	end     time.Time
-	payload []byte
-	hashVal uint32
+	payload interface{}
 	tid     int32
 }
 
 func (r *Record) toString() string {
-	return fmt.Sprintf("start %s end %s payload %s\n", r.start.String(), r.end.String(), string(r.payload))
+	return fmt.Sprintf("start %s end %s payload %s\n", r.start.String(), r.end.String())
 }
 
 type Channel struct {
 	innerChan chan *Record
-	sendWaker func()
-	recvWaker func()
+	sendCtx *taskContext
+	recvCtx *taskContext
 }
 
 func (c *Channel) readBatch(batch int) []*Record {
@@ -46,7 +46,7 @@ func (c *Channel) readBatch(batch int) []*Record {
 		}
 	}
 	if len(records) > 0 {
-		c.sendWaker()
+		c.sendCtx.wake()
 	}
 	return records
 }
@@ -57,20 +57,29 @@ func (c *Channel) writeBatch(records []*Record) ([]*Record, bool) {
 		case c.innerChan <- record:
 		default:
 			if i > 0 {
-				c.recvWaker()
+				c.recvCtx.wake()
 			}
 			return records[i:], i == 0
 		}
 	}
-	c.recvWaker()
+	c.recvCtx.wake()
 	return nil, false
 }
+
+type taskContext struct {
+	wake func()
+	err error // meet error during async job
+}
+
+// a vector of records
+type Chunk []*Record
 
 type taskContainer struct {
 	cfg    *model.Task
 	id     model.TaskID
 	status int32
-	cache  [][]*Record
+	inputCache   []Chunk
+	outputCache  []Chunk
 	op     operator
 	inputs []*Channel
 	output []*Channel
@@ -79,7 +88,7 @@ type taskContainer struct {
 }
 
 func (t *taskContainer) prepare() error {
-	t.cache = make([][]*Record, len(t.output))
+//	t.outputCache = make([]Chunk, len(t.output))
 	return t.op.prepare()
 }
 
@@ -113,9 +122,9 @@ func (t *taskContainer) setRunnable() {
 
 func (t *taskContainer) tryFlush() (blocked bool) {
 	hasBlocked := false
-	for i, cache := range t.cache {
+	for i, cache := range t.outputCache {
 		blocked := false
-		t.cache[i], blocked = t.output[i].writeBatch(cache)
+		t.outputCache[i], blocked = t.output[i].writeBatch(cache)
 		if blocked {
 			hasBlocked = true
 		}
@@ -123,24 +132,51 @@ func (t *taskContainer) tryFlush() (blocked bool) {
 	return hasBlocked
 }
 
+func (t *taskContainer) readDataFromInput(idx int, batch int) Chunk{
+	if len(t.inputCache[idx]) != 0 {
+		chk := t.inputCache[idx]
+		t.inputCache[idx] = t.inputCache[idx][:0]
+		return chk
+	}
+	return t.inputs[idx].readBatch(batch)
+}
+
 func (t *taskContainer) Poll() TaskStatus {
 	//	log.Printf("task %d polling", t.id)
 	if t.tryFlush() {
 		return Blocked
 	}
-	r := make([]*Record, 0, len(t.inputs)*128)
-	for _, input := range t.inputs {
-		tmp := input.readBatch(128)
-		r = append(r, tmp...)
+	idx := t.op.nextWantedInputIdx()
+	r := make(Chunk, 0, 128)
+    if idx == -1 {
+		for i := range t.inputs {
+			r = append(r, t.readDataFromInput(i, 128)...)
+		}
+	} else {
+		r = t.readDataFromInput(idx, 128)
 	}
 
-	if len(r) == 0 && len(t.inputs) > 0 {
+	if len(r) == 0 && len(t.inputs) != 0 {
+		// we don't have any input data
 		return Blocked
 	}
 
 	// do compute
 	blocked := false
-	t.cache, blocked = t.op.next(t.ctx, r)
+	var outputs []Chunk
+	var err error
+	for _, record := range r {
+		outputs, blocked, err = t.op.next(t.ctx, record, idx)
+		if err != nil {
+			// report error to job manager
+		}
+		for i, output := range outputs {
+			t.outputCache[i] = append(t.outputCache[i], output...)
+		}
+		if blocked {
+			break
+		}
+	}
 
 	if t.tryFlush() {
 		// log.Printf("task %d flush blocked", t.id)

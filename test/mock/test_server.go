@@ -3,7 +3,6 @@ package mock
 import (
 	"context"
 	"errors"
-	"io"
 	"sync/atomic"
 
 	"github.com/hanfei1991/microcosm/pb"

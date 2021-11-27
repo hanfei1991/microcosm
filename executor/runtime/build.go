@@ -9,24 +9,31 @@ import (
 	"go.uber.org/zap"
 )
 
-func newTaskContainer(task *model.Task, ctx *taskContext) *taskContainer {
+func (s *Runtime) newTaskContainer(task *model.Task) *taskContainer {
 	t := &taskContainer{
 		cfg: task,
 		id:  task.ID,
-		ctx: ctx,
+		ctx : new(taskContext),
+	}
+	t.ctx.wake = func() {
+		// you can't wake or it is already been waked.
+		if !t.tryAwake() {
+			return
+		}
+		t.setRunnable()
+		s.q.push(t)
 	}
 	return t
 }
 
-func newHashOp(cfg *model.HashOp) operator {
-	return &opHash{}
+func newSyncOp(cfg *model.HashOp) operator {
+	return &opSyncer{}
 }
 
 func newReadTableOp(cfg *model.TableReaderOp) operator {
 	return &opReceive{
 		addr:     cfg.Addr,
 		data:     make(chan *Record, 1024),
-		tableCnt: cfg.TableNum,
 	}
 }
 
@@ -42,8 +49,8 @@ func newSinkOp(cfg *model.TableSinkOp) operator {
 func (s *Runtime) connectTasks(sender, receiver *taskContainer) {
 	ch := &Channel{
 		innerChan: make(chan *Record, 1024),
-		sendWaker: s.getWaker(sender),
-		recvWaker: s.getWaker(receiver),
+		sendCtx: sender.ctx,
+		recvCtx: receiver.ctx,
 	}
 	sender.output = append(sender.output, ch)
 	receiver.inputs = append(receiver.inputs, ch)
@@ -52,7 +59,7 @@ func (s *Runtime) connectTasks(sender, receiver *taskContainer) {
 func (s *Runtime) SubmitTasks(tasks []*model.Task) error {
 	taskSet := make(map[model.TaskID]*taskContainer)
 	for _, t := range tasks {
-		task := newTaskContainer(t, s.ctx)
+		task := s.newTaskContainer(t)
 		log.L().Logger.Info("config", zap.ByteString("op", t.Op))
 		switch t.OpTp {
 		case model.TableReaderType:
@@ -69,7 +76,7 @@ func (s *Runtime) SubmitTasks(tasks []*model.Task) error {
 			if err != nil {
 				return err
 			}
-			task.op = newHashOp(op)
+			task.op = newSyncOp(op)
 			task.tryBlock()
 		case model.TableSinkType:
 			op := &model.TableSinkOp{}
