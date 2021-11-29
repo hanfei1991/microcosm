@@ -58,7 +58,7 @@ func (s *testStream) Send(r *pb.Record) error {
 }
 
 func (s *testStream) Recv() (*pb.Record, error) {
-	r := <- s.data
+	r := <-s.data
 	if r == nil {
 		return nil, s.err
 	}
@@ -75,7 +75,7 @@ func (s *testStream) SendHeader(metadata.MD) error {
 
 func (s *testStream) SetTrailer(metadata.MD) {}
 
-func (s *testStream) Context() context.Context {return nil}
+func (s *testStream) Context() context.Context { return nil }
 
 func (s *testStream) SendMsg(interface{}) error {
 	return errors.New("unimplemented")
@@ -89,7 +89,7 @@ func (s *testStream) Header() (metadata.MD, error) {
 	return nil, errors.New("unimplemented")
 }
 
-func (s *testStream) Trailer() metadata.MD {return nil}
+func (s *testStream) Trailer() metadata.MD { return nil }
 
 func (s *testStream) CloseSend() error {
 	return errors.New("unimplemented")
@@ -98,8 +98,8 @@ func (s *testStream) CloseSend() error {
 func (s *testServerConn) sendRequest(ctx context.Context, req interface{}) (interface{}, error) {
 	switch x := req.(type) {
 	case *pb.TestBinlogRequest:
-		stream := &testStream {
-			data : make(chan *pb.Record, 1024),
+		stream := &testStream{
+			data: make(chan *pb.Record, 1024),
 		}
 		if s.stream != nil {
 			return nil, errors.New("internal error")
@@ -127,5 +127,5 @@ func NewTestServer(addr string, server pb.TestServiceServer) (GrpcServer, error)
 }
 
 func NewTestClient(conn Conn) pb.TestServiceClient {
-	return &testClient{conn}	
+	return &testClient{conn}
 }

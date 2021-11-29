@@ -22,13 +22,12 @@ func BuildBenchmarkJobMaster(rawConfig string, idAllocator *autoid.Allocator, re
 	}
 
 	tableTasks := make([]*model.Task, 0)
-	job.Tasks = tableTasks
 	hashTasks := make([]*model.Task, 0)
 	sinkTasks := make([]*model.Task, 0)
 
 	for i, addr := range config.Servers {
 		tableOp := model.TableReaderOp{
-			Addr:     addr,
+			Addr: addr,
 		}
 		js, err := json.Marshal(tableOp)
 		if err != nil {
@@ -76,6 +75,7 @@ func BuildBenchmarkJobMaster(rawConfig string, idAllocator *autoid.Allocator, re
 		connectTwoTask(hashTask, sinkTask)
 	}
 
+	job.Tasks = tableTasks
 	job.Tasks = append(job.Tasks, hashTasks...)
 	job.Tasks = append(job.Tasks, sinkTasks...)
 	master := New(context.Background(), config, job, resourceMgr, client)

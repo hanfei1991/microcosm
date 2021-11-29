@@ -35,11 +35,6 @@ func (f *fileWriter) write(_ *taskContext, r *Record) error {
 	return err
 }
 
-type tableStats struct {
-	totalLag  time.Duration
-	recordCnt int
-}
-
 type operator interface {
 	next(ctx *taskContext, r *Record, idx int) ([]Chunk, bool, error)
 	nextWantedInputIdx() int
@@ -52,14 +47,17 @@ type closeable interface {
 }
 
 type opReceive struct {
-	addr     string
-	tableCnt int32
-	data     chan *Record
-	cache    Chunk 
-	conn     closeable
+	addr  string
+	data  chan *Record
+	cache Chunk
+	conn  closeable
+	errCh chan error
+
+	running      bool
+	binlogClient pb.TestService_FeedBinlogClient
 }
 
-func (o *opReceive) nextWantedInputIdx() int {return 0}
+func (o *opReceive) nextWantedInputIdx() int { return -1 }
 
 func (o *opReceive) close() error {
 	return o.conn.Close()
@@ -67,7 +65,7 @@ func (o *opReceive) close() error {
 
 func (o *opReceive) dial() (client pb.TestServiceClient, err error) {
 	// get connection
-	log.L().Logger.Info("dial to", zap.String("addr", o.addr))
+	log.L().Info("dial to", zap.String("addr", o.addr))
 	if test.GlobalTestFlag {
 		conn, err := mock.Dial(o.addr)
 		o.conn = conn
@@ -88,41 +86,53 @@ func (o *opReceive) dial() (client pb.TestServiceClient, err error) {
 
 func (o *opReceive) prepare() error {
 	client, err := o.dial()
+	if err != nil {
+		return errors.New("conn failed")
+	}
 	// start receiving data
 	// TODO: implement recover from a gtid point during failover.
-	stream, err := client.FeedBinlog(context.Background(), &pb.TestBinlogRequest{Gtid: 0})
+	o.binlogClient, err = client.FeedBinlog(context.Background(), &pb.TestBinlogRequest{Gtid: 0})
 	if err != nil {
 		return errors.New("conn failed")
 	}
 
-	go func() {
-		for {
-			record, err := stream.Recv()
-			if err != nil {
-				panic(err)
-			}
-			r := &Record{
-				tid:     record.Tid,
-			}
-			o.data <- r
-		}
-	}()
 	return nil
 }
 
 func (o *opReceive) next(ctx *taskContext, _ *Record, _ int) ([]Chunk, bool, error) {
+	if !o.running {
+		o.running = true
+		go func() {
+			for {
+				record, err := o.binlogClient.Recv()
+				if err != nil {
+					o.errCh <- err
+					log.L().Error("opReceive meet error", zap.Error(err))
+					return
+				}
+				r := &Record{
+					Tid:     record.Tid,
+					Payload: record,
+				}
+				o.data <- r
+				ctx.wake()
+			}
+		}()
+	}
 	o.cache = o.cache[:0]
 	i := 0
 	for ; i < 1024; i++ {
 		select {
 		case r := <-o.data:
 			o.cache = append(o.cache, r)
+		case err := <-o.errCh:
+			return nil, true, err
 		default:
 			break
 		}
 	}
 	if i == 0 {
-		return nil, false, nil
+		return nil, true, nil
 	}
 	return []Chunk{o.cache}, false, nil
 }
@@ -135,33 +145,38 @@ func (o *opSyncer) close() error { return nil }
 func (o *opSyncer) prepare() error { return nil }
 
 func (o *opSyncer) syncDDL(ctx *taskContext) {
-	time.Sleep(1*time.Second)
+	time.Sleep(1 * time.Second)
 	ctx.wake()
 }
 
 func (o *opSyncer) next(ctx *taskContext, r *Record, _ int) ([]Chunk, bool, error) {
-		record := r.payload.(*pb.Record)
-		if record.Tp == pb.Record_DDL {
-			go o.syncDDL(ctx)
-			return nil, true, nil
-		}	
+	record := r.Payload.(*pb.Record)
+	if record.Tp == pb.Record_DDL {
+		go o.syncDDL(ctx)
+		return nil, true, nil
+	}
 	return []Chunk{{r}}, false, nil
 }
 
-func (o *opSyncer) nextWantedInputIdx() int {return 0}
+func (o *opSyncer) nextWantedInputIdx() int { return 0 }
 
 type opSink struct {
 	writer fileWriter
 }
 
-func (o *opSink) close() error {return nil}
+func (o *opSink) close() error { return nil }
 
 func (o *opSink) prepare() error {
 	return o.writer.prepare()
 }
 
 func (o *opSink) next(ctx *taskContext, r *Record, _ int) ([]Chunk, bool, error) {
+	if test.GlobalTestFlag {
+		//	log.L().Info("send record", zap.Int32("table", r.Tid), zap.Int32("pk", r.payload.(*pb.Record).Pk))
+		ctx.testCtx.SendRecord(r)
+		return nil, false, nil
+	}
 	return nil, false, o.writer.write(ctx, r)
 }
 
-func (o *opSink) nextWantedInputIdx() int {return 0}
+func (o *opSink) nextWantedInputIdx() int { return 0 }

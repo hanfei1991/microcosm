@@ -12,8 +12,8 @@ const (
 
 // benchmark operators
 type TableReaderOp struct {
-	Addr     string `json:"address"`
-	//TableNum int32  `json:"table-num"`
+	Addr string `json:"address"`
+	// TableNum int32  `json:"table-num"`
 }
 
 type HashOp struct {

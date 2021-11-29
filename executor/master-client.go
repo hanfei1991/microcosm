@@ -73,3 +73,7 @@ func (c *MasterClient) RegisterExecutor(ctx context.Context, req *pb.RegisterExe
 	defer cancel()
 	return c.client.RegisterExecutor(ctx1, req)
 }
+
+func (c *MasterClient) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) (resp *pb.SubmitJobResponse, err error) {
+	return c.client.SubmitJob(ctx, req)
+}

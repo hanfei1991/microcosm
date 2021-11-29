@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/hanfei1991/microcosm/model"
+	"github.com/hanfei1991/microcosm/test"
 )
 
 type TaskStatus int32
@@ -21,18 +22,18 @@ const (
 type Record struct {
 	start   time.Time
 	end     time.Time
-	payload interface{}
-	tid     int32
+	Payload interface{}
+	Tid     int32
 }
 
 func (r *Record) toString() string {
-	return fmt.Sprintf("start %s end %s payload %s\n", r.start.String(), r.end.String())
+	return fmt.Sprintf("start %s end %s\n", r.start.String(), r.end.String())
 }
 
 type Channel struct {
 	innerChan chan *Record
-	sendCtx *taskContext
-	recvCtx *taskContext
+	sendCtx   *taskContext
+	recvCtx   *taskContext
 }
 
 func (c *Channel) readBatch(batch int) []*Record {
@@ -68,27 +69,28 @@ func (c *Channel) writeBatch(records []*Record) ([]*Record, bool) {
 
 type taskContext struct {
 	wake func()
-	err error // meet error during async job
+	// err error // record error during async job
+	testCtx *test.Context
 }
 
 // a vector of records
 type Chunk []*Record
 
 type taskContainer struct {
-	cfg    *model.Task
-	id     model.TaskID
-	status int32
-	inputCache   []Chunk
-	outputCache  []Chunk
-	op     operator
-	inputs []*Channel
-	output []*Channel
-	//	waker  func()
-	ctx *taskContext
+	cfg         *model.Task
+	id          model.TaskID
+	status      int32
+	inputCache  []Chunk
+	outputCache []Chunk
+	op          operator
+	inputs      []*Channel
+	outputs     []*Channel
+	ctx         *taskContext
 }
 
 func (t *taskContainer) prepare() error {
-//	t.outputCache = make([]Chunk, len(t.output))
+	t.inputCache = make([]Chunk, len(t.inputs))
+	t.outputCache = make([]Chunk, len(t.outputs))
 	return t.op.prepare()
 }
 
@@ -124,7 +126,7 @@ func (t *taskContainer) tryFlush() (blocked bool) {
 	hasBlocked := false
 	for i, cache := range t.outputCache {
 		blocked := false
-		t.outputCache[i], blocked = t.output[i].writeBatch(cache)
+		t.outputCache[i], blocked = t.outputs[i].writeBatch(cache)
 		if blocked {
 			hasBlocked = true
 		}
@@ -132,7 +134,7 @@ func (t *taskContainer) tryFlush() (blocked bool) {
 	return hasBlocked
 }
 
-func (t *taskContainer) readDataFromInput(idx int, batch int) Chunk{
+func (t *taskContainer) readDataFromInput(idx int, batch int) Chunk {
 	if len(t.inputCache[idx]) != 0 {
 		chk := t.inputCache[idx]
 		t.inputCache[idx] = t.inputCache[idx][:0]
@@ -142,13 +144,12 @@ func (t *taskContainer) readDataFromInput(idx int, batch int) Chunk{
 }
 
 func (t *taskContainer) Poll() TaskStatus {
-	//	log.Printf("task %d polling", t.id)
 	if t.tryFlush() {
 		return Blocked
 	}
 	idx := t.op.nextWantedInputIdx()
-	r := make(Chunk, 0, 128)
-    if idx == -1 {
+	r := make(Chunk, 1, 128)
+	if idx == -1 {
 		for i := range t.inputs {
 			r = append(r, t.readDataFromInput(i, 128)...)
 		}
@@ -165,15 +166,23 @@ func (t *taskContainer) Poll() TaskStatus {
 	blocked := false
 	var outputs []Chunk
 	var err error
-	for _, record := range r {
+	for i, record := range r {
 		outputs, blocked, err = t.op.next(t.ctx, record, idx)
 		if err != nil {
-			// report error to job manager
+			// TODO: report error to job manager
+			panic(err)
 		}
 		for i, output := range outputs {
 			t.outputCache[i] = append(t.outputCache[i], output...)
 		}
+		// TODO: limit the amount of output records
 		if blocked {
+			if i+1 < len(r) {
+				if idx == -1 {
+					idx = 0
+				}
+				t.inputCache[idx] = append(t.inputCache[idx], r[i+1:]...)
+			}
 			break
 		}
 	}

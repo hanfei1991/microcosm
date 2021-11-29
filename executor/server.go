@@ -29,6 +29,8 @@ type Server struct {
 	lastHearbeatTime time.Time
 
 	mockSrv mock.GrpcServer
+
+	cancel func()
 }
 
 func NewServer(cfg *Config, ctx *test.Context) *Server {
@@ -86,24 +88,29 @@ func (s *Server) startForTest(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
-	exitCh := make(chan struct{}, 1)
-
-	s.sch = runtime.NewRuntime()
+	s.sch = runtime.NewRuntime(s.testCtx)
 	go func() {
+		defer s.cancel()
 		s.sch.Run(ctx)
-		exitCh <- struct{}{}
 	}()
 
 	err = s.selfRegister(ctx)
 	if err != nil {
 		return err
 	}
-	return s.listenHeartbeat(ctx, exitCh)
+	go func() {
+		defer s.cancel()
+		err := s.listenHeartbeat(ctx)
+		log.L().Info("heartbeat quits", zap.Error(err))
+	}()
+	return nil
 }
 
 func (s *Server) Start(ctx context.Context) error {
+	ctx1, cancel := context.WithCancel(ctx)
+	s.cancel = cancel
 	if test.GlobalTestFlag {
-		return s.startForTest(ctx)
+		return s.startForTest(ctx1)
 	}
 	// Start grpc server
 	rootLis, err := net.Listen("tcp", s.cfg.WorkerAddr)
@@ -126,19 +133,24 @@ func (s *Server) Start(ctx context.Context) error {
 		exitCh <- struct{}{}
 	}()
 
-	s.sch = runtime.NewRuntime()
+	s.sch = runtime.NewRuntime(nil)
 	go func() {
-		s.sch.Run(ctx)
-		exitCh <- struct{}{}
+		defer s.cancel()
+		s.sch.Run(ctx1)
 	}()
 
-	err = s.selfRegister(ctx)
+	err = s.selfRegister(ctx1)
 	if err != nil {
 		return err
 	}
 
 	// Start Heartbeat
-	return s.listenHeartbeat(ctx, exitCh)
+	go func() {
+		defer s.cancel()
+		err := s.listenHeartbeat(ctx1)
+		log.L().Info("heartbeat quits", zap.Error(err))
+	}()
+	return nil
 }
 
 func (s *Server) selfRegister(ctx context.Context) (err error) {
@@ -162,7 +174,7 @@ func (s *Server) selfRegister(ctx context.Context) (err error) {
 	return nil
 }
 
-func (s *Server) listenHeartbeat(ctx context.Context, exitCh chan struct{}) error {
+func (s *Server) listenHeartbeat(ctx context.Context) error {
 	ticker := time.NewTicker(s.cfg.KeepAliveInterval)
 	s.lastHearbeatTime = time.Now()
 	defer func() {
@@ -176,8 +188,6 @@ func (s *Server) listenHeartbeat(ctx context.Context, exitCh chan struct{}) erro
 	for {
 		select {
 		case <-ctx.Done():
-			return nil
-		case <-exitCh:
 			return nil
 		case t := <-ticker.C:
 			if s.lastHearbeatTime.Add(s.cfg.KeepAliveTTL).Before(time.Now()) {

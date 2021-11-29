@@ -3,6 +3,8 @@ package runtime
 import (
 	"context"
 	"sync"
+
+	"github.com/hanfei1991/microcosm/test"
 )
 
 type queue struct {
@@ -28,7 +30,8 @@ func (q *queue) push(t *taskContainer) {
 }
 
 type Runtime struct {
-	q   queue
+	testCtx *test.Context
+	q       queue
 }
 
 func (s *Runtime) Run(ctx context.Context) {
@@ -54,7 +57,9 @@ func (s *Runtime) Run(ctx context.Context) {
 	}
 }
 
-func NewRuntime() *Runtime {
-	s := &Runtime{}
+func NewRuntime(ctx *test.Context) *Runtime {
+	s := &Runtime{
+		testCtx: ctx,
+	}
 	return s
 }
