@@ -1,4 +1,4 @@
-package jobmaster
+package master
 
 import (
 	"context"
