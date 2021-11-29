@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/hanfei1991/microcosm/pb"
@@ -21,6 +22,11 @@ type fileWriter struct {
 }
 
 func (f *fileWriter) prepare() error {
+	dir := filepath.Dir(f.filePath)
+	err := os.MkdirAll(dir, 0o755)
+	if err != nil {
+		return err
+	}
 	file, err := os.OpenFile(f.filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o777)
 	f.fd = file
 	return err
@@ -47,11 +53,12 @@ type closeable interface {
 }
 
 type opReceive struct {
-	addr  string
-	data  chan *Record
-	cache Chunk
-	conn  closeable
-	errCh chan error
+	flowID string
+	addr   string
+	data   chan *Record
+	cache  Chunk
+	conn   closeable
+	errCh  chan error
 
 	running      bool
 	binlogClient pb.TestService_FeedBinlogClient

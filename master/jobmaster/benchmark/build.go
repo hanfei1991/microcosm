@@ -4,14 +4,21 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 
 	"github.com/hanfei1991/microcosm/master/cluster"
+	"github.com/hanfei1991/microcosm/master/jobmaster/system"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pkg/autoid"
 )
 
+type jobMaster struct {
+	*system.Master
+	config *Config
+}
+
 // BuildBenchmarkJobMaster for benchmark workload.
-func BuildBenchmarkJobMaster(rawConfig string, idAllocator *autoid.Allocator, resourceMgr cluster.ResourceMgr, client cluster.ExecutorClient) (*Master, error) {
+func BuildBenchmarkJobMaster(rawConfig string, idAllocator *autoid.Allocator, resourceMgr cluster.ResourceMgr, client cluster.ExecutorClient) (*jobMaster, error) {
 	config, err := configFromJSON(rawConfig)
 	if err != nil {
 		return nil, err
@@ -27,18 +34,20 @@ func BuildBenchmarkJobMaster(rawConfig string, idAllocator *autoid.Allocator, re
 
 	for i, addr := range config.Servers {
 		tableOp := model.TableReaderOp{
-			Addr: addr,
+			FlowID: config.FlowID,
+			Addr:   addr,
 		}
 		js, err := json.Marshal(tableOp)
 		if err != nil {
 			return nil, err
 		}
 		tableTask := &model.Task{
-			JobID: job.ID,
-			ID:    model.TaskID(idAllocator.AllocID()),
-			Cost:  1,
-			Op:    js,
-			OpTp:  model.TableReaderType,
+			FlowID: config.FlowID,
+			JobID:  job.ID,
+			ID:     model.TaskID(idAllocator.AllocID()),
+			Cost:   1,
+			Op:     js,
+			OpTp:   model.TableReaderType,
 		}
 		tableTasks = append(tableTasks, tableTask)
 
@@ -48,27 +57,29 @@ func BuildBenchmarkJobMaster(rawConfig string, idAllocator *autoid.Allocator, re
 			return nil, err
 		}
 		hashTask := &model.Task{
-			JobID: job.ID,
-			ID:    model.TaskID(idAllocator.AllocID()),
-			Cost:  1,
-			Op:    js,
-			OpTp:  model.HashType,
+			FlowID: config.FlowID,
+			JobID:  job.ID,
+			ID:     model.TaskID(idAllocator.AllocID()),
+			Cost:   1,
+			Op:     js,
+			OpTp:   model.HashType,
 		}
 		hashTasks = append(hashTasks, hashTask)
 
 		sinkOp := model.TableSinkOp{
-			File: fmt.Sprintf("/tmp/table_%d", i),
+			File: filepath.Join("/tmp", "dataflow", config.FlowID, fmt.Sprintf("table_%d", i)),
 		}
 		js, err = json.Marshal(sinkOp)
 		if err != nil {
 			return nil, err
 		}
 		sinkTask := &model.Task{
-			JobID: job.ID,
-			ID:    model.TaskID(idAllocator.AllocID()),
-			Cost:  1,
-			Op:    js,
-			OpTp:  model.TableSinkType,
+			FlowID: config.FlowID,
+			JobID:  job.ID,
+			ID:     model.TaskID(idAllocator.AllocID()),
+			Cost:   1,
+			Op:     js,
+			OpTp:   model.TableSinkType,
 		}
 		sinkTasks = append(sinkTasks, sinkTask)
 		connectTwoTask(tableTask, hashTask)
@@ -78,7 +89,11 @@ func BuildBenchmarkJobMaster(rawConfig string, idAllocator *autoid.Allocator, re
 	job.Tasks = tableTasks
 	job.Tasks = append(job.Tasks, hashTasks...)
 	job.Tasks = append(job.Tasks, sinkTasks...)
-	master := New(context.Background(), config, job, resourceMgr, client)
+	systemJobMaster := system.New(context.Background(), job, resourceMgr, client)
+	master := &jobMaster{
+		Master: systemJobMaster,
+		config: config,
+	}
 	return master, nil
 }
 

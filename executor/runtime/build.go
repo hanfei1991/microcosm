@@ -33,9 +33,10 @@ func newSyncOp(cfg *model.HashOp) operator {
 
 func newReadTableOp(cfg *model.TableReaderOp) operator {
 	return &opReceive{
-		addr:  cfg.Addr,
-		data:  make(chan *Record, 1024),
-		errCh: make(chan error, 10),
+		flowID: cfg.FlowID,
+		addr:   cfg.Addr,
+		data:   make(chan *Record, 1024),
+		errCh:  make(chan error, 10),
 	}
 }
 
