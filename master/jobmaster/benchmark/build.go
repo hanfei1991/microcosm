@@ -18,7 +18,13 @@ type jobMaster struct {
 }
 
 // BuildBenchmarkJobMaster for benchmark workload.
-func BuildBenchmarkJobMaster(rawConfig string, idAllocator *autoid.Allocator, resourceMgr cluster.ResourceMgr, client cluster.ExecutorClient) (*jobMaster, error) {
+func BuildBenchmarkJobMaster(
+	rawConfig string,
+	idAllocator *autoid.Allocator,
+	resourceMgr cluster.ResourceMgr,
+	client cluster.ExecutorClient,
+	mClient *system.MasterClient,
+) (*jobMaster, error) {
 	config, err := configFromJSON(rawConfig)
 	if err != nil {
 		return nil, err
@@ -96,7 +102,7 @@ func BuildBenchmarkJobMaster(rawConfig string, idAllocator *autoid.Allocator, re
 	}
 	job.Tasks = append(job.Tasks, hashTasks...)
 	job.Tasks = append(job.Tasks, sinkTasks...)
-	systemJobMaster := system.New(context.Background(), job, resourceMgr, client)
+	systemJobMaster := system.New(context.Background(), job, resourceMgr, client, mClient)
 	master := &jobMaster{
 		Master: systemJobMaster,
 		config: config,

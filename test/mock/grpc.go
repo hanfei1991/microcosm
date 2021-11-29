@@ -76,6 +76,11 @@ func (c *masterServerClient) Heartbeat(ctx context.Context, req *pb.HeartbeatReq
 	return resp.(*pb.HeartbeatResponse), err
 }
 
+func (c *masterServerClient) ScheduleTask(ctx context.Context, req *pb.TaskSchedulerRequest, opts ...grpc.CallOption) (*pb.TaskSchedulerResponse, error) {
+	resp, err := c.conn.sendRequest(ctx, req)
+	return resp.(*pb.TaskSchedulerResponse), err
+}
+
 func NewMasterClient(conn Conn) pb.MasterClient {
 	return &masterServerClient{conn}
 }
