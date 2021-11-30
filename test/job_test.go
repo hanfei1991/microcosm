@@ -63,7 +63,7 @@ func (t *testJobSuite) TestSubmit(c *C) {
 		}
 	}()
 	c.Assert(err, IsNil)
-	client, err := executor.NewMasterClient(context.Background(), []string{"127.0.0.1:1991"})
+	client, err := master.NewMasterClient(context.Background(), []string{"127.0.0.1:1991"})
 	c.Assert(err, IsNil)
 	testJobConfig := benchmark.Config{
 		Servers:  testServers,

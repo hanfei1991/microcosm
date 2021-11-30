@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/hanfei1991/microcosm/executor/runtime"
+	"github.com/hanfei1991/microcosm/master"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/errors"
@@ -22,7 +23,7 @@ type Server struct {
 	testCtx *test.Context
 
 	srv *grpc.Server
-	cli *MasterClient
+	cli *master.Client
 	sch *runtime.Runtime
 	ID  model.ExecutorID
 
@@ -155,7 +156,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 func (s *Server) selfRegister(ctx context.Context) (err error) {
 	// Register myself
-	s.cli, err = NewMasterClient(ctx, getJoinURLs(s.cfg.Join))
+	s.cli, err = master.NewMasterClient(ctx, getJoinURLs(s.cfg.Join))
 	if err != nil {
 		return err
 	}
