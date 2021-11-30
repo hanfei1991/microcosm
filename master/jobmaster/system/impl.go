@@ -23,7 +23,7 @@ type Master struct {
 
 	resourceManager cluster.ResourceMgr
 	client          cluster.ExecutorClient
-	mClient         *MasterClient
+	mClient         cluster.JobMasterClient
 
 	offExecutors chan model.ExecutorID
 
@@ -42,7 +42,7 @@ func New(
 	job *model.Job,
 	resourceMgr cluster.ResourceMgr,
 	client cluster.ExecutorClient,
-	mClient *MasterClient,
+	mClient cluster.JobMasterClient,
 ) *Master {
 	ctx, cancel := context.WithCancel(parentCtx)
 	return &Master{

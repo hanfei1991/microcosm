@@ -65,7 +65,7 @@ func (j *JobManager) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *p
 		// TODO: supposing job master will be running independently, then the
 		// addresses of server can change because of failover, the job master
 		// should have ways to detect and adapt automatically.
-		mClient, err := system.NewMasterClient(ctx, j.masterAddrs)
+		mClient, err := NewMasterClient(ctx, j.masterAddrs)
 		if err != nil {
 			resp.Err = errors.ToPBError(err)
 			return resp

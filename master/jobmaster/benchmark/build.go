@@ -23,7 +23,7 @@ func BuildBenchmarkJobMaster(
 	idAllocator *autoid.Allocator,
 	resourceMgr cluster.ResourceMgr,
 	client cluster.ExecutorClient,
-	mClient *system.MasterClient,
+	mClient cluster.JobMasterClient,
 ) (*jobMaster, error) {
 	config, err := configFromJSON(rawConfig)
 	if err != nil {
