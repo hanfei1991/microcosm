@@ -53,6 +53,8 @@ func (s *masterServerConn) sendRequest(ctx context.Context, req interface{}) (in
 		return s.server.SubmitJob(ctx, x)
 	case *pb.HeartbeatRequest:
 		return s.server.Heartbeat(ctx, x)
+	case *pb.TaskSchedulerRequest:
+		return s.server.ScheduleTask(ctx, x)
 	}
 	return nil, errors.New("unknown request")
 }
@@ -78,7 +80,10 @@ func (c *masterServerClient) Heartbeat(ctx context.Context, req *pb.HeartbeatReq
 
 func (c *masterServerClient) ScheduleTask(ctx context.Context, req *pb.TaskSchedulerRequest, opts ...grpc.CallOption) (*pb.TaskSchedulerResponse, error) {
 	resp, err := c.conn.sendRequest(ctx, req)
-	return resp.(*pb.TaskSchedulerResponse), err
+	if err != nil {
+		return nil, err
+	}
+	return resp.(*pb.TaskSchedulerResponse), nil
 }
 
 func NewMasterClient(conn Conn) pb.MasterClient {
