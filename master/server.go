@@ -91,7 +91,7 @@ func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorR
 // - returns scheduler response to job master
 func (s *Server) ScheduleTask(ctx context.Context, req *pb.TaskSchedulerRequest) (*pb.TaskSchedulerResponse, error) {
 	// TODO: support running resource manager independently, and get resource snapshot via rpc.
-	snapshot := s.jobManager.resourceMgr.GetResourceSnapshot()
+	snapshot := s.executorManager.GetResourceSnapshot()
 	if len(snapshot.Executors) == 0 {
 		return nil, errors.ErrClusterResourceNotEnough.GenWithStackByArgs()
 	}
