@@ -7,7 +7,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"sync"
 	"time"
 
 	"github.com/hanfei1991/microcosm/executor/runtime"
@@ -199,8 +198,6 @@ type opProducer struct {
 	outputCnt    int
 }
 
-var ddlLock sync.Mutex
-
 func (o *opProducer) Close() error { return nil }
 
 func (o *opProducer) Prepare() error { return nil }
@@ -220,7 +217,6 @@ func (o *opProducer) Next(ctx *runtime.TaskContext, _ *runtime.Record, _ int) ([
 		}
 		if o.pk%o.ddlFrequency == 0 {
 			o.schemaVer++
-			ddlLock.Lock()
 			for i := range outputData {
 				payload := &pb.Record{
 					Tp:        pb.Record_DDL,
@@ -233,7 +229,6 @@ func (o *opProducer) Next(ctx *runtime.TaskContext, _ *runtime.Record, _ int) ([
 				}
 				outputData[i] = append(outputData[i], &r)
 			}
-			ddlLock.Unlock()
 		}
 		payload := &pb.Record{
 			Tp:        pb.Record_Data,
