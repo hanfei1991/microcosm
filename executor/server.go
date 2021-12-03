@@ -101,7 +101,7 @@ func (s *Server) startForTest(ctx context.Context) (err error) {
 	}
 	go func() {
 		defer s.cancel()
-		err := s.listenHeartbeat(ctx)
+		err := s.keepHeartbeat(ctx)
 		log.L().Info("heartbeat quits", zap.Error(err))
 	}()
 	return nil
@@ -148,7 +148,7 @@ func (s *Server) Start(ctx context.Context) error {
 	// Start Heartbeat
 	go func() {
 		defer s.cancel()
-		err := s.listenHeartbeat(ctx1)
+		err := s.keepHeartbeat(ctx1)
 		log.L().Info("heartbeat quits", zap.Error(err))
 	}()
 	return nil
@@ -175,7 +175,9 @@ func (s *Server) selfRegister(ctx context.Context) (err error) {
 	return nil
 }
 
-func (s *Server) listenHeartbeat(ctx context.Context) error {
+// TODO: Right now heartbeat maintainace is too simple. We should look into
+// what other frameworks do or whether we can use grpc heartbeat.
+func (s *Server) keepHeartbeat(ctx context.Context) error {
 	ticker := time.NewTicker(s.cfg.KeepAliveInterval)
 	s.lastHearbeatTime = time.Now()
 	defer func() {
