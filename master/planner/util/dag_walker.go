@@ -39,6 +39,7 @@ func (w *DAGWalker) Walk(dag *model.DAG) error {
 func (w *DAGWalker) doWalk(node *model.Node, depth int) error {
 	if node == nil {
 		log.Panic("unexpected nil node")
+		return nil // to make the linter happy
 	}
 
 	if _, ok := w.visited[node.ID]; ok {

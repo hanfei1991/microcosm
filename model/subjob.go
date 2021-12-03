@@ -15,8 +15,8 @@ type DAG struct {
 
 // Node is a node in the DAG.
 type Node struct {
-	ID       NodeID          `json:"id"`
-	Outputs  []*Node         `json:"outputs"`
+	ID      NodeID  `json:"id"`
+	Outputs []*Node `json:"outputs"`
 
 	// TODO more fields to be added in subsequent PRs.
 }
