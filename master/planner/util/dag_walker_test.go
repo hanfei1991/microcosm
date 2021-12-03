@@ -74,7 +74,7 @@ func TestDAGWalkerWalkTooDeep(t *testing.T) {
 
 	err := walker.Walk(dag)
 	require.Error(t, err)
-	require.Regexp(t, "exceed maximal depth.*", err.Error())
+	require.Regexp(t, ".*ErrPlannerDAGDepthExceeded.*", err.Error())
 }
 
 func TestNewDAGWalkerWalkNilNode(t *testing.T) {
