@@ -1,0 +1,4 @@
+addr = "http://127.0.0.1:10340"
+[etcd]
+name = "metastore-1"
+data-dir = "/tmp/df/metastore/discovery"

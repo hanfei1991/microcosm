@@ -54,6 +54,7 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.Join, "join", "", `join to an existing cluster (usage: dm-master cluster's "${master-addr}")`)
 	fs.StringVar(&cfg.Name, "name", "", "human-readable name for DM-worker member")
 	fs.StringVar(&cfg.KeepAliveTTLStr, "keepalive-ttl", defaultKeepAliveTTL, "dm-worker's TTL for keepalive with etcd (in seconds)")
+	fs.StringVar(&cfg.MetaEndpoints, "metastore-endpoints", "127.0.0.1:10340", "metastore endpoints")
 
 	return cfg
 }
@@ -71,6 +72,9 @@ type Config struct {
 	Join          string `toml:"join" json:"join" `
 	WorkerAddr    string `toml:"worker-addr" json:"worker-addr"`
 	AdvertiseAddr string `toml:"advertise-addr" json:"advertise-addr"`
+
+	MetaEndpoints string `toml:"meta-endpoints" json:"meta-endpoints"`
+	SessionTTL    int    `toml:"session-ttl" json:"session-ttl"`
 
 	ConfigFile string `toml:"config-file" json:"config-file"`
 
