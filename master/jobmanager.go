@@ -1,4 +1,4 @@
-package jobmaster
+package master
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 
 	"github.com/hanfei1991/microcosm/master/cluster"
 	"github.com/hanfei1991/microcosm/master/jobmaster/benchmark"
+	"github.com/hanfei1991/microcosm/master/jobmaster/system"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/autoid"
@@ -17,13 +18,15 @@ import (
 // JobManager manages all the job masters, and notify the offline executor to them.
 type JobManager struct {
 	mu         sync.Mutex
-	jobMasters map[model.JobID]JobMaster
+	jobMasters map[model.JobID]system.JobMaster
 
 	idAllocater    *autoid.Allocator
 	resourceMgr    cluster.ResourceMgr
 	executorClient cluster.ExecutorClient
 
 	offExecutors chan model.ExecutorID
+
+	masterAddrs []string
 }
 
 // Start the deamon goroutine.
@@ -52,14 +55,23 @@ func (j *JobManager) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *p
 		Config:   string(req.Config),
 		UserName: req.User,
 	}
-	var jobMaster JobMaster
+	var jobMaster system.JobMaster
 	var err error
 	log.L().Logger.Info("submit job", zap.String("config", info.Config))
 	resp := &pb.SubmitJobResponse{}
 	switch req.Tp {
 	case pb.SubmitJobRequest_Benchmark:
 		info.Type = model.JobBenchmark
-		jobMaster, err = benchmark.BuildBenchmarkJobMaster(info.Config, j.idAllocater, j.resourceMgr, j.executorClient)
+		// TODO: supposing job master will be running independently, then the
+		// addresses of server can change because of failover, the job master
+		// should have ways to detect and adapt automatically.
+		mClient, err := NewMasterClient(ctx, j.masterAddrs)
+		if err != nil {
+			resp.Err = errors.ToPBError(err)
+			return resp
+		}
+		jobMaster, err = benchmark.BuildBenchmarkJobMaster(
+			info.Config, j.idAllocater, j.resourceMgr, j.executorClient, mClient)
 		if err != nil {
 			resp.Err = errors.ToPBError(err)
 			return resp
@@ -72,7 +84,7 @@ func (j *JobManager) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *p
 	log.L().Logger.Info("finished build job")
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	err = jobMaster.DispatchJob(ctx)
+	err = jobMaster.Start(ctx)
 	if err != nil {
 		resp.Err = errors.ToPBError(err)
 		return resp
@@ -84,12 +96,18 @@ func (j *JobManager) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *p
 	return resp
 }
 
-func NewJobManager(resource cluster.ResourceMgr, clt cluster.ExecutorClient, executorNotifier chan model.ExecutorID) *JobManager {
+func NewJobManager(
+	resource cluster.ResourceMgr,
+	clt cluster.ExecutorClient,
+	executorNotifier chan model.ExecutorID,
+	masterAddrs []string,
+) *JobManager {
 	return &JobManager{
-		jobMasters:     make(map[model.JobID]JobMaster),
+		jobMasters:     make(map[model.JobID]system.JobMaster),
 		idAllocater:    autoid.NewAllocator(),
 		resourceMgr:    resource,
 		executorClient: clt,
 		offExecutors:   executorNotifier,
+		masterAddrs:    masterAddrs,
 	}
 }

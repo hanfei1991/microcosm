@@ -7,12 +7,19 @@ import (
 	"path/filepath"
 
 	"github.com/hanfei1991/microcosm/master/cluster"
+	"github.com/hanfei1991/microcosm/master/jobmaster/system"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pkg/autoid"
 )
 
 // BuildBenchmarkJobMaster for benchmark workload.
-func BuildBenchmarkJobMaster(rawConfig string, idAllocator *autoid.Allocator, resourceMgr cluster.ResourceMgr, client cluster.ExecutorClient) (*Master, error) {
+func BuildBenchmarkJobMaster(
+	rawConfig string,
+	idAllocator *autoid.Allocator,
+	resourceMgr cluster.ResourceMgr,
+	client cluster.ExecutorClient,
+	mClient cluster.JobMasterClient,
+) (*jobMaster, error) {
 	config, err := configFromJSON(rawConfig)
 	if err != nil {
 		return nil, err
@@ -22,18 +29,70 @@ func BuildBenchmarkJobMaster(rawConfig string, idAllocator *autoid.Allocator, re
 		ID: model.JobID(idAllocator.AllocID()),
 	}
 
-	tableTasks := make([]*model.Task, 0)
+	// build producers
+	produceTasks := make([]*model.Task, 0)
+	binlogTasks := make([]*model.Task, 0)
+	for id := int32(0); id < config.TableNum; id++ {
+		produceOp := &model.ProducerOp{
+			TableID:      id,
+			RecordCnt:    config.RecordCnt,
+			DDLFrequency: config.DDLFrequency,
+			OutputCnt:    len(config.Servers),
+		}
+		js, err := json.Marshal(produceOp)
+		if err != nil {
+			return nil, err
+		}
+		produceTasks = append(produceTasks, &model.Task{
+			FlowID: config.FlowID,
+			JobID:  job.ID,
+			ID:     model.TaskID(idAllocator.AllocID()),
+			Cost:   1,
+			OpTp:   model.ProducerType,
+			Op:     js,
+		})
+	}
 	for _, addr := range config.Servers {
+		binlogOp := &model.BinlogOp{
+			Address: addr,
+		}
+		js, err := json.Marshal(binlogOp)
+		if err != nil {
+			return nil, err
+		}
+		binlogTasks = append(binlogTasks, &model.Task{
+			FlowID: config.FlowID,
+			JobID:  job.ID,
+			ID:     model.TaskID(idAllocator.AllocID()),
+			Cost:   1,
+			OpTp:   model.BinlogType,
+			Op:     js,
+		})
+	}
+
+	for _, inputTask := range produceTasks {
+		for _, outputTask := range binlogTasks {
+			connectTwoTask(inputTask, outputTask)
+		}
+	}
+
+	job.Tasks = append(job.Tasks, binlogTasks...)
+	job.Tasks = append(job.Tasks, produceTasks...)
+
+	tableTasks := make([]*model.Task, 0)
+	hashTasks := make([]*model.Task, 0)
+	sinkTasks := make([]*model.Task, 0)
+
+	for i, addr := range config.Servers {
 		tableOp := model.TableReaderOp{
-			FlowID:   config.FlowID,
-			Addr:     addr,
-			TableNum: int32(config.TableNum),
+			FlowID: config.FlowID,
+			Addr:   addr,
 		}
 		js, err := json.Marshal(tableOp)
 		if err != nil {
 			return nil, err
 		}
-		t := &model.Task{
+		tableTask := &model.Task{
 			FlowID: config.FlowID,
 			JobID:  job.ID,
 			ID:     model.TaskID(idAllocator.AllocID()),
@@ -41,17 +100,10 @@ func BuildBenchmarkJobMaster(rawConfig string, idAllocator *autoid.Allocator, re
 			Op:     js,
 			OpTp:   model.TableReaderType,
 		}
-		tableTasks = append(tableTasks, t)
-	}
+		tableTasks = append(tableTasks, tableTask)
 
-	job.Tasks = tableTasks
-	hashTasks := make([]*model.Task, 0)
-	sinkTasks := make([]*model.Task, 0)
-	for i := 1; i <= config.TableNum; i++ {
-		hashOp := model.HashOp{
-			TableID: int32(i),
-		}
-		js, err := json.Marshal(hashOp)
+		hashOp := model.HashOp{}
+		js, err = json.Marshal(hashOp)
 		if err != nil {
 			return nil, err
 		}
@@ -81,16 +133,23 @@ func BuildBenchmarkJobMaster(rawConfig string, idAllocator *autoid.Allocator, re
 			OpTp:   model.TableSinkType,
 		}
 		sinkTasks = append(sinkTasks, sinkTask)
+		connectTwoTask(tableTask, hashTask)
 		connectTwoTask(hashTask, sinkTask)
 	}
-	for _, trTask := range tableTasks {
-		for _, hsTask := range hashTasks {
-			connectTwoTask(trTask, hsTask)
-		}
-	}
+
+	job.Tasks = append(job.Tasks, tableTasks...)
 	job.Tasks = append(job.Tasks, hashTasks...)
 	job.Tasks = append(job.Tasks, sinkTasks...)
-	master := New(context.Background(), config, job, resourceMgr, client)
+	systemJobMaster := system.New(context.Background(), job, resourceMgr, client, mClient)
+	master := &jobMaster{
+		Master: systemJobMaster,
+		config: config,
+	}
+	master.stage1 = append(master.stage1, produceTasks...)
+	master.stage1 = append(master.stage1, binlogTasks...)
+	master.stage2 = append(master.stage2, tableTasks...)
+	master.stage2 = append(master.stage2, hashTasks...)
+	master.stage2 = append(master.stage2, sinkTasks...)
 	return master, nil
 }
 

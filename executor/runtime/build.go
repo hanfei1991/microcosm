@@ -1,84 +1,69 @@
 package runtime
 
 import (
-	"encoding/json"
-
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"go.uber.org/zap"
 )
 
-func newTaskContainer(task *model.Task, ctx *taskContext) *taskContainer {
+func (s *Runtime) newTaskContainer(task *model.Task) *taskContainer {
 	t := &taskContainer{
 		cfg: task,
 		id:  task.ID,
-		ctx: ctx,
+		ctx: new(TaskContext),
+	}
+	t.ctx.TestCtx = s.testCtx
+	t.ctx.Wake = func() {
+		// you can't wake or it is already been waked.
+		if !t.tryAwake() {
+			return
+		}
+		t.setRunnable()
+		s.q.push(t)
 	}
 	return t
-}
-
-func newHashOp(cfg *model.HashOp) operator {
-	return &opHash{}
-}
-
-func newReadTableOp(cfg *model.TableReaderOp) operator {
-	return &opReceive{
-		flowID:   cfg.FlowID,
-		addr:     cfg.Addr,
-		data:     make(chan *Record, 1024),
-		tableCnt: cfg.TableNum,
-	}
-}
-
-func newSinkOp(cfg *model.TableSinkOp) operator {
-	return &opSink{
-		writer: fileWriter{
-			filePath: cfg.File,
-			tid:      cfg.TableID,
-		},
-	}
 }
 
 func (s *Runtime) connectTasks(sender, receiver *taskContainer) {
 	ch := &Channel{
 		innerChan: make(chan *Record, 1024),
-		sendWaker: s.getWaker(sender),
-		recvWaker: s.getWaker(receiver),
+		sendCtx:   sender.ctx,
+		recvCtx:   receiver.ctx,
 	}
-	sender.output = append(sender.output, ch)
+	sender.outputs = append(sender.outputs, ch)
 	receiver.inputs = append(receiver.inputs, ch)
+}
+
+type opBuilder interface {
+	Build(model.Operator) (Operator, bool, error)
+}
+
+var OpBuilders map[model.OperatorType]opBuilder
+
+func InitOpBuilders() {
+	OpBuilders = make(map[model.OperatorType]opBuilder)
 }
 
 func (s *Runtime) SubmitTasks(tasks []*model.Task) error {
 	taskSet := make(map[model.TaskID]*taskContainer)
+	taskToRun := make([]*taskContainer, 0)
 	for _, t := range tasks {
-		task := newTaskContainer(t, s.ctx)
+		task := s.newTaskContainer(t)
 		log.L().Logger.Info("config", zap.ByteString("op", t.Op))
-		switch t.OpTp {
-		case model.TableReaderType:
-			op := &model.TableReaderOp{}
-			err := json.Unmarshal(t.Op, op)
-			if err != nil {
-				return err
-			}
-			task.op = newReadTableOp(op)
+		builder, ok := OpBuilders[t.OpTp]
+		if !ok {
+			return errors.ErrExecutorUnknownOperator.FastGenByArgs(t.OpTp)
+		}
+		op, runnable, err := builder.Build(t.Op)
+		if err != nil {
+			return err
+		}
+		task.op = op
+		if runnable {
 			task.setRunnable()
-		case model.HashType:
-			op := &model.HashOp{}
-			err := json.Unmarshal(t.Op, op)
-			if err != nil {
-				return err
-			}
-			task.op = newHashOp(op)
-			task.tryBlock()
-		case model.TableSinkType:
-			op := &model.TableSinkOp{}
-			err := json.Unmarshal(t.Op, op)
-			if err != nil {
-				return err
-			}
-			task.op = newSinkOp(op)
+			taskToRun = append(taskToRun, task)
+		} else {
 			task.tryBlock()
 		}
 		taskSet[task.id] = task
@@ -95,6 +80,9 @@ func (s *Runtime) SubmitTasks(tasks []*model.Task) error {
 				return errors.ErrTaskNotFound.GenWithStackByArgs(tid)
 			}
 		}
+	}
+
+	for _, t := range taskSet {
 		err := t.prepare()
 		if err != nil {
 			return err
@@ -103,10 +91,8 @@ func (s *Runtime) SubmitTasks(tasks []*model.Task) error {
 
 	log.L().Logger.Info("begin to push")
 	// add to queue, begin to run.
-	for _, t := range taskSet {
-		if t.status == int32(Runnable) {
-			s.q.push(t)
-		}
+	for _, t := range taskToRun {
+		s.q.push(t)
 	}
 	return nil
 }
