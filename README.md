@@ -56,12 +56,6 @@ the job of demo workload is devided to two parts:
 
 change the `worker-addr` field in toml, and start another executor.
 
-#### start producer
-
-```[shell]
-./bin/producer
-```
-
 #### submit a job
 
 ```[shell]
