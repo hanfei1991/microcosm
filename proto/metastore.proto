@@ -4,12 +4,6 @@ package pb;
 
 import "error.proto";
 
-service MetaStore {
-    rpc RegisterMetaStore(RegisterMetaStoreRequest) returns(RegisterMetaStoreResponse) {}
-
-    rpc QueryMetaStore(QueryMetaStoreRequest) returns(QueryMetaStoreResponse) {}
-}
-
 enum StoreType {
     ServiceDiscovery = 0;
     SystemMetaStore = 1;

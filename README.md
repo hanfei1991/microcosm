@@ -28,14 +28,6 @@ Executor is the worker process to run the tasks. It receives `submit tasks` requ
 
 Master-Client is set to interact with master. Right now it only supports `submit-job` command.
 
-## MetaStore
-
-MetaStore is a metastore service, it manages multiple metastore and it handles RPC requests from metastore user,
-the abilities it provides including:
-- A service discovery metastore management, it is am embed etcd indeed.
-- A metastore for dataflow engine system
-- A metastore for applications running on dataflow engine
-
 ## Demo
 
 the job of demo workload is devided to two parts:
@@ -49,12 +41,6 @@ the job of demo workload is devided to two parts:
   - **Sink task** writes the record to a local file, and records the ending time.
 
 ### demonstration
-
-#### Start MetaStore server
-
-```[shell]
-./bin/metastore --config cmd/metastore/example.toml
-```
 
 #### Start Master
 

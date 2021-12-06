@@ -189,18 +189,12 @@ func (s *Server) CloseCh() chan bool {
 }
 
 func (s *Server) keepalive(ctx context.Context) error {
-	if s.cfg.MetaEndpoints == "" {
-		return nil
-	}
-	// dial to metastore server
-	conn, err := grpc.Dial(s.cfg.MetaEndpoints, grpc.WithInsecure())
-	if err != nil {
-		return err
-	}
-	cli := pb.NewMetaStoreClient(conn)
-
 	// query service discovery metastore, which is an embed etcd underlying
-	resp, err := cli.QueryMetaStore(ctx, &pb.QueryMetaStoreRequest{Tp: pb.StoreType_ServiceDiscovery})
+	resp, err := s.cli.QueryMetaStore(
+		ctx,
+		&pb.QueryMetaStoreRequest{Tp: pb.StoreType_ServiceDiscovery},
+		s.cfg.RPCTimeout,
+	)
 	if err != nil {
 		return err
 	}

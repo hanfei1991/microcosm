@@ -108,6 +108,38 @@ func (s *Server) DeleteExecutor() {
 	// To implement
 }
 
+// RegisterMetaStore registers backend metastore to server master,
+// but have not implemented yet.
+func (s *Server) RegisterMetaStore(
+	ctx context.Context, req *pb.RegisterMetaStoreRequest,
+) (*pb.RegisterMetaStoreResponse, error) {
+	return nil, nil
+}
+
+// QueryMetaStore implements gRPC interface
+func (s *Server) QueryMetaStore(
+	ctx context.Context, req *pb.QueryMetaStoreRequest,
+) (*pb.QueryMetaStoreResponse, error) {
+	switch req.Tp {
+	case pb.StoreType_ServiceDiscovery:
+		return &pb.QueryMetaStoreResponse{
+			Address: s.cfg.AdvertiseAddr,
+		}, nil
+	case pb.StoreType_SystemMetaStore:
+		// TODO: independent system metastore
+		return &pb.QueryMetaStoreResponse{
+			Address: s.cfg.AdvertiseAddr,
+		}, nil
+	default:
+		return &pb.QueryMetaStoreResponse{
+			Err: &pb.Error{
+				Code:    pb.ErrorCode_InvalidMetaStoreType,
+				Message: fmt.Sprintf("store type: %s", req.Tp),
+			},
+		}, nil
+	}
+}
+
 func (s *Server) startForTest(ctx context.Context) (err error) {
 	// TODO: implement mock-etcd and leader election
 
