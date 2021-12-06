@@ -227,7 +227,7 @@ func (s *Server) keepalive(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	// TODO: we share system metastore with service discovery etc, in the future
+	// TODO: we share system metastore with service discovery etcd, in the future
 	// we could separate them
 	s.metastore = metadata.NewMetaEtcd(etcdCli)
 	value, err := s.info.ToJSON()

@@ -60,7 +60,7 @@ echo "generate protobuf code..."
 
 #cp -r ${GAPI_PATH}/google ./
 
-../tools/bin/protoc -I. -I"${GOGO_PATH}" -I"${GOGO_PATH}/protobuf" --plugin=protoc-gen-gogofaster=${GOGO_FASTER} --gogofaster_out=plugins=grpc:../pb/ *.proto
+protoc -I. -I"${GOGO_PATH}" -I"${GOGO_PATH}/protobuf" --plugin=protoc-gen-gogofaster=${GOGO_FASTER} --gogofaster_out=plugins=grpc:../pb/ *.proto
 
 #protoc -I. -I"${GOGO_PATH}" -I"${GOGO_PATH}/protobuf" --plugin=protoc-gen-grpc-gateway=${GRPC_GATEWAY} --grpc-gateway_out=logtostderr=true:../pb/ dmmaster.proto
 
