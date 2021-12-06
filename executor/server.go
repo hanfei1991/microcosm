@@ -150,13 +150,8 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// Start Heartbeat
 	go func() {
-<<<<<<< HEAD
-		defer s.cancel()
-		err := s.keepHeartbeat(ctx1)
-=======
 		defer s.close()
-		err := s.listenHeartbeat(ctx1)
->>>>>>> master
+		err := s.keepHeartbeat(ctx1)
 		log.L().Info("heartbeat quits", zap.Error(err))
 	}()
 	return nil
