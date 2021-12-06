@@ -23,12 +23,10 @@ const (
 	defaultInitialClusterState = embed.ClusterStateFlagNew
 )
 
-var (
-	// SampleConfigFile is sample config file of meta-store
-	// later we can read it from dm/master/meta-store.toml
-	// and assign it to SampleConfigFile while we build meta-store.
-	SampleConfigFile string
-)
+// SampleConfigFile is sample config file of meta-store
+// later we can read it from dm/master/meta-store.toml
+// and assign it to SampleConfigFile while we build meta-store.
+var SampleConfigFile string
 
 // NewConfig creates a config for meta-store server.
 func NewConfig() *Config {
