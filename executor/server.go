@@ -3,7 +3,6 @@ package executor
 import (
 	"context"
 	"net"
-	"strconv"
 	"strings"
 	"time"
 
@@ -231,15 +230,11 @@ func (s *Server) keepalive(ctx context.Context) error {
 	// TODO: we share system metastore with service discovery etc, in the future
 	// we could separate them
 	s.metastore = metadata.NewMetaEtcd(etcdCli)
-	key := metadata.DataFlowKey{
-		Tp:     metadata.DataFlowKeyTypeExecutor,
-		NodeID: strconv.Itoa(int(s.info.ID)),
-	}
 	value, err := s.info.ToJSON()
 	if err != nil {
 		return err
 	}
-	_, err = s.metastore.Put(ctx, key.String(), value, clientv3.WithLease(session.Lease()))
+	_, err = s.metastore.Put(ctx, s.info.EtcdKey(), value, clientv3.WithLease(session.Lease()))
 	if err != nil {
 		return err
 	}
