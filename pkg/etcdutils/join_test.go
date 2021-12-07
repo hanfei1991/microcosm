@@ -17,13 +17,6 @@ import (
 	"go.etcd.io/etcd/embed"
 )
 
-/*
-func (t *testEtcdSuite) SetUpSuite(c *check.C) {
-	// initialized the logger to make genEmbedEtcdConfig working.
-	c.Assert(log.InitLogger(&log.Config{}), check.IsNil)
-}
-*/
-
 func allocTempURL(t *testing.T) string {
 	port, err := freeport.GetFreePort()
 	require.Nil(t, err)
@@ -150,6 +143,7 @@ func TestPrepareJoinEtcd(t *testing.T) {
 	cfgAfter2.Name = "dataflow-master-3" // overwrite some items
 	dir3, err := ioutil.TempDir("", "test3")
 	require.Nil(t, err)
+	defer os.RemoveAll(dir3)
 	cfgAfter2.DataDir = dir3
 	after2MasterAddr := allocTempURL(t)
 	cfgAfter2.PeerUrls = "http://" + allocTempURL(t)
@@ -190,7 +184,9 @@ func TestIsDirExist(t *testing.T) {
 	d := "./directory-not-exists"
 	require.False(t, isDirExist(d))
 
-	d = os.TempDir()
+	var err error
+	d, err = ioutil.TempDir("", "test-dir")
+	require.Nil(t, err)
 	defer os.RemoveAll(d)
 
 	// empty directory
