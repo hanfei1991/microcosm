@@ -38,6 +38,7 @@ var (
 	ErrMasterDecodeConfigFile       = errors.Normalize("decode config file failed", errors.RFCCodeText("DFLOW:ErrMasterDecodeConfigFile"))
 	ErrMasterConfigUnknownItem      = errors.Normalize("master config containes unknown configuration options: %s", errors.RFCCodeText("DFLOW:ErrMasterConfigUnknownItem"))
 	ErrMasterGenEmbedEtcdConfigFail = errors.Normalize("", errors.RFCCodeText("DFLOW:ErrMasterGenEmbedEtcdConfigFail"))
+	ErrMasterJoinEmbedEtcdFail      = errors.Normalize("failed to join embed etcd: %s", errors.RFCCodeText("DFLOW:ErrMasterJoinEmbedEtcdFail"))
 	ErrMasterStartEmbedEtcdFail     = errors.Normalize("failed to start embed etcd", errors.RFCCodeText("DFLOW:ErrMasterStartEmbedEtcdFail"))
 	ErrMasterParseURLFail           = errors.Normalize("failed to parse URL %s", errors.RFCCodeText("DFLOW:ErrMasterParseURLFail"))
 	ErrMasterScheduleMissTask       = errors.Normalize("task %d is not found after scheduling", errors.RFCCodeText("DFLOW:ErrMasterScheduleMissTask"))
