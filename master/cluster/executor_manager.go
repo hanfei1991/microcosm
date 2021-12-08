@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"context"
+	"strconv"
 	"sync"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/ha"
 	"github.com/hanfei1991/microcosm/test"
 	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/pingcap/ticdc/pkg/p2p"
 	"go.uber.org/zap"
 )
 
@@ -229,8 +231,32 @@ func (e *ExecutorManager) Send(ctx context.Context, id model.ExecutorID, req *Ex
 		if exec.Status == model.Running {
 			exec.Status = model.Disconnected
 		}
+		log.L().Warn("error happens when send message to executor", zap.Error(err))
 		exec.mu.Unlock()
 		return resp, err
 	}
 	return resp, nil
 }
+
+func (e *ExecutorManager) SendMessage(ctx context.Context, nodeID p2p.NodeID, topic string, value interface{}) (error) {
+	e.mu.Lock()
+	id, err := strconv.Atoi(nodeID)
+	exec, ok := e.executors[model.ExecutorID(id)]
+	if !ok {
+		e.mu.Unlock()
+		return errors.ErrUnknownExecutorID.GenWithStackByArgs(id)
+	}
+	e.mu.Unlock()
+	err = exec.client.SendMessage(ctx, topic, value)
+	if err != nil {
+		exec.mu.Lock()
+		if exec.Status == model.Running {
+			exec.Status = model.Disconnected
+		}
+		log.L().Warn("error happens when send message to executor", zap.Error(err))
+		exec.mu.Unlock()
+		return err
+	}
+	return nil
+}
+

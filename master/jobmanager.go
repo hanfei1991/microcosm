@@ -12,6 +12,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/autoid"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/pingcap/ticdc/pkg/p2p"
 	"go.uber.org/zap"
 )
 
@@ -25,12 +26,15 @@ type JobManager struct {
 	executorClient cluster.ExecutorClient
 
 	offExecutors chan model.ExecutorID
+	p2pServer    *p2p.MessageServer
 
 	masterAddrs []string
 }
 
 // Start the deamon goroutine.
-func (j *JobManager) Start(ctx context.Context) {
+func (j *JobManager) Start(ctx context.Context, p2pServer *p2p.MessageServer) {
+	j.p2pServer = p2pServer
+	go j.p2pServer.Run(ctx)
 	go j.startImpl(ctx)
 }
 
@@ -71,7 +75,7 @@ func (j *JobManager) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *p
 			return resp
 		}
 		jobMaster, err = benchmark.BuildBenchmarkJobMaster(
-			info.Config, j.idAllocater, j.resourceMgr, j.executorClient, mClient)
+			info.Config, j.idAllocater, j.resourceMgr, j.executorClient, mClient, j.p2pServer)
 		if err != nil {
 			resp.Err = errors.ToPBError(err)
 			return resp

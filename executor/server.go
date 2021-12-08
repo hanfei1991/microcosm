@@ -15,6 +15,8 @@ import (
 	"github.com/hanfei1991/microcosm/test"
 	"github.com/hanfei1991/microcosm/test/mock"
 	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/pingcap/ticdc/pkg/p2p"
+	p2ppb "github.com/pingcap/ticdc/proto/p2p"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/pkg/logutil"
@@ -133,6 +135,9 @@ func (s *Server) Start(ctx context.Context) error {
 
 	s.srv = grpc.NewServer()
 	pb.RegisterExecutorServer(s.srv, s)
+	
+	p2pConfig := new(p2p.MessageServerConfig)
+	p2pServer := p2p.NewMessageServer("master", p2pConfig)
 
 	exitCh := make(chan struct{}, 1)
 
@@ -145,7 +150,7 @@ func (s *Server) Start(ctx context.Context) error {
 		exitCh <- struct{}{}
 	}()
 
-	s.sch = runtime.NewRuntime(nil)
+	s.sch = runtime.NewRuntime(nil, p2pServer)
 	go func() {
 		defer s.close()
 		s.sch.Run(ctx1)
@@ -267,6 +272,7 @@ func (s *Server) selfRegister(ctx context.Context) (err error) {
 		ID:   model.ExecutorID(resp.ExecutorId),
 		Addr: s.cfg.WorkerAddr,
 	}
+//	p2p.NewMessageClient()
 	log.L().Logger.Info("register successful", zap.Any("info", s.info))
 	return nil
 }

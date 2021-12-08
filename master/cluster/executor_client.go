@@ -9,12 +9,17 @@ import (
 	"github.com/hanfei1991/microcosm/test"
 	"github.com/hanfei1991/microcosm/test/mock"
 	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/pingcap/ticdc/pkg/p2p"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
+type MessageClient interface {
+	SendMessage(ctx context.Context, topic string, value interface{}) (int64, error)
+}
 
 type ExecutorClient interface {
 	Send(context.Context, model.ExecutorID, *ExecutorRequest) (*ExecutorResponse, error)
+	SendMessage(context.Context, p2p.NodeID, p2p.Topic, interface{}) (error)
 }
 
 type closeable interface {
@@ -24,10 +29,16 @@ type closeable interface {
 type executorClient struct {
 	conn   closeable
 	client pb.ExecutorClient
+	msgClient MessageClient
 }
 
 func (c *executorClient) close() error {
 	return c.conn.Close()
+}
+
+func (c *executorClient) SendMessage(ctx context.Context, topic p2p.Topic, value interface{}) error {
+	_, err := c.msgClient.SendMessage(ctx, topic, value)
+	return err
 }
 
 func (c *executorClient) send(ctx context.Context, req *ExecutorRequest) (*ExecutorResponse, error) {

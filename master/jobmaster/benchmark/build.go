@@ -19,6 +19,7 @@ func BuildBenchmarkJobMaster(
 	resourceMgr cluster.ResourceMgr,
 	client cluster.ExecutorClient,
 	mClient cluster.JobMasterClient,
+	messageServer system.MessageServer,
 ) (*jobMaster, error) {
 	config, err := configFromJSON(rawConfig)
 	if err != nil {
@@ -80,7 +81,7 @@ func BuildBenchmarkJobMaster(
 	job.Tasks = append(job.Tasks, produceTasks...)
 
 	tableTasks := make([]*model.Task, 0)
-	hashTasks := make([]*model.Task, 0)
+	syncTasks := make([]*model.Task, 0)
 	sinkTasks := make([]*model.Task, 0)
 
 	for i, addr := range config.Servers {
@@ -115,7 +116,7 @@ func BuildBenchmarkJobMaster(
 			Op:     js,
 			OpTp:   model.HashType,
 		}
-		hashTasks = append(hashTasks, hashTask)
+		syncTasks = append(syncTasks, hashTask)
 
 		sinkOp := model.TableSinkOp{
 			File: filepath.Join("/tmp", "dataflow", config.FlowID, fmt.Sprintf("table_%d", i)),
@@ -138,7 +139,7 @@ func BuildBenchmarkJobMaster(
 	}
 
 	job.Tasks = append(job.Tasks, tableTasks...)
-	job.Tasks = append(job.Tasks, hashTasks...)
+	job.Tasks = append(job.Tasks, syncTasks...)
 	job.Tasks = append(job.Tasks, sinkTasks...)
 	systemJobMaster := system.New(context.Background(), job, resourceMgr, client, mClient)
 	master := &jobMaster{
@@ -148,7 +149,7 @@ func BuildBenchmarkJobMaster(
 	master.stage1 = append(master.stage1, produceTasks...)
 	master.stage1 = append(master.stage1, binlogTasks...)
 	master.stage2 = append(master.stage2, tableTasks...)
-	master.stage2 = append(master.stage2, hashTasks...)
+	master.stage2 = append(master.stage2, syncTasks...)
 	master.stage2 = append(master.stage2, sinkTasks...)
 	return master, nil
 }

@@ -17,3 +17,8 @@ type JobMaster interface {
 	// ID returns the current job id.
 	ID() model.JobID
 }
+
+type MessageServer interface {
+	SyncAddHandler(ctx context.Context, topic string, tpi interface{}, fn func(string, interface{}) error) (<-chan error, error)
+    SyncRemoveHandler(ctx context.Context, topic string) error
+}

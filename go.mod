@@ -8,8 +8,8 @@ require (
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
 	github.com/pingcap/errors v0.11.5-0.20211009033009-93128226aaa3
 	github.com/pingcap/failpoint v0.0.0-20210918120811-547c13e3eb00 // indirect
-	github.com/pingcap/log v0.0.0-20210906054005-afc726e70354 // indirect
-	github.com/pingcap/ticdc v0.0.0-20211122030349-23c0c6dbd8a8
+	github.com/pingcap/log v0.0.0-20210906054005-afc726e70354
+	github.com/pingcap/ticdc v0.0.0-20211207034555-3eafa6d36404
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.7.0
 	go.etcd.io/etcd v0.5.0-alpha.5.0.20210512015243-d19fbe541bf9

@@ -14,6 +14,8 @@ import (
 	"github.com/hanfei1991/microcosm/test/mock"
 	"github.com/pingcap/ticdc/dm/pkg/etcdutil"
 	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/pingcap/ticdc/pkg/p2p"
+	p2ppb "github.com/pingcap/ticdc/proto/p2p"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/embed"
 	"go.uber.org/zap"
@@ -30,6 +32,7 @@ type Server struct {
 	// sched scheduler
 	executorManager *cluster.ExecutorManager
 	jobManager      *JobManager
+	p2pServer       *p2p.MessageServer
 	//
 	cfg *Config
 
@@ -149,7 +152,7 @@ func (s *Server) startForTest(ctx context.Context) (err error) {
 	}
 
 	s.executorManager.Start(ctx)
-	s.jobManager.Start(ctx)
+	s.jobManager.Start(ctx, nil)
 
 	return nil
 }
@@ -187,9 +190,12 @@ func (s *Server) Start(ctx context.Context) (err error) {
 		return
 	}
 
+	p2pConfig := new(p2p.MessageServerConfig)
+	s.p2pServer = p2p.NewMessageServer("master", p2pConfig)
+
 	gRPCSvr := func(gs *grpc.Server) {
 		pb.RegisterMasterServer(gs, s)
-		// TODO: register msg server
+		p2ppb.RegisterCDCPeerToPeerServer(gs, s.p2pServer)
 	}
 
 	// TODO: implement http api/
@@ -219,7 +225,7 @@ func (s *Server) Start(ctx context.Context) (err error) {
 
 	// start keep alive
 	s.executorManager.Start(ctx)
-	s.jobManager.Start(ctx)
+	s.jobManager.Start(ctx, s.p2pServer)
 	return nil
 }
 

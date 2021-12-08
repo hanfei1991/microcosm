@@ -23,7 +23,7 @@ type Master struct {
 	cancel func()
 
 	resourceManager cluster.ResourceMgr
-	client          cluster.ExecutorClient
+	Client          cluster.ExecutorClient
 	mClient         cluster.JobMasterClient
 
 	offExecutors chan model.ExecutorID
@@ -51,7 +51,7 @@ func New(
 		cancel:          cancel,
 		job:             job,
 		resourceManager: resourceMgr,
-		client:          client,
+		Client:          client,
 		mClient:         mClient,
 
 		offExecutors:         make(chan model.ExecutorID, 100),
@@ -120,7 +120,7 @@ func (m *Master) dispatch(ctx context.Context, tasks []*Task) error {
 			Cmd: cluster.CmdSubmitBatchTasks,
 			Req: reqPb,
 		}
-		resp, err := m.client.Send(ctx, execID, request)
+		resp, err := m.Client.Send(ctx, execID, request)
 		if err != nil {
 			log.L().Logger.Info("Send meet error", zap.Error(err))
 			return err

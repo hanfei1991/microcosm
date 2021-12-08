@@ -52,6 +52,9 @@ var (
 	ErrExecutorUnknownOperator    = errors.Normalize("operator type %d is unknown", errors.RFCCodeText("DFLOW:ErrOperatorUnknown"))
 	ErrExecutorSessionDone        = errors.Normalize("executor session done", errors.RFCCodeText("DFLOW:ErrExecutorSessionDone"))
 
+	// benchmark related errors
+	ErrBenchmarkDuplicateSyncDDLReq = errors.Normalize("sync ddl multiple times from task %s")
+
 	// planner related errors
 	ErrPlannerDAGDepthExceeded = errors.Normalize("dag depth exceeded: %d", errors.RFCCodeText("DFLOW:ErrPlannerDAGDepthExceeded"))
 )
