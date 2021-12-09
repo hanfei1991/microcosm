@@ -35,11 +35,22 @@ func (f *fileWriter) Prepare() error {
 	return err
 }
 
-func (f *fileWriter) write(_ *runtime.TaskContext, r *runtime.Record) error {
-	r.End = time.Now()
-	str := []byte(r.String())
-	// ctx.stats[f.tid].recordCnt ++
-	// ctx.stats[f.tid].totalLag += r.end.Sub(r.start)
+func sprintRecord(r *runtime.Record) string {
+	start := time.Unix(0, r.Payload.(*pb.Record).StartTs)
+	return fmt.Sprintf("flowID %s start %s end %s payload: %v\n", r.FlowID, start.String(), r.End.String(), r.Payload)
+}
+
+func (f *fileWriter) writeStats(s *recordStats) error {
+	str := []byte(s.String())
+	_, err := f.fd.Write(str)
+	return err
+}
+
+func (f *fileWriter) write(s *recordStats, r *runtime.Record) error {
+	str := []byte(sprintRecord(r))
+	start := time.Unix(0, r.Payload.(*pb.Record).StartTs)
+	s.cnt++
+	s.totalLag += r.End.Sub(start)
 	_, err := f.fd.Write(str)
 	return err
 }
@@ -167,23 +178,37 @@ func (o *opSyncer) Next(ctx *runtime.TaskContext, r *runtime.Record, _ int) ([]r
 
 func (o *opSyncer) NextWantedInputIdx() int { return 0 }
 
-type opSink struct {
-	writer fileWriter
+type recordStats struct {
+	totalLag time.Duration
+	cnt      int64
 }
 
-func (o *opSink) Close() error { return nil }
+func (s *recordStats) String() string {
+	return fmt.Sprintf("total record %d, average lantency %.3f ms", s.cnt, float64(s.totalLag.Milliseconds())/float64(s.cnt))
+}
+
+type opSink struct {
+	writer fileWriter
+	stats  *recordStats
+}
+
+func (o *opSink) Close() error {
+	return o.writer.writeStats(o.stats)
+}
 
 func (o *opSink) Prepare() error {
+	o.stats = new(recordStats)
 	return o.writer.Prepare()
 }
 
 func (o *opSink) Next(ctx *runtime.TaskContext, r *runtime.Record, _ int) ([]runtime.Chunk, bool, error) {
+	r.End = time.Now()
 	if test.GlobalTestFlag {
 		//	log.L().Info("send record", zap.Int32("table", r.Tid), zap.Int32("pk", r.payload.(*pb.Record).Pk))
 		ctx.TestCtx.SendRecord(r)
 		return nil, false, nil
 	}
-	return nil, false, o.writer.write(ctx, r)
+	return nil, false, o.writer.write(o.stats, r)
 }
 
 func (o *opSink) NextWantedInputIdx() int { return 0 }
@@ -215,6 +240,7 @@ func (o *opProducer) Next(ctx *runtime.TaskContext, _ *runtime.Record, _ int) ([
 		if o.pk == 10000 {
 			log.L().Info("got 10000 data")
 		}
+		start := time.Now()
 		if o.pk%o.ddlFrequency == 0 {
 			o.schemaVer++
 			for i := range outputData {
@@ -222,6 +248,7 @@ func (o *opProducer) Next(ctx *runtime.TaskContext, _ *runtime.Record, _ int) ([
 					Tp:        pb.Record_DDL,
 					Tid:       o.tid,
 					SchemaVer: o.schemaVer,
+					StartTs:   start.UnixNano(),
 				}
 				r := runtime.Record{
 					Tid:     o.tid,
@@ -235,6 +262,7 @@ func (o *opProducer) Next(ctx *runtime.TaskContext, _ *runtime.Record, _ int) ([
 			Tid:       o.tid,
 			SchemaVer: o.schemaVer,
 			Pk:        o.pk,
+			StartTs:   start.UnixNano(),
 		}
 		r := runtime.Record{
 			Tid:     o.tid,
@@ -246,12 +274,16 @@ func (o *opProducer) Next(ctx *runtime.TaskContext, _ *runtime.Record, _ int) ([
 	return outputData, false, nil
 }
 
+type stoppable interface {
+	Stop()
+}
+
 type opBinlog struct {
 	binlogChan chan *runtime.Record
 	wal        []*runtime.Record
 	addr       string
 
-	server      mock.GrpcServer
+	server      stoppable
 	cacheRecord *runtime.Record
 	ctx         *runtime.TaskContext
 }
@@ -271,6 +303,7 @@ func (o *opBinlog) Prepare() (err error) {
 			return err
 		}
 		s := grpc.NewServer()
+		o.server = s
 		pb.RegisterTestServiceServer(s, o)
 		go func() {
 			err1 := s.Serve(lis)
