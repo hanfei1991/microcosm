@@ -35,7 +35,7 @@ func (f *fileWriter) Prepare() error {
 	return err
 }
 
-func sprintPayload(r *pb.Record) string  {
+func sprintPayload(r *pb.Record) string {
 	str := fmt.Sprintf("tid %d, pk %d, time tracer ", r.Tid, r.Pk)
 	for _, ts := range r.TimeTracer {
 		str += fmt.Sprintf("%s ", time.Unix(0, ts))
@@ -258,10 +258,10 @@ func (o *opProducer) Next(ctx *runtime.TaskContext, _ *runtime.Record, _ int) ([
 			o.schemaVer++
 			for i := range outputData {
 				payload := &pb.Record{
-					Tp:        pb.Record_DDL,
-					Tid:       o.tid,
-					SchemaVer: o.schemaVer,
-					TimeTracer:   []int64{start.UnixNano()},
+					Tp:         pb.Record_DDL,
+					Tid:        o.tid,
+					SchemaVer:  o.schemaVer,
+					TimeTracer: []int64{start.UnixNano()},
 				}
 				r := runtime.Record{
 					Tid:     o.tid,
@@ -271,11 +271,11 @@ func (o *opProducer) Next(ctx *runtime.TaskContext, _ *runtime.Record, _ int) ([
 			}
 		}
 		payload := &pb.Record{
-			Tp:        pb.Record_Data,
-			Tid:       o.tid,
-			SchemaVer: o.schemaVer,
-			Pk:        o.pk,
-			TimeTracer:   []int64{start.UnixNano()},
+			Tp:         pb.Record_Data,
+			Tid:        o.tid,
+			SchemaVer:  o.schemaVer,
+			Pk:         o.pk,
+			TimeTracer: []int64{start.UnixNano()},
 		}
 		r := runtime.Record{
 			Tid:     o.tid,
@@ -376,7 +376,7 @@ func (o *opBinlog) FeedBinlog(req *pb.TestBinlogRequest, server pb.TestService_F
 		}
 	}
 	for record := range o.binlogChan {
-		r := record.Payload.(*pb.Record)	
+		r := record.Payload.(*pb.Record)
 		r.TimeTracer = append(r.TimeTracer, time.Now().UnixNano())
 		o.wal = append(o.wal, record)
 		err := server.Send(r)
