@@ -35,9 +35,17 @@ func (f *fileWriter) Prepare() error {
 	return err
 }
 
+func sprintPayload(r *pb.Record) string  {
+	str := fmt.Sprintf("tid %d, pk %d, time tracer ", r.Tid, r.Pk)
+	for _, ts := range r.TimeTracer {
+		str += fmt.Sprintf("%s ", time.Unix(0, ts))
+	}
+	return str
+}
+
 func sprintRecord(r *runtime.Record) string {
-	start := time.Unix(0, r.Payload.(*pb.Record).StartTs)
-	return fmt.Sprintf("flowID %s start %s end %s payload: %v\n", r.FlowID, start.String(), r.End.String(), r.Payload)
+	start := time.Unix(0, r.Payload.(*pb.Record).TimeTracer[0])
+	return fmt.Sprintf("flowID %s start %s end %s payload: %s\n", r.FlowID, start.String(), r.End.String(), sprintPayload(r.Payload.(*pb.Record)))
 }
 
 func (f *fileWriter) writeStats(s *recordStats) error {
@@ -48,7 +56,7 @@ func (f *fileWriter) writeStats(s *recordStats) error {
 
 func (f *fileWriter) write(s *recordStats, r *runtime.Record) error {
 	str := []byte(sprintRecord(r))
-	start := time.Unix(0, r.Payload.(*pb.Record).StartTs)
+	start := time.Unix(0, r.Payload.(*pb.Record).TimeTracer[0])
 	s.cnt++
 	s.totalLag += r.End.Sub(start)
 	_, err := f.fd.Write(str)
@@ -139,6 +147,8 @@ func (o *opReceive) Next(ctx *runtime.TaskContext, _ *runtime.Record, _ int) ([]
 		noMoreData := false
 		select {
 		case r := <-o.data:
+			payload := r.Payload.(*pb.Record)
+			payload.TimeTracer = append(payload.TimeTracer, time.Now().UnixNano())
 			o.cache = append(o.cache, r)
 		case err := <-o.errCh:
 			return nil, true, err
@@ -169,6 +179,7 @@ func (o *opSyncer) syncDDL(ctx *runtime.TaskContext) {
 
 func (o *opSyncer) Next(ctx *runtime.TaskContext, r *runtime.Record, _ int) ([]runtime.Chunk, bool, error) {
 	record := r.Payload.(*pb.Record)
+	record.TimeTracer = append(record.TimeTracer, time.Now().UnixNano())
 	if record.Tp == pb.Record_DDL {
 		go o.syncDDL(ctx)
 		return nil, true, nil
@@ -221,6 +232,8 @@ type opProducer struct {
 
 	ddlFrequency int32
 	outputCnt    int
+
+	checkpoint time.Time
 }
 
 func (o *opProducer) Close() error { return nil }
@@ -232,14 +245,14 @@ func (o *opProducer) NextWantedInputIdx() int { return runtime.DontNeedData }
 func (o *opProducer) Next(ctx *runtime.TaskContext, _ *runtime.Record, _ int) ([]runtime.Chunk, bool, error) {
 	outputData := make([]runtime.Chunk, o.outputCnt)
 	binlogID := 0
+	if o.checkpoint.Add(50 * time.Millisecond).After(time.Now()) {
+		return nil, true, nil
+	}
 	for i := 0; i < 128; i++ {
 		if o.pk >= o.dataCnt {
 			return outputData, true, nil
 		}
 		o.pk++
-		if o.pk == 10000 {
-			log.L().Info("got 10000 data")
-		}
 		start := time.Now()
 		if o.pk%o.ddlFrequency == 0 {
 			o.schemaVer++
@@ -248,7 +261,7 @@ func (o *opProducer) Next(ctx *runtime.TaskContext, _ *runtime.Record, _ int) ([
 					Tp:        pb.Record_DDL,
 					Tid:       o.tid,
 					SchemaVer: o.schemaVer,
-					StartTs:   start.UnixNano(),
+					TimeTracer:   []int64{start.UnixNano()},
 				}
 				r := runtime.Record{
 					Tid:     o.tid,
@@ -262,7 +275,7 @@ func (o *opProducer) Next(ctx *runtime.TaskContext, _ *runtime.Record, _ int) ([
 			Tid:       o.tid,
 			SchemaVer: o.schemaVer,
 			Pk:        o.pk,
-			StartTs:   start.UnixNano(),
+			TimeTracer:   []int64{start.UnixNano()},
 		}
 		r := runtime.Record{
 			Tid:     o.tid,
@@ -270,6 +283,14 @@ func (o *opProducer) Next(ctx *runtime.TaskContext, _ *runtime.Record, _ int) ([
 		}
 		outputData[binlogID] = append(outputData[binlogID], &r)
 		binlogID = (binlogID + 1) % o.outputCnt
+	}
+	if !test.GlobalTestFlag {
+		o.checkpoint = time.Now()
+		go func() {
+			time.Sleep(55 * time.Millisecond)
+			ctx.Wake()
+		}()
+		return outputData, true, nil
 	}
 	return outputData, false, nil
 }
@@ -355,8 +376,10 @@ func (o *opBinlog) FeedBinlog(req *pb.TestBinlogRequest, server pb.TestService_F
 		}
 	}
 	for record := range o.binlogChan {
+		r := record.Payload.(*pb.Record)	
+		r.TimeTracer = append(r.TimeTracer, time.Now().UnixNano())
 		o.wal = append(o.wal, record)
-		err := server.Send(o.wal[id].Payload.(*pb.Record))
+		err := server.Send(r)
 		if err != nil {
 			return err
 		}

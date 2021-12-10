@@ -14,7 +14,7 @@ message Record {
     int32 gtid = 4;
     int32 pk = 5;
     // for record time
-    int64 start_ts = 6;
+    repeated int64 time_tracer = 6;
     // error
     Error err = 7;
 }
