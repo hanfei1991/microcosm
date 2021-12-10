@@ -60,6 +60,7 @@ func (j *JobManager) CancelJob(ctx context.Context, req *pb.CancelJobRequest) *p
 	if err != nil {
 		return &pb.CancelJobResponse{Err: &pb.Error{Message: err.Error()}}
 	}
+	delete(j.jobMasters, model.JobID(req.JobId))
 	return &pb.CancelJobResponse{}
 }
 

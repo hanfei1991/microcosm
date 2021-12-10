@@ -96,7 +96,9 @@ func (o *opReceive) dial() (client pb.TestServiceClient, err error) {
 		}
 		client = mock.NewTestClient(conn)
 	} else {
-		conn, err := grpc.Dial(o.addr, grpc.WithInsecure(), grpc.WithBlock())
+		conn, err := grpc.Dial(o.addr, grpc.WithInsecure(), grpc.WithBackoffConfig(grpc.BackoffConfig{
+			MaxDelay: 2 * time.Second,
+		}))
 		o.conn = conn
 		if err != nil {
 			return nil, errors.New("conn failed")
@@ -107,6 +109,10 @@ func (o *opReceive) dial() (client pb.TestServiceClient, err error) {
 }
 
 func (o *opReceive) Prepare() error {
+	return nil
+}
+
+func (o *opReceive) connect() error {
 	client, err := o.dial()
 	if err != nil {
 		return errors.New("conn failed")
@@ -125,6 +131,12 @@ func (o *opReceive) Next(ctx *runtime.TaskContext, _ *runtime.Record, _ int) ([]
 	if !o.running {
 		o.running = true
 		go func() {
+			err := o.connect()
+			if err != nil {
+				o.errCh <- err
+				log.L().Error("opReceive meet error", zap.Error(err))
+				return
+			}
 			for {
 				record, err := o.binlogClient.Recv()
 				if err != nil {
