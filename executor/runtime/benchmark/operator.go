@@ -16,6 +16,7 @@ import (
 	"github.com/pingcap/ticdc/dm/pkg/log"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
 )
 
 type fileWriter struct {
@@ -96,9 +97,7 @@ func (o *opReceive) dial() (client pb.TestServiceClient, err error) {
 		}
 		client = mock.NewTestClient(conn)
 	} else {
-		conn, err := grpc.Dial(o.addr, grpc.WithInsecure(), grpc.WithBackoffConfig(grpc.BackoffConfig{
-			MaxDelay: 2 * time.Second,
-		}))
+		conn, err := grpc.Dial(o.addr, grpc.WithInsecure(), grpc.WithConnectParams(grpc.ConnectParams{Backoff: backoff.DefaultConfig}))
 		o.conn = conn
 		if err != nil {
 			return nil, errors.New("conn failed")
