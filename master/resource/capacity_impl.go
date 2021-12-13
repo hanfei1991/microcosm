@@ -80,7 +80,7 @@ func (m *CapRescMgr) allocateTasksWithNaiveStrategy(
 			rest := exec.Capacity - used
 			if rest >= RescUnit(task.Cost) {
 				result[task.GetTask().Id] = &pb.ScheduleResult{
-					ExecutorId: int32(exec.ID),
+					ExecutorId: string(exec.ID),
 				}
 				exec.Reserved = exec.Reserved + RescUnit(task.GetCost())
 				break
