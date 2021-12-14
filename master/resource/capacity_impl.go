@@ -65,8 +65,6 @@ func (m *CapRescMgr) Update(id model.ExecutorID, use RescUnit, status model.Exec
 // getAvailableResource returns resources that are available
 func (m *CapRescMgr) getAvailableResource() []*ExecutorResource {
 	res := make([]*ExecutorResource, 0)
-	m.mu.Lock()
-	defer m.mu.Unlock()
 	for _, exec := range m.executors {
 		if exec.Status == model.Running &&
 			exec.Capacity > exec.Reserved && exec.Capacity > exec.Used {
@@ -79,6 +77,8 @@ func (m *CapRescMgr) getAvailableResource() []*ExecutorResource {
 func (m *CapRescMgr) allocateTasksWithNaiveStrategy(
 	tasks []*pb.ScheduleTask,
 ) (bool, *pb.TaskSchedulerResponse) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	result := make(map[int32]*pb.ScheduleResult)
 	resources := m.getAvailableResource()
 	var idx int = 0
