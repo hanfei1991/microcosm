@@ -6,9 +6,11 @@ import (
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/errors"
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
 )
 
-// CapRescMgr implements ResourceMgr interface, and it uses node capacitiy as
+// CapRescMgr implements ResourceMgr interface, and it uses node capacity as
 // alloction algorithm
 type CapRescMgr struct {
 	mu        sync.Mutex
@@ -29,6 +31,17 @@ func (m *CapRescMgr) Register(id model.ExecutorID, capacity RescUnit) {
 		ID:       id,
 		Capacity: capacity,
 	}
+	log.L().Info("executor resource is registered",
+		zap.String("executor-id", string(id)), zap.Int("capacity", int(capacity)))
+}
+
+// Unregister implements RescMgr.Unregister
+func (m *CapRescMgr) Unregister(id model.ExecutorID) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.executors, id)
+	log.L().Info("executor resource is unregistered",
+		zap.String("executor-id", string(id)))
 }
 
 // Allocate implements RescMgr.Allocate

@@ -5,10 +5,13 @@ import (
 	"github.com/hanfei1991/microcosm/pb"
 )
 
-// RescMgrr manages the resources of the clusters.
+// RescMgr manages the resources of the clusters.
 type RescMgr interface {
-	// Register registers new executor resource
-	Register(id model.ExecutorID, capacitiy RescUnit)
+	// Register registers new executor, it is called when an executor joins
+	Register(id model.ExecutorID, capacity RescUnit)
+
+	// Unregister is called when an executor exits
+	Unregister(id model.ExecutorID)
 
 	// Allocate allocates executor resources to given tasks
 	Allocate(tasks []*pb.ScheduleTask) (bool, *pb.TaskSchedulerResponse)

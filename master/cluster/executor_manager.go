@@ -58,6 +58,7 @@ func (e *ExecutorManager) removeExecutorImpl(id model.ExecutorID) error {
 		return errors.ErrUnknownExecutorID.GenWithStackByArgs(id)
 	}
 	delete(e.executors, id)
+	e.rescMgr.Unregister(id)
 	//err := e.haStore.Del(exec.EtcdKey())
 	//if err != nil {
 	//	return err
