@@ -50,7 +50,7 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 	for _, u := range urls {
 		masterAddrs = append(masterAddrs, u.Host)
 	}
-	jobManager := NewJobManager(executorManager, executorManager, executorNotifier, masterAddrs)
+	jobManager := NewJobManager(executorManager, executorNotifier, masterAddrs)
 	server := &Server{
 		cfg:             cfg,
 		executorManager: executorManager,

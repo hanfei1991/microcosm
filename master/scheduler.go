@@ -25,6 +25,7 @@ func (s *Server) allocateTasksWithNaiveStrategy(
 			if rest >= cluster.ResourceUsage(task.Cost) {
 				result[task.GetTask().Id] = &pb.ScheduleResult{
 					ExecutorId: string(exec.ID),
+					Addr: exec.Addr,
 				}
 				exec.Reserved = exec.Reserved + cluster.ResourceUsage(task.GetCost())
 				break

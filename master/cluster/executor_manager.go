@@ -16,7 +16,6 @@ import (
 )
 
 var (
-	_ ExecutorClient = &ExecutorManager{}
 	_ ResourceMgr    = &ExecutorManager{}
 )
 
@@ -51,7 +50,7 @@ func (e *ExecutorManager) removeExecutorImpl(id model.ExecutorID) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	log.L().Logger.Info("begin to remove executor", zap.String("id", string(id)))
-	exec, ok := e.executors[id]
+	_, ok := e.executors[id]
 	if !ok {
 		// This executor has been removed
 		return errors.ErrUnknownExecutorID.GenWithStackByArgs(id)
@@ -69,7 +68,7 @@ func (e *ExecutorManager) removeExecutorImpl(id model.ExecutorID) error {
 			Time: time.Now(),
 		})
 	}
-	return exec.close()
+	return nil
 }
 
 // HandleHeartbeat implements pb interface,
@@ -123,16 +122,17 @@ func (e *ExecutorManager) AddExecutor(req *pb.RegisterExecutorRequest) (*model.E
 		resource: ExecutorResource{
 			ID:       info.ID,
 			Capacity: ResourceUsage(info.Capability),
+			Addr:     info.Addr,
 		},
 		lastUpdateTime: time.Now(),
 		heartbeatTTL:   e.initHeartbeatTTL,
 		Status:         model.Initing,
 	}
-	var err error
-	exec.client, err = newExecutorClient(info.Addr)
-	if err != nil {
-		return nil, err
-	}
+	//var err error
+	//exec.client, err = newExecutorClient(info.Addr)
+	//if err != nil {
+	//	return nil, err
+	//}
 
 	// Persistant
 	//value, err := info.ToJSON()
@@ -158,11 +158,6 @@ type Executor struct {
 	lastUpdateTime time.Time
 	heartbeatTTL   time.Duration
 
-	client *executorClient
-}
-
-func (e *Executor) close() error {
-	return e.client.close()
 }
 
 func (e *Executor) checkAlive() bool {
@@ -215,22 +210,22 @@ func (e *ExecutorManager) checkAliveImpl() error {
 }
 
 // Send implements ExecutorClient interface.
-func (e *ExecutorManager) Send(ctx context.Context, id model.ExecutorID, req *ExecutorRequest) (*ExecutorResponse, error) {
-	e.mu.Lock()
-	exec, ok := e.executors[id]
-	if !ok {
-		e.mu.Unlock()
-		return nil, errors.ErrUnknownExecutorID.GenWithStackByArgs(id)
-	}
-	e.mu.Unlock()
-	resp, err := exec.client.send(ctx, req)
-	if err != nil {
-		exec.mu.Lock()
-		if exec.Status == model.Running {
-			exec.Status = model.Disconnected
-		}
-		exec.mu.Unlock()
-		return resp, err
-	}
-	return resp, nil
-}
+//func (e *ExecutorManager) Send(ctx context.Context, id model.ExecutorID, req *ExecutorRequest) (*ExecutorResponse, error) {
+//	e.mu.Lock()
+//	exec, ok := e.executors[id]
+//	if !ok {
+//		e.mu.Unlock()
+//		return nil, errors.ErrUnknownExecutorID.GenWithStackByArgs(id)
+//	}
+//	e.mu.Unlock()
+//	resp, err := exec.client.send(ctx, req)
+//	if err != nil {
+//		exec.mu.Lock()
+//		if exec.Status == model.Running {
+//			exec.Status = model.Disconnected
+//		}
+//		exec.mu.Unlock()
+//		return resp, err
+//	}
+//	return resp, nil
+//}

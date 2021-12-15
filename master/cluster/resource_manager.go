@@ -20,6 +20,7 @@ type ExecutorResource struct {
 	Capacity ResourceUsage
 	Reserved ResourceUsage
 	Used     ResourceUsage
+	Addr     string
 }
 
 func (e *ExecutorResource) getSnapShot() *ExecutorResource {
@@ -28,6 +29,7 @@ func (e *ExecutorResource) getSnapShot() *ExecutorResource {
 		Capacity: e.Capacity,
 		Reserved: e.Reserved,
 		Used:     e.Used,
+		Addr:   e.Addr,
 	}
 	return r
 }
