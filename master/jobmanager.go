@@ -5,7 +5,6 @@ import (
 	"sync"
 
 	"github.com/hanfei1991/microcosm/client"
-	"github.com/hanfei1991/microcosm/master/cluster"
 	"github.com/hanfei1991/microcosm/master/jobmaster/benchmark"
 	"github.com/hanfei1991/microcosm/master/jobmaster/system"
 	"github.com/hanfei1991/microcosm/model"
@@ -22,7 +21,6 @@ type JobManager struct {
 	jobMasters map[model.JobID]system.JobMaster
 
 	idAllocater *autoid.IDAllocator
-	resourceMgr cluster.ResourceMgr
 
 	offExecutors chan model.ExecutorID
 
@@ -87,7 +85,7 @@ func (j *JobManager) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *p
 			return resp
 		}
 		jobMaster, err = benchmark.BuildBenchmarkJobMaster(
-			info.Config, j.idAllocater, j.resourceMgr, clients)
+			info.Config, j.idAllocater, clients)
 		if err != nil {
 			resp.Err = errors.ToPBError(err)
 			return resp
@@ -113,14 +111,12 @@ func (j *JobManager) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *p
 }
 
 func NewJobManager(
-	resource cluster.ResourceMgr,
 	executorNotifier chan model.ExecutorID,
 	masterAddrs []string,
 ) *JobManager {
 	return &JobManager{
 		jobMasters:   make(map[model.JobID]system.JobMaster),
 		idAllocater:  autoid.NewAllocator(),
-		resourceMgr:  resource,
 		offExecutors: executorNotifier,
 		masterAddrs:  masterAddrs,
 	}

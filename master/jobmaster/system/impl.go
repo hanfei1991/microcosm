@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/hanfei1991/microcosm/client"
-	"github.com/hanfei1991/microcosm/master/cluster"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/errors"
@@ -23,8 +22,7 @@ type Master struct {
 	ctx    context.Context
 	cancel func()
 
-	resourceManager cluster.ResourceMgr
-	clients         *client.Manager
+	clients *client.Manager
 
 	offExecutors chan model.ExecutorID
 
@@ -41,16 +39,14 @@ type Master struct {
 func New(
 	parentCtx context.Context,
 	job *model.Job,
-	resourceMgr cluster.ResourceMgr,
 	clients *client.Manager,
 ) *Master {
 	ctx, cancel := context.WithCancel(parentCtx)
 	return &Master{
-		ctx:             ctx,
-		cancel:          cancel,
-		job:             job,
-		resourceManager: resourceMgr,
-		clients:         clients,
+		ctx:     ctx,
+		cancel:  cancel,
+		job:     job,
+		clients: clients,
 
 		offExecutors:         make(chan model.ExecutorID, 100),
 		scheduleWaitingTasks: make(chan scheduleGroup, 1024),
