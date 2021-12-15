@@ -53,7 +53,10 @@ func NewMasterClient(ctx context.Context, join []string) (*MasterClient, error) 
 	} else {
 		err = client.init(ctx)
 	}
-	return client, err
+	if err != nil {
+		return nil, err
+	}
+	return client, nil
 }
 
 // SendHeartbeat to master-server.
