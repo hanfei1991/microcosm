@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/master/cluster"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
@@ -23,7 +24,7 @@ type Master struct {
 	cancel func()
 
 	resourceManager cluster.ResourceMgr
-	clients         *cluster.ClientManager
+	clients         *client.Manager
 
 	offExecutors chan model.ExecutorID
 
@@ -41,7 +42,7 @@ func New(
 	parentCtx context.Context,
 	job *model.Job,
 	resourceMgr cluster.ResourceMgr,
-	clients *cluster.ClientManager,
+	clients *client.Manager,
 ) *Master {
 	ctx, cancel := context.WithCancel(parentCtx)
 	return &Master{
@@ -49,7 +50,7 @@ func New(
 		cancel:          cancel,
 		job:             job,
 		resourceManager: resourceMgr,
-		clients: clients,
+		clients:         clients,
 
 		offExecutors:         make(chan model.ExecutorID, 100),
 		scheduleWaitingTasks: make(chan scheduleGroup, 1024),
@@ -113,8 +114,8 @@ func (m *Master) dispatch(ctx context.Context, tasks []*Task) error {
 		}
 		reqPb := job.ToPB()
 		log.L().Logger.Info("submit sub job", zap.String("exec id", string(execID)), zap.String("req pb", reqPb.String()))
-		request := &cluster.ExecutorRequest{
-			Cmd: cluster.CmdSubmitBatchTasks,
+		request := &client.ExecutorRequest{
+			Cmd: client.CmdSubmitBatchTasks,
 			Req: reqPb,
 		}
 		resp, err := m.clients.ExecutorClient(execID).Send(ctx, request)
@@ -238,8 +239,8 @@ func (m *Master) StopTasks(ctx context.Context, tasks []*model.Task) error {
 			TaskIdList: taskList,
 		}
 		log.L().Info("begin to cancel tasks", zap.String("exec", string(exec)), zap.Any("task", taskList))
-		resp, err := m.clients.ExecutorClient(exec).Send(ctx, &cluster.ExecutorRequest{
-			Cmd: cluster.CmdCancelBatchTasks,
+		resp, err := m.clients.ExecutorClient(exec).Send(ctx, &client.ExecutorRequest{
+			Cmd: client.CmdCancelBatchTasks,
 			Req: req,
 		})
 		if err != nil {

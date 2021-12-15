@@ -15,9 +15,7 @@ import (
 	"go.uber.org/zap"
 )
 
-var (
-	_ ResourceMgr    = &ExecutorManager{}
-)
+var _ ResourceMgr = &ExecutorManager{}
 
 // ExecutorManager holds all the executors info, including liveness, status, resource usage.
 type ExecutorManager struct {
@@ -157,7 +155,6 @@ type Executor struct {
 	// Last heartbeat
 	lastUpdateTime time.Time
 	heartbeatTTL   time.Duration
-
 }
 
 func (e *Executor) checkAlive() bool {

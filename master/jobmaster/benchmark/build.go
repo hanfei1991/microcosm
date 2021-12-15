@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/master/cluster"
 	"github.com/hanfei1991/microcosm/master/jobmaster/system"
 	"github.com/hanfei1991/microcosm/model"
@@ -17,7 +18,7 @@ func BuildBenchmarkJobMaster(
 	rawConfig string,
 	idAllocator *autoid.IDAllocator,
 	resourceMgr cluster.ResourceMgr,
-	clients *cluster.ClientManager,
+	clients *client.Manager,
 ) (*jobMaster, error) {
 	config, err := configFromJSON(rawConfig)
 	if err != nil {

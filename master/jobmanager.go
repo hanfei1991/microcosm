@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/master/cluster"
 	"github.com/hanfei1991/microcosm/master/jobmaster/benchmark"
 	"github.com/hanfei1991/microcosm/master/jobmaster/system"
@@ -20,8 +21,8 @@ type JobManager struct {
 	mu         sync.Mutex
 	jobMasters map[model.JobID]system.JobMaster
 
-	idAllocater    *autoid.IDAllocator
-	resourceMgr    cluster.ResourceMgr
+	idAllocater *autoid.IDAllocator
+	resourceMgr cluster.ResourceMgr
 
 	offExecutors chan model.ExecutorID
 
@@ -79,7 +80,7 @@ func (j *JobManager) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *p
 		// TODO: supposing job master will be running independently, then the
 		// addresses of server can change because of failover, the job master
 		// should have ways to detect and adapt automatically.
-		clients := cluster.NewClientManager()
+		clients := client.NewClientManager()
 		err := clients.AddMasterClient(ctx, j.masterAddrs)
 		if err != nil {
 			resp.Err = errors.ToPBError(err)
@@ -117,10 +118,10 @@ func NewJobManager(
 	masterAddrs []string,
 ) *JobManager {
 	return &JobManager{
-		jobMasters:     make(map[model.JobID]system.JobMaster),
-		idAllocater:    autoid.NewAllocator(),
-		resourceMgr:    resource,
-		offExecutors:   executorNotifier,
-		masterAddrs:    masterAddrs,
+		jobMasters:   make(map[model.JobID]system.JobMaster),
+		idAllocater:  autoid.NewAllocator(),
+		resourceMgr:  resource,
+		offExecutors: executorNotifier,
+		masterAddrs:  masterAddrs,
 	}
 }

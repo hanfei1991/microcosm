@@ -1,4 +1,4 @@
-package cluster
+package client
 
 import (
 	"context"
@@ -26,9 +26,9 @@ type executorClient struct {
 	client pb.ExecutorClient
 }
 
-func (c *executorClient) close() error {
-	return c.conn.Close()
-}
+//func (c *executorClient) close() error {
+//	return c.conn.Close()
+//}
 
 func (c *executorClient) Send(ctx context.Context, req *ExecutorRequest) (*ExecutorResponse, error) {
 	resp := &ExecutorResponse{}

@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/executor"
 	"github.com/hanfei1991/microcosm/executor/runtime"
 	"github.com/hanfei1991/microcosm/master"
-	flowCluster "github.com/hanfei1991/microcosm/master/cluster"
 	"github.com/hanfei1991/microcosm/master/jobmaster/benchmark"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/etcdutils"
@@ -54,7 +54,7 @@ func (t *testJobSuite) TestSubmit(c *C) {
 
 	time.Sleep(2 * time.Second)
 
-	client, err := flowCluster.NewMasterClient(context.Background(), []string{"127.0.0.1:1991"})
+	client, err := client.NewMasterClient(context.Background(), []string{"127.0.0.1:1991"})
 	c.Assert(err, IsNil)
 	testJobConfig := benchmark.Config{
 		Servers:      []string{"127.0.0.1:9999", "127.0.0.1:9998", "127.0.0.1:9997"},

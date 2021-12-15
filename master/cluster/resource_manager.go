@@ -29,7 +29,7 @@ func (e *ExecutorResource) getSnapShot() *ExecutorResource {
 		Capacity: e.Capacity,
 		Reserved: e.Reserved,
 		Used:     e.Used,
-		Addr:   e.Addr,
+		Addr:     e.Addr,
 	}
 	return r
 }
