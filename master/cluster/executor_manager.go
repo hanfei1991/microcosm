@@ -206,24 +206,3 @@ func (e *ExecutorManager) checkAliveImpl() error {
 	e.mu.Unlock()
 	return nil
 }
-
-// Send implements ExecutorClient interface.
-//func (e *ExecutorManager) Send(ctx context.Context, id model.ExecutorID, req *ExecutorRequest) (*ExecutorResponse, error) {
-//	e.mu.Lock()
-//	exec, ok := e.executors[id]
-//	if !ok {
-//		e.mu.Unlock()
-//		return nil, errors.ErrUnknownExecutorID.GenWithStackByArgs(id)
-//	}
-//	e.mu.Unlock()
-//	resp, err := exec.client.send(ctx, req)
-//	if err != nil {
-//		exec.mu.Lock()
-//		if exec.Status == model.Running {
-//			exec.Status = model.Disconnected
-//		}
-//		exec.mu.Unlock()
-//		return resp, err
-//	}
-//	return resp, nil
-//}

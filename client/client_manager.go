@@ -15,6 +15,7 @@ func NewClientManager() *Manager {
 	}
 }
 
+// TODO: We need to consider when to remove executor client and how to process transilient error.
 type Manager struct {
 	mu sync.RWMutex
 
