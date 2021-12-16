@@ -72,12 +72,12 @@ message SubmitJobRequest {
 }
 
 message CancelJobRequest {
-    int32 job_id = 1;
+    int64 job_id = 1;
 }
 
 message SubmitJobResponse {
     Error err = 1;
-    int32 job_id = 2;
+    int64 job_id = 2;
 }
 
 message CancelJobResponse {
@@ -118,5 +118,5 @@ message ScheduleResult {
 }
 
 message TaskSchedulerResponse {
-    map<int32, ScheduleResult> schedule = 1;
+    map<int64, ScheduleResult> schedule = 1;
 }

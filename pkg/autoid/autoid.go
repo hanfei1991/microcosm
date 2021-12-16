@@ -8,18 +8,21 @@ import (
 
 type IDAllocator struct {
 	sync.Mutex
-	id int32
+	internalID int64
+	jobID      int64
 }
 
-func NewAllocator() *IDAllocator {
-	return &IDAllocator{}
+func NewIDAllocator(jobID int64) *IDAllocator {
+	return &IDAllocator{
+		jobID: jobID << 32,
+	}
 }
 
-func (a *IDAllocator) AllocID() int32 {
+func (a *IDAllocator) AllocID() int64 {
 	a.Lock()
 	defer a.Unlock()
-	a.id++
-	return a.id
+	a.internalID++
+	return a.internalID + a.jobID
 }
 
 type UUIDAllocator struct{}
