@@ -181,6 +181,7 @@ func (s *Server) startForTest(ctx context.Context) (err error) {
 
 	s.executorManager.Start(ctx)
 	s.jobManager.Start(ctx)
+	s.initialized.Store(true)
 
 	return nil
 }
