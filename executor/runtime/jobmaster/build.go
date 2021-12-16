@@ -16,8 +16,7 @@ func RegisterBuilder() {
 	runtime.OpBuilders[model.JobMasterType] = &jobMasterBuilder{}
 }
 
-type jobMasterBuilder struct {
-}
+type jobMasterBuilder struct{}
 
 func (b *jobMasterBuilder) Build(op model.Operator) (runtime.Operator, bool, error) {
 	cfg := &model.JobMaster{}
