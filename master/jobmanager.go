@@ -4,9 +4,9 @@ import (
 	"context"
 	"sync"
 
+	"github.com/hanfei1991/microcosm/jobmaster/benchmark"
+	"github.com/hanfei1991/microcosm/jobmaster/system"
 	"github.com/hanfei1991/microcosm/master/cluster"
-	"github.com/hanfei1991/microcosm/master/jobmaster/benchmark"
-	"github.com/hanfei1991/microcosm/master/jobmaster/system"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/autoid"

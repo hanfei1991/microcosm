@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/hanfei1991/microcosm/jobmaster/system"
 	"github.com/hanfei1991/microcosm/master/cluster"
-	"github.com/hanfei1991/microcosm/master/jobmaster/system"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pkg/autoid"
 )
@@ -19,7 +19,7 @@ func BuildBenchmarkJobMaster(
 	resourceMgr cluster.ResourceMgr,
 	client cluster.ExecutorClient,
 	mClient cluster.JobMasterClient,
-) (*jobMaster, error) {
+) (*jobMasterDemo, error) {
 	config, err := configFromJSON(rawConfig)
 	if err != nil {
 		return nil, err
@@ -141,7 +141,7 @@ func BuildBenchmarkJobMaster(
 	job.Tasks = append(job.Tasks, hashTasks...)
 	job.Tasks = append(job.Tasks, sinkTasks...)
 	systemJobMaster := system.New(context.Background(), job, resourceMgr, client, mClient)
-	master := &jobMaster{
+	master := &jobMasterDemo{
 		Master: systemJobMaster,
 		config: config,
 	}

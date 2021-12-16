@@ -118,6 +118,7 @@ func (s *Server) startForTest(ctx context.Context) (err error) {
 }
 
 func (s *Server) Start(ctx context.Context) error {
+
 	ctx1, cancel := context.WithCancel(ctx)
 	s.cancel = cancel
 	if test.GlobalTestFlag {
