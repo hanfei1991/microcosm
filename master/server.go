@@ -219,10 +219,13 @@ func (s *Server) Start(ctx context.Context) (err error) {
 
 	// start background managers
 	s.executorManager.Start(ctx)
-	s.jobManager.Start(ctx)
+	err = s.jobManager.Start(ctx)
+	if err != nil {
+		return
+	}
 	s.initialized.Store(true)
 
-	return nil
+	return
 }
 
 func (s *Server) startGrpcSrv() (err error) {
