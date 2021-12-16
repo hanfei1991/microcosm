@@ -23,7 +23,10 @@ func BuildBenchmarkJobMaster(
 		return nil, err
 	}
 
-	idAllocator := autoid.NewIDAllocator(int64(jobID))
+	idAllocator, err := autoid.NewTaskIDAllocator(int32(jobID))
+	if err != nil {
+		return nil, err
+	}
 	// build producers
 	produceTasks := make([]*model.Task, 0)
 	binlogTasks := make([]*model.Task, 0)
@@ -40,7 +43,7 @@ func BuildBenchmarkJobMaster(
 		}
 		produceTasks = append(produceTasks, &model.Task{
 			FlowID: config.FlowID,
-			ID:     model.ID(idAllocator.AllocID()),
+			ID:     model.ID(idAllocator.AllocTaskID()),
 			Cost:   1,
 			OpTp:   model.ProducerType,
 			Op:     js,
@@ -56,7 +59,7 @@ func BuildBenchmarkJobMaster(
 		}
 		binlogTasks = append(binlogTasks, &model.Task{
 			FlowID: config.FlowID,
-			ID:     model.ID(idAllocator.AllocID()),
+			ID:     model.ID(idAllocator.AllocTaskID()),
 			Cost:   1,
 			OpTp:   model.BinlogType,
 			Op:     js,
@@ -84,7 +87,7 @@ func BuildBenchmarkJobMaster(
 		}
 		tableTask := &model.Task{
 			FlowID: config.FlowID,
-			ID:     model.ID(idAllocator.AllocID()),
+			ID:     model.ID(idAllocator.AllocTaskID()),
 			Cost:   1,
 			Op:     js,
 			OpTp:   model.TableReaderType,
@@ -98,7 +101,7 @@ func BuildBenchmarkJobMaster(
 		}
 		hashTask := &model.Task{
 			FlowID: config.FlowID,
-			ID:     model.ID(idAllocator.AllocID()),
+			ID:     model.ID(idAllocator.AllocTaskID()),
 			Cost:   1,
 			Op:     js,
 			OpTp:   model.HashType,
@@ -114,7 +117,7 @@ func BuildBenchmarkJobMaster(
 		}
 		sinkTask := &model.Task{
 			FlowID: config.FlowID,
-			ID:     model.ID(idAllocator.AllocID()),
+			ID:     model.ID(idAllocator.AllocTaskID()),
 			Cost:   1,
 			Op:     js,
 			OpTp:   model.TableSinkType,

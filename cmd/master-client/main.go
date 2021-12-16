@@ -77,7 +77,7 @@ func main() {
 			os.Exit(1)
 		}
 		req := &pb.CancelJobRequest{
-			JobId: int64(jobID),
+			JobId: int32(jobID),
 		}
 		resp, err := clt.CancelJob(context.Background(), req)
 		if err != nil {

@@ -24,7 +24,7 @@ type JobManager struct {
 
 	mu          sync.Mutex
 	jobMasters  map[model.ID]*model.Task
-	idAllocater *autoid.IDAllocator
+	idAllocater autoid.JobIDAllocator
 	clients     *client.Manager
 	masterAddrs []string
 }
@@ -61,7 +61,7 @@ func (j *JobManager) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *p
 	resp := &pb.SubmitJobResponse{}
 	switch req.Tp {
 	case pb.SubmitJobRequest_Benchmark:
-		id := j.idAllocater.AllocID()
+		id := j.idAllocater.AllocJobID()
 		// TODO: supposing job master will be running independently, then the
 		// addresses of server can change because of failover, the job master
 		// should have ways to detect and adapt automatically.
@@ -87,18 +87,16 @@ func (j *JobManager) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *p
 		resp.Err = errors.ToPBError(err)
 		return resp
 	}
-	log.L().Logger.Info("finished build job")
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	log.L().Logger.Info("finished dispatch job")
 	j.jobMasters[jobTask.ID] = jobTask
 	err := j.Master.DispatchTasks(ctx, []*model.Task{jobTask})
 	if err != nil {
 		resp.Err = errors.ToPBError(err)
 		return resp
 	}
-
-	resp.JobId = int64(jobTask.ID)
+	log.L().Logger.Info("finished dispatch job")
+	resp.JobId = int32(jobTask.ID)
 	return resp
 }
 
@@ -107,7 +105,7 @@ func NewJobManager(
 ) *JobManager {
 	return &JobManager{
 		jobMasters:  make(map[model.ID]*model.Task),
-		idAllocater: autoid.NewIDAllocator(0),
+		idAllocater: autoid.NewJobIDAllocator(),
 		clients:     client.NewClientManager(),
 		masterAddrs: masterAddrs,
 	}

@@ -72,12 +72,12 @@ message SubmitJobRequest {
 }
 
 message CancelJobRequest {
-    int64 job_id = 1;
+    int32 job_id = 1;
 }
 
 message SubmitJobResponse {
     Error err = 1;
-    int64 job_id = 2;
+    int32 job_id = 2;
 }
 
 message CancelJobResponse {
