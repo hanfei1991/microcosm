@@ -3,11 +3,11 @@ package benchmark
 import (
 	"context"
 
-	"github.com/hanfei1991/microcosm/master/jobmaster/system"
+	"github.com/hanfei1991/microcosm/jobmaster/system"
 	"github.com/hanfei1991/microcosm/model"
 )
 
-type jobMaster struct {
+type jobMasterDemo struct {
 	*system.Master
 	config *Config
 
@@ -15,7 +15,7 @@ type jobMaster struct {
 	stage2 []*model.Task
 }
 
-func (m *jobMaster) Start(ctx context.Context) error {
+func (m *jobMasterDemo) Start(ctx context.Context) error {
 	m.StartInternal()
 	// start stage1
 	err := m.DispatchTasks(ctx, m.stage1)
