@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/hanfei1991/microcosm/model"
+	"github.com/hanfei1991/microcosm/master"
 )
 
 type SyncType int32
