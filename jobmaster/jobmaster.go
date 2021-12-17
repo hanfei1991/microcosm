@@ -16,8 +16,8 @@ package JobMaster
 import (
 	"time"
 
-	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/master"
+	"github.com/hanfei1991/microcosm/model"
 )
 
 type SyncType int32
@@ -50,7 +50,7 @@ type jobMaster struct {
 	// ID is allocated by the jobmanager, which will keep unchanged if restarted
 	id model.JobID
 	// master client used to keep connection with the servermaster
-	masterClient *master.client
+	masterClient *master.Client
 	// sync job type
 	jobType SyncType
 	// the current status of the jobmaster
