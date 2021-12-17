@@ -60,10 +60,8 @@ type jobMaster struct {
 }
 
 func NewJobMaster() *jobMaster {
-
 	// todo
 	return &jobMaster{}
-
 }
 
 // init the jobmaster
@@ -77,13 +75,11 @@ func (jm *jobMaster) Init() error {
 
 func (jm *jobMaster) Run() error {
 	jm.status = Running
-
 	return nil
 }
 
 // handle the message send from the task
 func (jm *jobMaster) TaskReportHandler() error {
-
 	return nil
 }
 
@@ -94,27 +90,20 @@ func (jm *jobMaster) MasterCommandHandler() error {
 
 // spit the sync job into some tasks
 func (jm *jobMaster) createTasks() error {
-
 	return nil
-
 }
 
 // apply for an executor to run the task , submit the task.
 func (jm *jobMaster) submitTask() error {
-
 	return nil
 }
 
 // check whether each task is running ,if not ,submit task again
 func (jm *jobMaster) monitorTaskStatus() error {
-
 	return nil
-
 }
 
 // report its status to the jobmanager at fixed time
 func (jm *jobMaster) reportStatus() error {
-
 	return nil
-
 }
