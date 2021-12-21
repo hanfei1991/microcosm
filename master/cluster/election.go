@@ -4,13 +4,12 @@ import (
 	"context"
 	"time"
 
-	"go.etcd.io/etcd/mvcc"
-
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
+	"go.etcd.io/etcd/mvcc"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
