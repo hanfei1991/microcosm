@@ -14,8 +14,14 @@ import (
 	"golang.org/x/time/rate"
 )
 
+// Election is an interface that performs leader elections.
 type Election interface {
-	Campaign(ctx context.Context, selfID NodeID) (leaderCtx context.Context, resign context.CancelFunc, err error)
+	// Campaign returns only after being elected.
+	// Return values:
+	// - leaderCtx: a context that is canceled when the current node is no longer the leader.
+	// - resign: a function used to resign the leader.
+	// - err: indicates an IRRECOVERABLE error during election.
+	Campaign(ctx context.Context, selfID NodeID) (leaderCtx context.Context, resignFn context.CancelFunc, err error)
 }
 
 type EtcdElectionConfig struct {
@@ -29,6 +35,7 @@ type (
 	NodeID        = string
 )
 
+// EtcdElection implements Election and provides a way to elect leaders via Etcd.
 type EtcdElection struct {
 	etcdClient *clientv3.Client
 	election   *concurrency.Election
@@ -100,13 +107,11 @@ func (e *EtcdElection) doCampaign(ctx context.Context, selfID NodeID) (context.C
 	if err != nil {
 		return nil, nil, derror.ErrMasterEtcdElectionCampaignFail.Wrap(err)
 	}
-	retCtx := &sessionCtx{
-		Context: ctx,
-		sess:    e.session,
-	}
+	retCtx := newLeaderCtx(ctx, e.session)
 	resignFn := func() {
 		resignCtx, cancel := context.WithCancel(ctx)
 		defer cancel()
+		defer retCtx.OnResigned()
 		err := e.election.Resign(resignCtx)
 		if err != nil {
 			log.Warn("resign leader failed", zap.Error(err))
@@ -115,17 +120,35 @@ func (e *EtcdElection) doCampaign(ctx context.Context, selfID NodeID) (context.C
 	return retCtx, resignFn, nil
 }
 
-type sessionCtx struct {
+type leaderCtx struct {
 	context.Context
-	sess *concurrency.Session
+	sess    *concurrency.Session
+	closeCh chan struct{}
 }
 
-func (c *sessionCtx) Done() <-chan struct{} {
+func newLeaderCtx(parent context.Context, session *concurrency.Session) *leaderCtx {
+	return &leaderCtx{
+		Context: parent,
+		sess:    session,
+		closeCh: make(chan struct{}),
+	}
+}
+
+func (c *leaderCtx) OnResigned() {
+	close(c.closeCh)
+}
+
+func (c *leaderCtx) Done() <-chan struct{} {
 	doneCh := make(chan struct{})
 	go func() {
+		// Handles the three situations where the context needs to be canceled.
 		select {
 		case <-c.Context.Done():
+			// the upstream context is canceled
 		case <-c.sess.Done():
+			// the session goes out
+		case <-c.closeCh:
+			// we voluntarily resigned
 		}
 		close(doneCh)
 	}()
