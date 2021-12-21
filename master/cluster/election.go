@@ -6,7 +6,7 @@ import (
 
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/mvcc"
@@ -95,7 +95,7 @@ func (e *EtcdElection) Campaign(ctx context.Context, selfID NodeID) (context.Con
 			if errors.Cause(err) != mvcc.ErrCompacted {
 				return nil, nil, derror.ErrMasterEtcdElectionCampaignFail.Wrap(err)
 			}
-			log.Warn("campaign for leader failed", zap.Error(err))
+			log.L().Warn("campaign for leader failed", zap.Error(err))
 			continue
 		}
 		return retCtx, resign, nil
@@ -114,7 +114,7 @@ func (e *EtcdElection) doCampaign(ctx context.Context, selfID NodeID) (context.C
 		defer retCtx.OnResigned()
 		err := e.election.Resign(resignCtx)
 		if err != nil {
-			log.Warn("resign leader failed", zap.Error(err))
+			log.L().Warn("resign leader failed", zap.Error(err))
 		}
 	}
 	return retCtx, resignFn, nil
