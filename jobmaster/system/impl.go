@@ -234,6 +234,9 @@ func (m *Master) StartInternal(parentCtx context.Context) {
 }
 
 func (m *Master) addScheduleTasks(group scheduleGroup) {
+	if len(group) == 0 {
+		return
+	}
 	go func() {
 		m.scheduleWaitingTasks <- group
 	}()

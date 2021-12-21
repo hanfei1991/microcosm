@@ -9,11 +9,13 @@ import (
 	"go.etcd.io/etcd/mvcc/mvccpb"
 )
 
-var _ MetaKV = &MetaMock{}
-var _ clientv3.Txn = &Txn{}
+var (
+	_ MetaKV       = &MetaMock{}
+	_ clientv3.Txn = &Txn{}
+)
 
 type Txn struct {
-	m *MetaMock
+	m   *MetaMock
 	ops []clientv3.Op
 }
 
@@ -32,7 +34,10 @@ func (t *Txn) Then(ops ...clientv3.Op) clientv3.Txn {
 
 func (t *Txn) Commit() (*clientv3.TxnResponse, error) {
 	for _, op := range t.ops {
-		t.m.Put(nil, string(op.KeyBytes()), string(op.ValueBytes()))
+		_, err := t.m.Put(context.Background(), string(op.KeyBytes()), string(op.ValueBytes()))
+		if err != nil {
+			return nil, err
+		}
 	}
 	return nil, nil
 }
@@ -55,7 +60,7 @@ func (m *MetaMock) Delete(ctx context.Context, key string, opts ...interface{}) 
 	return nil, nil
 }
 
-func(m *MetaMock)	Watch(ctx context.Context, key string, opts ...interface{}) interface{} {
+func (m *MetaMock) Watch(ctx context.Context, key string, opts ...interface{}) interface{} {
 	panic("unimplemented")
 }
 
@@ -75,7 +80,7 @@ func (m *MetaMock) Get(ctx context.Context, key string, opts ...interface{}) (in
 			continue
 		}
 		ret.Kvs = append(ret.Kvs, &mvccpb.KeyValue{
-			Key: []byte(k),
+			Key:   []byte(k),
 			Value: []byte(v),
 		})
 	}
