@@ -9,6 +9,7 @@ import (
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/etcdutils"
+	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/test"
 	"github.com/hanfei1991/microcosm/test/mock"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
@@ -179,7 +180,7 @@ func (s *Server) startForTest(ctx context.Context) (err error) {
 	}
 
 	s.executorManager.Start(ctx)
-	err = s.jobManager.Start(ctx)
+	err = s.jobManager.Start(ctx, metadata.NewMetaMock())
 	if err != nil {
 		return
 	}
@@ -218,7 +219,7 @@ func (s *Server) Start(ctx context.Context) (err error) {
 
 	// start background managers
 	s.executorManager.Start(ctx)
-	err = s.jobManager.Start(ctx)
+	err = s.jobManager.Start(ctx, metadata.NewMetaEtcd(s.etcdClient))
 	if err != nil {
 		return
 	}
