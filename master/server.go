@@ -177,6 +177,7 @@ func (s *Server) startForTest(ctx context.Context) (err error) {
 	if err != nil {
 		return
 	}
+	s.leaderName.Store(s.name())
 	s.initialized.Store(true)
 	return
 }
