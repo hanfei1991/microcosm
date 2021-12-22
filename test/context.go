@@ -30,6 +30,10 @@ func NewContext() *Context {
 	}
 }
 
+func (c *Context) SetMetaKV(kv metadata.MetaKV) {
+	c.metaKV = kv
+}
+
 func (c *Context) GetMetaKV() metadata.MetaKV {
 	if c.metaKV == nil {
 		c.metaKV = metadata.NewMetaMock()

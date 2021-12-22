@@ -92,14 +92,16 @@ func (m *Master) RestoreTask(ctx context.Context, task *model.Task) error {
 
 func (m *Master) updateEtcd(ctx context.Context, tasks []*model.Task) error {
 	txn := m.MetaKV.Txn(ctx).(clientv3.Txn)
+	actions := make([]clientv3.Op, 0, len(tasks))
 	for _, task := range tasks {
 		taskKey := adapter.TaskKeyAdapter.Encode(strconv.Itoa(int(task.ID)))
 		taskValue, err := json.Marshal(task)
 		if err != nil {
 			return err
 		}
-		txn = txn.Then(clientv3.OpPut(taskKey, string(taskValue)))
+		actions = append(actions, clientv3.OpPut(taskKey, string(taskValue)))
 	}
+	txn.Then(actions...)
 	_, err := txn.Commit()
 	return err
 }
