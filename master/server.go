@@ -38,6 +38,8 @@ type Server struct {
 
 	// mocked server for test
 	mockGrpcServer mock.GrpcServer
+
+	testCtx *test.Context
 }
 
 // NewServer creates a new master-server.
@@ -59,6 +61,7 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 		executorManager: executorManager,
 		jobManager:      jobManager,
 		initialized:     *atomic.NewBool(false),
+		testCtx:         ctx,
 	}
 	return server, nil
 }
@@ -180,7 +183,7 @@ func (s *Server) startForTest(ctx context.Context) (err error) {
 	}
 
 	s.executorManager.Start(ctx)
-	err = s.jobManager.Start(ctx, metadata.NewMetaMock())
+	err = s.jobManager.Start(ctx, s.testCtx.GetMetaKV())
 	if err != nil {
 		return
 	}
