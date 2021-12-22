@@ -89,13 +89,14 @@ func (s *Server) leaderLoop(ctx context.Context) {
 	}
 }
 
+// nolint:unused
 func (s *Server) resign() {
 	s.resignFn()
 }
 
 func (s *Server) campaign(ctx context.Context, timeout time.Duration) error {
 	log.L().Info("start to campaign server master leader", zap.String("name", s.name()))
-	leaderCtx, resignFn, err := s.election.Campaign(ctx, s.member(), time.Second*5)
+	leaderCtx, resignFn, err := s.election.Campaign(ctx, s.member(), timeout)
 	switch err {
 	case nil:
 	case context.Canceled:
