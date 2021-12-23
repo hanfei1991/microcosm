@@ -46,6 +46,13 @@ var (
 	ErrMasterNewServer              = errors.Normalize("master create new server failed", errors.RFCCodeText("DFLOW:ErrMasterNewServer"))
 	ErrMasterCampaignLeader         = errors.Normalize("master campaign to be leader failed", errors.RFCCodeText("DFLOW:ErrMasterCampaignLeader"))
 	ErrMasterSessionDone            = errors.Normalize("master session is done", errors.RFCCodeText("DFLOW:ErrMasterSessionDone"))
+	ErrMasterRPCNotForward          = errors.Normalize("server grpc is not forwarded to leader", errors.RFCCodeText("DFLOW:ErrMasterRPCNotForward"))
+
+	// master etcd related errors
+	ErrMasterEtcdCreateSessionFail    = errors.Normalize("failed to create Etcd session", errors.RFCCodeText("DFLOW:ErrMasterEtcdCreateSessionFail"))
+	ErrMasterEtcdElectionCampaignFail = errors.Normalize("failed to campaign for leader", errors.RFCCodeText("DFLOW:ErrMasterEtcdElectionCampaignFail"))
+	ErrMasterNoLeader                 = errors.Normalize("server master has no leader", errors.RFCCodeText("DFLOW:ErrMasterNoLeader"))
+	ErrEtcdLeaderChanged              = errors.Normalize("etcd leader has changed", errors.RFCCodeText("DFLOW:ErrEtcdLeaderChanged"))
 
 	// executor related errors
 	ErrExecutorConfigParseFlagSet = errors.Normalize("parse config flag set failed", errors.RFCCodeText("DFLOW:ErrExecutorConfigParseFlagSet"))
