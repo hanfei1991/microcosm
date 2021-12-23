@@ -20,6 +20,7 @@ func (j *jobMasterAgent) Prepare(ctx *runtime.TaskContext) error {
 	if test.GlobalTestFlag {
 		j.metaKV = ctx.TestCtx.GetMetaKV()
 	}
+	// TODO: the starting routine cannot be cancelled here.
 	return j.master.Start(context.Background(), j.metaKV)
 }
 
