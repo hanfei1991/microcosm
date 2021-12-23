@@ -120,4 +120,5 @@ func TestLeaderCtxCancelPropagate(t *testing.T) {
 	_, cancel := context.WithCancel(sessCtx)
 	defer cancel()
 	resignFn()
+	require.EqualError(t, sessCtx.Err(), "[DFLOW:ErrMasterSessionDone]master session is done")
 }
