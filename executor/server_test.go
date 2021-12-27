@@ -39,7 +39,7 @@ func testPprof(t *testing.T, addr string) {
 		"/debug/pprof/",
 		"/debug/pprof/cmdline",
 		"/debug/pprof/symbol",
-		// these two apis make will make ut slow
+		// enable these two apis will make ut slow
 		//"/debug/pprof/profile", http.MethodGet,
 		//"/debug/pprof/trace", http.MethodGet,
 		"/debug/pprof/threadcreate",
