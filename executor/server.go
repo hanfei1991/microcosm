@@ -141,6 +141,33 @@ func (s *Server) Run(ctx context.Context) error {
 
 	wg, ctx := errgroup.WithContext(ctx)
 
+	s.startTCPService(ctx, wg)
+
+	s.sch = runtime.NewRuntime(nil)
+	wg.Go(func() error {
+		s.sch.Run(ctx, 10)
+		return nil
+	})
+
+	err := s.selfRegister(ctx)
+	if err != nil {
+		return err
+	}
+
+	// connects to metastore and maintains a etcd session
+	wg.Go(func() error {
+		return s.keepalive(ctx)
+	})
+
+	wg.Go(func() error {
+		return s.keepHeartbeat(ctx)
+	})
+
+	return wg.Wait()
+}
+
+// startTCPService starts grpc server and http server
+func (s *Server) startTCPService(ctx context.Context, wg *errgroup.Group) error {
 	tcpServer, err := tcpserver.NewTCPServer(s.cfg.WorkerAddr, &security.Credential{})
 	if err != nil {
 		return err
@@ -162,27 +189,7 @@ func (s *Server) Run(ctx context.Context) error {
 		return debugHandler(s.tcpServer.HTTP1Listener())
 	})
 
-	s.sch = runtime.NewRuntime(nil)
-	wg.Go(func() error {
-		s.sch.Run(ctx, 10)
-		return nil
-	})
-
-	err = s.selfRegister(ctx)
-	if err != nil {
-		return err
-	}
-
-	// connects to metastore and maintains a etcd session
-	wg.Go(func() error {
-		return s.keepalive(ctx)
-	})
-
-	wg.Go(func() error {
-		return s.keepHeartbeat(ctx)
-	})
-
-	return wg.Wait()
+	return nil
 }
 
 func (s *Server) keepalive(ctx context.Context) error {

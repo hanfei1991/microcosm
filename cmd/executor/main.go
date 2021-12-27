@@ -16,7 +16,7 @@ import (
 
 // 1. parse config
 // 2. init logger
-// 3. print log
+// 3. register singal handler
 // 4. start server
 func main() {
 	// 1. parse config
@@ -40,7 +40,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	// 3. register signal
+	// 3. register signal handler
 	ctx, cancel := context.WithCancel(context.Background())
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc,
