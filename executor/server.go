@@ -141,7 +141,10 @@ func (s *Server) Run(ctx context.Context) error {
 
 	wg, ctx := errgroup.WithContext(ctx)
 
-	s.startTCPService(ctx, wg)
+	err := s.startTCPService(ctx, wg)
+	if err != nil {
+		return err
+	}
 
 	s.sch = runtime.NewRuntime(nil)
 	wg.Go(func() error {
@@ -149,7 +152,7 @@ func (s *Server) Run(ctx context.Context) error {
 		return nil
 	})
 
-	err := s.selfRegister(ctx)
+	err = s.selfRegister(ctx)
 	if err != nil {
 		return err
 	}
