@@ -40,8 +40,6 @@ type Server struct {
 
 	mockSrv mock.GrpcServer
 
-	cancel func()
-
 	metastore metadata.MetaKV
 }
 
@@ -118,7 +116,6 @@ func (s *Server) startForTest(ctx context.Context) (err error) {
 	}
 	s.sch = runtime.NewRuntime(s.testCtx)
 	go func() {
-		defer s.cancel()
 		s.sch.Run(ctx, 10)
 	}()
 
@@ -127,7 +124,6 @@ func (s *Server) startForTest(ctx context.Context) (err error) {
 		return err
 	}
 	go func() {
-		defer s.cancel()
 		err := s.keepHeartbeat(ctx)
 		log.L().Info("heartbeat quits", zap.Error(err))
 	}()
