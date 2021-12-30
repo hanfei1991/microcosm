@@ -5,9 +5,9 @@ import (
 	"time"
 
 	"github.com/hanfei1991/microcosm/executor"
-	"github.com/hanfei1991/microcosm/master"
 	"github.com/hanfei1991/microcosm/pkg/etcdutils"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
+	"github.com/hanfei1991/microcosm/servermaster"
 	"github.com/hanfei1991/microcosm/test"
 	"github.com/hanfei1991/microcosm/test/mock"
 	. "github.com/pingcap/check"
@@ -15,7 +15,7 @@ import (
 
 // TODO: support multi master / executor
 type MiniCluster struct {
-	master       *master.Server
+	master       *servermaster.Server
 	masterCancel func()
 
 	exec       *executor.Server
@@ -30,10 +30,10 @@ func NewEmptyMiniCluster() *MiniCluster {
 	return c
 }
 
-func (c *MiniCluster) CreateMaster(cfg *master.Config) (*test.Context, error) {
+func (c *MiniCluster) CreateMaster(cfg *servermaster.Config) (*test.Context, error) {
 	masterCtx := test.NewContext()
 	masterCtx.SetMetaKV(c.metastore)
-	master, err := master.NewServer(cfg, masterCtx)
+	master, err := servermaster.NewServer(cfg, masterCtx)
 	c.master = master
 	return masterCtx, err
 }
@@ -74,7 +74,7 @@ func (c *MiniCluster) StopMaster() {
 
 // Start 1 master 1 executor.
 func (c *MiniCluster) Start1M1E(cc *C) (*test.Context, *test.Context) {
-	masterCfg := &master.Config{
+	masterCfg := &servermaster.Config{
 		Etcd: &etcdutils.ConfigParams{
 			Name:    "master1",
 			DataDir: "/tmp/df",
