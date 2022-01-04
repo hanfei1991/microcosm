@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"os"
 	"strings"
 	"time"
 
@@ -33,12 +34,11 @@ func NewDemoclient(serverAddr string) (*democlient, error) {
 		fmt.Printf("init the client  failed %v", err)
 		return &democlient{nil, nil}, err
 	}
-	//defer conn.Close()
+	// defer conn.Close()
 	buf := make(chan kv, BUFFERSIZE)
 	client := pb.NewDataRWServiceClient(conn)
 	demo := &democlient{cli: client, buffer: buf}
 	return demo, nil
-
 }
 
 func (c *democlient) GetFilesList(ctx context.Context, sources string) ([]string, error) {
@@ -52,7 +52,7 @@ func (c *democlient) GetFilesList(ctx context.Context, sources string) ([]string
 		fmt.Printf("error happened are %v", err)
 		return []string{}, err
 	}
-	fmt.Printf("the files name are %v", reply.String())
+	//	fmt.Printf("the files name are %v", reply.String())
 	return reply.GetFileNames(), nil
 }
 
@@ -99,70 +99,47 @@ func (c *democlient) Send(ctx context.Context, dest string) error {
 			time.Sleep(time.Second)
 		}
 	}
-
 }
 
 func main() {
+	args := os.Args
+	if len(args) < 3 {
+		fmt.Println("Please run the command in format : democlient sourceFolder destFolder")
+		return
+	}
+	sourceFolder := os.Args[1]
+	destFolder := os.Args[2]
+	if sourceFolder == destFolder {
+		fmt.Println("make sure the source address is not the same as the destionation address")
+		return
+	}
+	ctx, cancel := context.WithCancel(context.Background())
 	client, err := NewDemoclient(ADDRESS)
 	if err != nil {
 		fmt.Printf("error happened %v", err)
 		return
 	}
-	files, err := client.GetFilesList(context.Background(), "./data")
+	files, err := client.GetFilesList(ctx, sourceFolder)
 	if (err != nil) || len(files) == 0 {
 		fmt.Printf("no file found %v", err)
 		return
 	}
 	firstfile := strings.Split(files[0], "/")
-	fileName := "./data2/" + firstfile[len(firstfile)-1]
-	go client.Receive(context.Background(), files[0])
-	go client.Send(context.Background(), fileName)
+	fileName := destFolder + firstfile[len(firstfile)-1]
+	go func() {
+		err = client.Receive(ctx, files[0])
+		if err != nil {
+			cancel()
+		}
+	}()
+	go func() {
+		err = client.Send(context.Background(), fileName)
+		if err != nil {
+			cancel()
+		}
+	}()
 	for {
 		fmt.Printf("the size of chan %v\n", len(client.buffer))
 		time.Sleep(time.Second)
 	}
-
 }
-
-/*
-func main() {
-	conn, err := grpc.Dial(ADDRESS, grpc.WithInsecure())
-	if err != nil {
-		return
-	}
-	defer conn.Close()
-	client := pb.NewDataRWServiceClient(conn)
-	reply, err := client.ListFiles(context.Background(), &pb.ListFilesReq{FolderName: "./data"})
-	if err != nil {
-		fmt.Println("error happened when call the list files method ", err)
-		return
-	}
-	files := reply.GetFileNames()
-	for _, file := range files {
-		fmt.Printf("file name is %s", file)
-	}
-	reader, err1 := client.ReadLines(context.Background(), &pb.ReadLinesRequest{FileName: files[0]})
-	if err1 != nil {
-		log.Fatal(err1)
-	}
-	writer, err := client.WriteLines(context.Background())
-	for {
-		linestr, err := reader.Recv()
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			log.Fatal(err)
-		}
-		strs := strings.Split(linestr.Linestr, ",")
-		if len(strs) > 1 {
-			fmt.Printf("key is %s,value is %s ", strs[0], strs[1])
-			if err := writer.Send(&pb.WriteLinesRequest{FileName: "./data1/0.txt", Key: strs[0], Value: strs[1]}); err != nil {
-				log.Fatal(err)
-			}
-			time.Sleep(time.Second)
-		}
-
-	}
-
-}*/

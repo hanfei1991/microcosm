@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"math/rand"
 	"net"
 	"os"
@@ -20,16 +19,32 @@ import (
 
 const (
 	FILENUM     = 3
-	RECORDERNUM = 10
-	FLUSHLEN    = 2
+	RECORDERNUM = 100000
+	FLUSHLEN    = 200
+	PORT        = "127.0.0.1:1234"
 )
 
 func main() {
-	fmt.Println("Start to generate the data ...")
-	generateData("./data", RECORDERNUM)
-	fmt.Println("Listening the client call ..")
-	DataService()
+	args := os.Args
+	if len(args) < 2 {
+		fmt.Println("Please run the command in format : demoserver folder [recordernum]")
+	} else {
+		dataFolder := os.Args[1]
+		recorderNum := RECORDERNUM
+		var err error
+		if len(args) > 2 {
+			recorderNum, err = strconv.Atoi(os.Args[2])
+		}
+		if err != nil {
+			fmt.Println("the third parameter should be a interger")
+			return
+		}
+		fmt.Println("Start to generate the data ...")
+		generateData(dataFolder, recorderNum)
+		fmt.Println("Listening the client call ..")
+		DataService()
 
+	}
 }
 
 func generateData(folderName string, recorders int) int {
@@ -69,9 +84,16 @@ func generateData(folderName string, recorders int) int {
 			shouldFlush = true
 		}
 		index := k % fileNum
-		fileWriterMap[index].WriteString(strconv.Itoa(k) + "," + "value \r\n")
+		_, err2 := fileWriterMap[index].WriteString(strconv.Itoa(k) + "," + "value \r\n")
+		if err2 != nil {
+			continue
+		}
+
 		if shouldFlush {
-			fileWriterMap[index].Flush()
+			err1 := fileWriterMap[index].Flush()
+			if err1 != nil {
+				panic(err1)
+			}
 		}
 		if index == 0 {
 			shouldFlush = false
@@ -97,10 +119,10 @@ func NewDataRWServer() *DataRWServer {
 }
 
 func (*DataRWServer) ListFiles(ctx context.Context, folder *pb.ListFilesReq) (*pb.ListFilesResponse, error) {
-	//fmt.Printf("receive the list file call %s", folder.String())
+	// fmt.Printf("receive the list file call %s", folder.String())
 	fd := folder.FolderName
 	_dir, err := ioutil.ReadDir(fd)
-	fmt.Printf("receive the list file call %s \n", fd)
+	fmt.Printf("receive the list file call %v \n", fd)
 	if err != nil {
 		return &pb.ListFilesResponse{}, err
 	}
@@ -113,7 +135,6 @@ func (*DataRWServer) ListFiles(ctx context.Context, folder *pb.ListFilesReq) (*p
 		}
 	}
 	return &pb.ListFilesResponse{FileNames: files}, nil
-
 }
 
 func (s *DataRWServer) ReadLines(req *pb.ReadLinesRequest, stream pb.DataRWService_ReadLinesServer) error {
@@ -155,7 +176,6 @@ func (s *DataRWServer) ReadLines(req *pb.ReadLinesRequest, stream pb.DataRWServi
 		}
 	}
 	return nil
-
 }
 
 func (s *DataRWServer) WriteLines(stream pb.DataRWService_WriteLinesServer) error {
@@ -180,11 +200,11 @@ func (s *DataRWServer) WriteLines(stream pb.DataRWService_WriteLinesServer) erro
 				writer = bufio.NewWriter(file)
 				s.fileWriterMap[fileName] = writer
 			}
-			writer.WriteString(res.Key + "," + res.Value + "\n")
+			_, err = writer.WriteString(res.Key + "," + res.Value + "\n")
 			fmt.Println(res)
 			count++
 			if (count % FLUSHLEN) == 0 {
-				writer.Flush()
+				err = writer.Flush()
 			}
 		} else if err == io.EOF {
 			return stream.SendAndClose(&pb.WriteLinesResponse{})
@@ -193,18 +213,18 @@ func (s *DataRWServer) WriteLines(stream pb.DataRWService_WriteLinesServer) erro
 		if err != nil {
 			return err
 		}
-
 	}
-
 }
 
 func DataService() {
 	grpcServer := grpc.NewServer()
 	pb.RegisterDataRWServiceServer(grpcServer, NewDataRWServer())
-	lis, err := net.Listen("tcp", ":1234")
+	lis, err := net.Listen("tcp", PORT)
 	if err != nil {
-		log.Fatal(err)
 		fmt.Println("error happened ")
 	}
-	grpcServer.Serve(lis)
+	err = grpcServer.Serve(lis)
+	if err != nil {
+		fmt.Printf("error is %f", err)
+	}
 }
