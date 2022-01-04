@@ -37,7 +37,7 @@ var (
 	ErrMasterConfigParseFlagSet     = errors.Normalize("parse config flag set failed", errors.RFCCodeText("DFLOW:ErrMasterConfigParseFlagSet"))
 	ErrMasterConfigInvalidFlag      = errors.Normalize("'%s' is an invalid flag", errors.RFCCodeText("DFLOW:ErrMasterConfigInvalidFlag"))
 	ErrMasterDecodeConfigFile       = errors.Normalize("decode config file failed", errors.RFCCodeText("DFLOW:ErrMasterDecodeConfigFile"))
-	ErrMasterConfigUnknownItem      = errors.Normalize("master config containes unknown configuration options: %s", errors.RFCCodeText("DFLOW:ErrMasterConfigUnknownItem"))
+	ErrMasterConfigUnknownItem      = errors.Normalize("master config contains unknown configuration options: %s", errors.RFCCodeText("DFLOW:ErrMasterConfigUnknownItem"))
 	ErrMasterGenEmbedEtcdConfigFail = errors.Normalize("master gen embed etcd config failed: %s", errors.RFCCodeText("DFLOW:ErrMasterGenEmbedEtcdConfigFail"))
 	ErrMasterJoinEmbedEtcdFail      = errors.Normalize("failed to join embed etcd: %s", errors.RFCCodeText("DFLOW:ErrMasterJoinEmbedEtcdFail"))
 	ErrMasterStartEmbedEtcdFail     = errors.Normalize("failed to start embed etcd", errors.RFCCodeText("DFLOW:ErrMasterStartEmbedEtcdFail"))
@@ -47,16 +47,19 @@ var (
 	ErrMasterCampaignLeader         = errors.Normalize("master campaign to be leader failed", errors.RFCCodeText("DFLOW:ErrMasterCampaignLeader"))
 	ErrMasterSessionDone            = errors.Normalize("master session is done", errors.RFCCodeText("DFLOW:ErrMasterSessionDone"))
 	ErrMasterRPCNotForward          = errors.Normalize("server grpc is not forwarded to leader", errors.RFCCodeText("DFLOW:ErrMasterRPCNotForward"))
+	ErrLeaderCtxCanceled            = errors.Normalize("leader context is canceled", errors.RFCCodeText("DFLOW:ErrLeaderCtxCanceled"))
 
 	// master etcd related errors
 	ErrMasterEtcdCreateSessionFail    = errors.Normalize("failed to create Etcd session", errors.RFCCodeText("DFLOW:ErrMasterEtcdCreateSessionFail"))
 	ErrMasterEtcdElectionCampaignFail = errors.Normalize("failed to campaign for leader", errors.RFCCodeText("DFLOW:ErrMasterEtcdElectionCampaignFail"))
+	ErrMasterNoLeader                 = errors.Normalize("server master has no leader", errors.RFCCodeText("DFLOW:ErrMasterNoLeader"))
+	ErrEtcdLeaderChanged              = errors.Normalize("etcd leader has changed", errors.RFCCodeText("DFLOW:ErrEtcdLeaderChanged"))
 
 	// executor related errors
 	ErrExecutorConfigParseFlagSet = errors.Normalize("parse config flag set failed", errors.RFCCodeText("DFLOW:ErrExecutorConfigParseFlagSet"))
 	ErrExecutorConfigInvalidFlag  = errors.Normalize("'%s' is an invalid flag", errors.RFCCodeText("DFLOW:ErrExecutorConfigInvalidFlag"))
 	ErrExecutorDecodeConfigFile   = errors.Normalize("decode config file failed", errors.RFCCodeText("DFLOW:ErrExecutorDecodeConfigFile"))
-	ErrExecutorConfigUnknownItem  = errors.Normalize("master config containes unknown configuration options: %s", errors.RFCCodeText("DFLOW:ErrExecutorConfigUnknownItem"))
+	ErrExecutorConfigUnknownItem  = errors.Normalize("master config contains unknown configuration options: %s", errors.RFCCodeText("DFLOW:ErrExecutorConfigUnknownItem"))
 	ErrHeartbeat                  = errors.Normalize("heartbeat error type: %s", errors.RFCCodeText("DFLOW:ErrHeartbeat"))
 	ErrTaskNotFound               = errors.Normalize("task %d is not found", errors.RFCCodeText("DFLOW:ErrTaskNotFound"))
 	ErrExecutorUnknownOperator    = errors.Normalize("operator type %d is unknown", errors.RFCCodeText("DFLOW:ErrOperatorUnknown"))

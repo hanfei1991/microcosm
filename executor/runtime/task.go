@@ -33,12 +33,13 @@ type Channel struct {
 
 func (c *Channel) readBatch(batch int) []*Record {
 	records := make([]*Record, 0, batch)
+readLoop:
 	for i := 0; i < batch; i++ {
 		select {
 		case record := <-c.innerChan:
 			records = append(records, record)
 		default:
-			break
+			break readLoop
 		}
 	}
 	if len(records) > 0 {
@@ -88,7 +89,7 @@ type taskContainer struct {
 func (t *taskContainer) prepare() error {
 	t.inputCache = make([]Chunk, len(t.inputs))
 	t.outputCache = make([]Chunk, len(t.outputs))
-	return t.op.Prepare()
+	return t.op.Prepare(t.ctx)
 }
 
 func (t *taskContainer) tryAwake() bool {

@@ -5,6 +5,7 @@ import (
 
 	"github.com/hanfei1991/microcosm/executor"
 	"github.com/hanfei1991/microcosm/master"
+	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/test"
 )
 
@@ -15,10 +16,19 @@ type MiniCluster struct {
 
 	exec       *executor.Server
 	execCancel func()
+
+	metastore metadata.MetaKV
+}
+
+func NewEmptyMiniCluster() *MiniCluster {
+	c := new(MiniCluster)
+	c.metastore = metadata.NewMetaMock()
+	return c
 }
 
 func (c *MiniCluster) CreateMaster(cfg *master.Config) (*test.Context, error) {
 	masterCtx := test.NewContext()
+	masterCtx.SetMetaKV(c.metastore)
 	master, err := master.NewServer(cfg, masterCtx)
 	c.master = master
 	return masterCtx, err
@@ -34,6 +44,7 @@ func (c *MiniCluster) AsyncStartMaster() error {
 
 func (c *MiniCluster) CreateExecutor(cfg *executor.Config) *test.Context {
 	execContext := test.NewContext()
+	execContext.SetMetaKV(c.metastore)
 	exec := executor.NewServer(cfg, execContext)
 	c.exec = exec
 	return execContext
@@ -42,7 +53,7 @@ func (c *MiniCluster) CreateExecutor(cfg *executor.Config) *test.Context {
 func (c *MiniCluster) AsyncStartExector() error {
 	ctx := context.Background()
 	execCtx, execCancel := context.WithCancel(ctx)
-	err := c.exec.Start(execCtx)
+	err := c.exec.Run(execCtx)
 	c.execCancel = execCancel
 	return err
 }

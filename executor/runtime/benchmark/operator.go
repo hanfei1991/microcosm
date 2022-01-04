@@ -1,12 +1,14 @@
 package benchmark
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/hanfei1991/microcosm/executor/runtime"
@@ -37,16 +39,31 @@ func (f *fileWriter) Prepare() error {
 }
 
 func sprintPayload(r *pb.Record) string {
-	str := fmt.Sprintf("tid %d, pk %d, time tracer ", r.Tid, r.Pk)
+	var buf bytes.Buffer
+	buf.WriteString("tid ")
+	buf.WriteString(strconv.FormatInt(int64(r.Tid), 10))
+	buf.WriteString(", pk")
+	buf.WriteString(strconv.FormatInt(int64(r.Pk), 10))
+	buf.WriteString(", time tracer ")
 	for _, ts := range r.TimeTracer {
-		str += fmt.Sprintf("%s ", time.Unix(0, ts))
+		buf.WriteString(strconv.FormatInt(ts, 10) + " ")
 	}
-	return str
+	return buf.String()
 }
 
 func sprintRecord(r *runtime.Record) string {
 	start := time.Unix(0, r.Payload.(*pb.Record).TimeTracer[0])
-	return fmt.Sprintf("flowID %s start %s end %s payload: %s\n", r.FlowID, start.String(), r.End.String(), sprintPayload(r.Payload.(*pb.Record)))
+	var buf bytes.Buffer
+	buf.WriteString("flowID ")
+	buf.WriteString(r.FlowID)
+	buf.WriteString(" start ")
+	buf.WriteString(start.String())
+	buf.WriteString(" end ")
+	buf.WriteString(r.End.String())
+	buf.WriteString(" payload: ")
+	buf.WriteString(sprintPayload(r.Payload.(*pb.Record)))
+	buf.WriteString("\n")
+	return buf.String()
 }
 
 func (f *fileWriter) writeStats(s *recordStats) error {
@@ -107,7 +124,7 @@ func (o *opReceive) dial() (client pb.TestServiceClient, err error) {
 	return
 }
 
-func (o *opReceive) Prepare() error {
+func (o *opReceive) Prepare(_ *runtime.TaskContext) error {
 	return nil
 }
 
@@ -181,7 +198,7 @@ type opSyncer struct{}
 func (o *opSyncer) Close() error { return nil }
 
 // TODO communicate with master.
-func (o *opSyncer) Prepare() error { return nil }
+func (o *opSyncer) Prepare(_ *runtime.TaskContext) error { return nil }
 
 func (o *opSyncer) syncDDL(ctx *runtime.TaskContext) {
 	time.Sleep(1 * time.Second)
@@ -218,7 +235,7 @@ func (o *opSink) Close() error {
 	return o.writer.writeStats(o.stats)
 }
 
-func (o *opSink) Prepare() error {
+func (o *opSink) Prepare(_ *runtime.TaskContext) error {
 	o.stats = new(recordStats)
 	return o.writer.Prepare()
 }
@@ -249,7 +266,7 @@ type opProducer struct {
 
 func (o *opProducer) Close() error { return nil }
 
-func (o *opProducer) Prepare() error { return nil }
+func (o *opProducer) Prepare(_ *runtime.TaskContext) error { return nil }
 
 func (o *opProducer) NextWantedInputIdx() int { return runtime.DontNeedData }
 
@@ -325,7 +342,7 @@ func (o *opBinlog) Close() error {
 	return nil
 }
 
-func (o *opBinlog) Prepare() (err error) {
+func (o *opBinlog) Prepare(_ *runtime.TaskContext) (err error) {
 	o.binlogChan = make(chan *runtime.Record, 1024)
 	if test.GlobalTestFlag {
 		o.server, err = mock.NewTestServer(o.addr, o)

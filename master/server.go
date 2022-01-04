@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/http"
 	"reflect"
 	"runtime"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/etcdutils"
+	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/test"
 	"github.com/hanfei1991/microcosm/test/mock"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
@@ -25,6 +27,7 @@ import (
 	"go.etcd.io/etcd/embed"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 )
 
@@ -35,9 +38,10 @@ type Server struct {
 	etcdClient   *clientv3.Client
 	session      *concurrency.Session
 	election     cluster.Election
+	leaderCtx    context.Context
 	resignFn     context.CancelFunc
 	leader       atomic.Value
-	members      []*Member
+	members      []*Member //nolint:unused
 	leaderClient *client.MasterClient
 
 	// sched scheduler
@@ -50,6 +54,8 @@ type Server struct {
 
 	// mocked server for test
 	mockGrpcServer mock.GrpcServer
+
+	testCtx *test.Context
 }
 
 // NewServer creates a new master-server.
@@ -71,6 +77,7 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 		executorManager: executorManager,
 		jobManager:      jobManager,
 		initialized:     *atomic.NewBool(false),
+		testCtx:         ctx,
 		leader:          atomic.Value{},
 	}
 	return server, nil
@@ -217,7 +224,7 @@ func (s *Server) startForTest(ctx context.Context) (err error) {
 	}
 
 	s.executorManager.Start(ctx)
-	err = s.jobManager.Start(ctx)
+	err = s.jobManager.Start(ctx, s.testCtx.GetMetaKV())
 	if err != nil {
 		return
 	}
@@ -232,6 +239,15 @@ func (s *Server) Stop() {
 	if s.mockGrpcServer != nil {
 		s.mockGrpcServer.Stop()
 	}
+	if s.etcdClient != nil {
+		s.etcdClient.Close()
+	}
+	if s.leaderClient != nil {
+		s.leaderClient.Close()
+	}
+	if s.etcd != nil {
+		s.etcd.Close()
+	}
 }
 
 // Run the master-server.
@@ -244,10 +260,19 @@ func (s *Server) Run(ctx context.Context) (err error) {
 	if err != nil {
 		return
 	}
-	go s.bgUpdateServerMembers(ctx)
+	err = s.reset(ctx)
+	if err != nil {
+		return
+	}
 	s.initialized.Store(true)
 
-	return s.campaignLeaderLoop(ctx)
+	wg, ctx := errgroup.WithContext(ctx)
+
+	wg.Go(func() error {
+		return s.leaderLoop(ctx)
+	})
+
+	return wg.Wait()
 }
 
 func (s *Server) startGrpcSrv() (err error) {
@@ -276,14 +301,12 @@ func (s *Server) startGrpcSrv() (err error) {
 		// TODO: register msg server
 	}
 
-	// TODO: implement http api/
-	//apiHandler, err := getHTTPAPIHandler(ctx, s.cfg.AdvertiseAddr, tls2.ToGRPCDialOption())
-	//if err != nil {
-	//	return
-	//}
+	httpHandlers := map[string]http.Handler{
+		"/debug/": getDebugHandler(),
+	}
 
 	// generate grpcServer
-	s.etcd, err = startEtcd(etcdCfg, gRPCSvr, nil, etcdStartTimeout)
+	s.etcd, err = startEtcd(etcdCfg, gRPCSvr, httpHandlers, etcdStartTimeout)
 	if err != nil {
 		return
 	}
@@ -292,6 +315,19 @@ func (s *Server) startGrpcSrv() (err error) {
 	// start grpc server
 	s.etcdClient, err = etcdutil.CreateClient([]string{withHost(s.cfg.MasterAddr)}, nil)
 	return
+}
+
+// member returns member information of the server
+func (s *Server) member() string {
+	m := &Member{
+		Name:  s.name(),
+		Addrs: []string{s.cfg.AdvertiseAddr},
+	}
+	val, err := m.String()
+	if err != nil {
+		return s.name()
+	}
+	return val
 }
 
 // name is a shortcut to etcd name
@@ -332,7 +368,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 
 	// start background managers
 	s.executorManager.Start(ctx)
-	err = s.jobManager.Start(ctx)
+	err = s.jobManager.Start(ctx, metadata.NewMetaEtcd(s.etcdClient))
 	if err != nil {
 		return
 	}
@@ -348,11 +384,20 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		s.resign()
 	}()
 
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-s.session.Done():
-		return errors.ErrMasterSessionDone.GenWithStackByArgs()
+	leaderTicker := time.NewTicker(time.Millisecond * 200)
+	defer leaderTicker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			// ctx is a leaderCtx actually
+			return ctx.Err()
+		case <-leaderTicker.C:
+			if !s.isEtcdLeader() {
+				log.L().Info("etcd leader changed, resigns server master leader",
+					zap.String("old-leader-name", s.name()))
+				return errors.ErrEtcdLeaderChanged.GenWithStackByArgs()
+			}
+		}
 	}
 }
 
@@ -446,23 +491,6 @@ func (s *Server) apiPreCheck() *pb.Error {
 		}
 	}
 	return nil
-}
-
-func (s *Server) bgUpdateServerMembers(ctx context.Context) {
-	// TODO: refine background gourtine of server master, add exit notification
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			err := s.updateServerMasterMembers(ctx)
-			if err != nil {
-				log.L().Warn("update server members failed", zap.Error(err))
-			}
-		}
-	}
 }
 
 func withHost(addr string) string {
