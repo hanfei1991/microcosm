@@ -121,11 +121,15 @@ func (m *BaseMaster) initMetadata(ctx context.Context) error {
 
 // workerManager is for private use by BaseMaster.
 type workerManager struct {
-	workerInfoMap sync.Map // stores WorkerInfo
+	mu            sync.Mutex
 	initStartTime time.Time
+	workerInfos   map[WorkerID]*WorkerInfo
 }
 
 func (m *workerManager) Initialized(ctx context.Context) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	if m.initStartTime.IsZero() {
 		m.initStartTime = time.Now()
 	}
@@ -140,25 +144,43 @@ func (m *workerManager) Tick(ctx context.Context) {
 }
 
 func (m *workerManager) HandleHeartBeat(msg *workerToMasterHeartbeatMessage) {
-	log.L().Debug("received heartbeat", zap.Any("msg", msg))
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
+	log.L().Debug("received heartbeat", zap.Any("msg", msg))
+	workerInfo, ok := m.workerInfos[msg.FromWorkerID]
+	if !ok {
+		log.L().Info("discarding heartbeat for non-existing worker",
+			zap.Any("msg", msg))
+	}
+	workerInfo.lastHeartBeat = time.Now()
 }
 
 func (m *workerManager) GetWorkerInfo(id WorkerID) (*WorkerInfo, bool) {
-	value, ok := m.workerInfoMap.Load(id)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	value, ok := m.workerInfos[id]
 	if !ok {
 		return nil, false
 	}
-	return value.(*WorkerInfo), false
+	return value, true
 }
 
 func (m *workerManager) PutWorkerInfo(info *WorkerInfo) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	id := info.ID
-	_, exists := m.workerInfoMap.LoadOrStore(id, info)
+	_, exists := m.workerInfos[id]
 	return !exists
 }
 
 func (m *workerManager) RemoveWorkerInfo(id WorkerID) bool {
-	_, exists := m.workerInfoMap.LoadAndDelete(id)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	_, exists := m.workerInfos[id]
+	delete(m.workerInfos, id)
 	return exists
 }

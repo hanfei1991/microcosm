@@ -70,4 +70,6 @@ type WorkerInfo struct {
 	ID     WorkerID   `json:"id"`
 	Addr   string     `json:"addr"`
 	NodeID p2p.NodeID `json:"node-id"`
+
+	lastHeartBeat time.Time
 }
