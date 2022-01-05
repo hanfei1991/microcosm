@@ -15,7 +15,7 @@ import (
 
 const (
 	ADDRESS    = "127.0.0.1:1234"
-	BUFFERSIZE = 5
+	BUFFERSIZE = 1024
 )
 
 type kv struct {
@@ -78,7 +78,7 @@ func (c *democlient) Receive(ctx context.Context, sources string) error {
 		} else {
 			break
 		}
-		time.Sleep(time.Second)
+		// time.Sleep(time.Second)
 	}
 	return nil
 }
@@ -133,7 +133,7 @@ func main() {
 		}
 	}()
 	go func() {
-		err = client.Send(context.Background(), fileName)
+		err = client.Send(ctx, fileName)
 		if err != nil {
 			cancel()
 		}

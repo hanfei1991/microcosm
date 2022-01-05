@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	FILENUM     = 3
+	FILENUM     = 50
 	RECORDERNUM = 100000
 	FLUSHLEN    = 200
 	PORT        = "127.0.0.1:1234"
@@ -47,18 +47,32 @@ func main() {
 	}
 }
 
+type ErrorInfo struct {
+	info string
+}
+
+func (e *ErrorInfo) Error() string {
+	return e.info
+}
+
 func generateData(folderName string, recorders int) int {
 	_dir, err := ioutil.ReadDir(folderName)
 	if err != nil {
 		fmt.Printf("the folder %s doesn't exist ", folderName)
-		return 0
-	}
-	for _, _file := range _dir {
-		fileName := folderName + "/" + _file.Name()
-		if _file.IsDir() {
-			os.RemoveAll(fileName)
-		} else {
-			os.Remove(fileName)
+		err = os.Mkdir(folderName, os.ModePerm)
+		if err != nil {
+			fmt.Printf("create the folder failed %v", folderName)
+			return 0
+		}
+
+	} else {
+		for _, _file := range _dir {
+			fileName := folderName + "/" + _file.Name()
+			if _file.IsDir() {
+				os.RemoveAll(fileName)
+			} else {
+				os.Remove(fileName)
+			}
 		}
 	}
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -66,20 +80,21 @@ func generateData(folderName string, recorders int) int {
 	for fileNum = r.Intn(FILENUM); fileNum == 0; {
 		fileNum = r.Intn(FILENUM)
 	}
-	fmt.Printf("the fold file number is  %d  ", fileNum)
 	fileWriterMap := make(map[int]*bufio.Writer)
 	for i := 0; i < fileNum; i++ {
 		fileName := folderName + "/" + strconv.Itoa(i) + ".txt"
 		file, err := os.OpenFile(fileName, os.O_CREATE|os.O_WRONLY, 0o666)
 		if err != nil {
-			fmt.Printf("make sure the file % s exist, the error is %v ", fileName, err)
+			// if create file failed ,just ingore this file
+			fileNum = fileNum - 1
+			continue
 		}
 		defer file.Close()
 		writer := bufio.NewWriter(file)
 		fileWriterMap[i] = writer
 	}
 	shouldFlush := false
-	for k := 0; k < recorders; k++ {
+	for k := 0; (k < recorders) && fileNum > 0; k++ {
 		if (k % FLUSHLEN) == 0 {
 			shouldFlush = true
 		}
@@ -88,7 +103,6 @@ func generateData(folderName string, recorders int) int {
 		if err2 != nil {
 			continue
 		}
-
 		if shouldFlush {
 			err1 := fileWriterMap[index].Flush()
 			if err1 != nil {
@@ -189,19 +203,35 @@ func (s *DataRWServer) WriteLines(stream pb.DataRWService_WriteLinesServer) erro
 		res, err := stream.Recv()
 		if err == nil {
 			fileName := res.FileName
-			//	fmt.Println("the string is ", fileName, res.Key, res.Value)
 			writer, exist := s.fileWriterMap[fileName]
 			if !exist {
+				index := strings.LastIndex(fileName, " /")
+				if index == 0 {
+					return &ErrorInfo{info: " bad file name :" + fileName}
+				}
+				folder := fileName[0 : index-1]
+				_, err := ioutil.ReadDir(folder)
+				// create the dir if not exist
+				if err != nil {
+					if strings.Index(folder, "/") > 0 {
+						err = os.MkdirAll(folder, os.ModePerm)
+					} else {
+						err = os.Mkdir(folder, os.ModePerm)
+					}
+					if err != nil {
+						return &ErrorInfo{info: "create the folder " + folder + " failed"}
+					}
+				}
+				// create the file
 				file, err1 := os.OpenFile(fileName, os.O_CREATE|os.O_WRONLY, 0o666)
 				if err1 != nil {
-					fmt.Printf("make sure the file % s exist, the error is %v ", fileName, err1)
+					return &ErrorInfo{info: "create file " + fileName + " failed"}
 				}
 				defer file.Close()
 				writer = bufio.NewWriter(file)
 				s.fileWriterMap[fileName] = writer
 			}
-			_, err = writer.WriteString(res.Key + "," + res.Value + "\n")
-			fmt.Println(res)
+			_, err = writer.WriteString(res.Key + "," + strings.TrimSpace(res.Value) + "\n")
 			count++
 			if (count % FLUSHLEN) == 0 {
 				err = writer.Flush()
@@ -209,7 +239,6 @@ func (s *DataRWServer) WriteLines(stream pb.DataRWService_WriteLinesServer) erro
 		} else if err == io.EOF {
 			return stream.SendAndClose(&pb.WriteLinesResponse{})
 		}
-
 		if err != nil {
 			return err
 		}
