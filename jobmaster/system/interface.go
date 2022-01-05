@@ -17,6 +17,10 @@ type JobMaster interface {
 	Start(ctx context.Context, metaKV metadata.MetaKV) (runtime.TaskRescUnit, error)
 	// Stop the job master.
 	Stop(ctx context.Context) error
+
+	SuspendTasks(tasks ...*model.Task) error
+
+	SuspendAllTasks() error
 	// ID returns the current job id.
 	ID() model.ID
 }

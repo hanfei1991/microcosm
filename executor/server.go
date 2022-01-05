@@ -92,6 +92,27 @@ func (s *Server) CancelBatchTasks(ctx context.Context, req *pb.CancelBatchTasksR
 	return &pb.CancelBatchTasksResponse{}, nil
 }
 
+// SuspendBatchTasks implements pb interface.
+func (s *Server) SuspendBatchTasks(ctx context.Context, req *pb.SuspendBatchTasksRequest) (*pb.SuspendBatchTasksResponse, error) {
+	log.L().Info("suspending tasks", zap.String("req", req.String()))
+	err := s.sch.Suspend(req.TaskIdList)
+	if err != nil {
+		return &pb.SuspendBatchTasksResponse{
+			Err: &pb.Error{
+				Message: err.Error(),
+			},
+		}, nil
+	}
+	return &pb.SuspendBatchTasksResponse{}, nil
+}
+
+// SuspendBatchTasks implements pb interface.
+func (s *Server) ContinueBatchTasks(ctx context.Context, req *pb.SuspendBatchTasksRequest) (*pb.SuspendBatchTasksResponse, error) {
+	log.L().Info("continue tasks", zap.String("req", req.String()))
+	s.sch.Continue(req.TaskIdList)
+	return &pb.SuspendBatchTasksResponse{}, nil
+}
+
 func (s *Server) Stop() {
 	if s.grpcSrv != nil {
 		s.grpcSrv.Stop()

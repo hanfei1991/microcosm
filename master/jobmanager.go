@@ -78,6 +78,20 @@ func (j *JobManager) Start(ctx context.Context, metaKV metadata.MetaKV) error {
 	return nil
 }
 
+func (j *JobManager) SuspendJob(ctx context.Context, req *pb.SuspendJobRequest) *pb.SuspendJobResponse {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	task, ok := j.jobMasters[model.ID(req.JobId)]
+	if !ok {
+		return &pb.SuspendJobResponse{Err: &pb.Error{Message: "No such job"}}
+	}
+	err := j.Master.AsyncSuspendTasks(task)
+	if err != nil {
+		return &pb.SuspendJobResponse{Err: &pb.Error{Message: err.Error()}}
+	}
+	return &pb.SuspendJobResponse{}
+}
+
 func (j *JobManager) CancelJob(ctx context.Context, req *pb.CancelJobRequest) *pb.CancelJobResponse {
 	j.mu.Lock()
 	defer j.mu.Unlock()

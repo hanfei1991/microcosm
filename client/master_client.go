@@ -77,6 +77,10 @@ func (c *MasterClient) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) 
 	return c.client.SubmitJob(ctx, req)
 }
 
+func (c *MasterClient) SuspendJob(ctx context.Context, req *pb.SuspendJobRequest) (resp *pb.SuspendJobResponse, err error) {
+	return c.client.SuspendJob(ctx, req)
+}
+
 func (c *MasterClient) CancelJob(ctx context.Context, req *pb.CancelJobRequest) (resp *pb.CancelJobResponse, err error) {
 	return c.client.CancelJob(ctx, req)
 }

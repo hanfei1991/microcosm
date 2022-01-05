@@ -22,6 +22,8 @@ service Master {
         //};
     }
 
+    rpc SuspendJob(SuspendJobRequest) returns(SuspendJobResponse) {}
+
     rpc CancelJob(CancelJobRequest) returns(CancelJobResponse) {}
 
     //GetMembers returns the available master members
@@ -79,9 +81,17 @@ message CancelJobRequest {
     int32 job_id = 1;
 }
 
+message SuspendJobRequest {
+    int32 job_id = 1;
+}
+
 message SubmitJobResponse {
     Error err = 1;
     int32 job_id = 2;
+}
+
+message SuspendJobResponse {
+    Error err = 1;
 }
 
 message CancelJobResponse {

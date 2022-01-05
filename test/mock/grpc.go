@@ -6,15 +6,15 @@ import (
 	"sync"
 
 	"github.com/hanfei1991/microcosm/pb"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
 
 var container *grpcContainer
 
 func init() {
-	container = &grpcContainer{
-		servers: make(map[string]GrpcServer),
-	}
+	ResetGrpcCtx()
 }
 
 type grpcContainer struct {
@@ -49,6 +49,8 @@ func (s *masterServerConn) sendRequest(ctx context.Context, req interface{}) (in
 	switch x := req.(type) {
 	case *pb.RegisterExecutorRequest:
 		return s.server.RegisterExecutor(ctx, x)
+	case *pb.SuspendJobRequest:
+		return s.server.SuspendJob(ctx, x)
 	case *pb.SubmitJobRequest:
 		return s.server.SubmitJob(ctx, x)
 	case *pb.HeartbeatRequest:
@@ -68,6 +70,11 @@ type masterServerClient struct {
 func (c *masterServerClient) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorRequest, opts ...grpc.CallOption) (*pb.RegisterExecutorResponse, error) {
 	resp, err := c.conn.sendRequest(ctx, req)
 	return resp.(*pb.RegisterExecutorResponse), err
+}
+
+func (c *masterServerClient) SuspendJob(ctx context.Context, req *pb.SuspendJobRequest, opts ...grpc.CallOption) (*pb.SuspendJobResponse, error) {
+	resp, err := c.conn.sendRequest(ctx, req)
+	return resp.(*pb.SuspendJobResponse), err
 }
 
 func (c *masterServerClient) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest, opts ...grpc.CallOption) (*pb.SubmitJobResponse, error) {
@@ -148,6 +155,7 @@ func (s *baseServer) Stop() {
 	container.mu.Lock()
 	defer container.mu.Unlock()
 	_, ok := container.servers[s.addr]
+	log.L().Logger.Info("server is cancelled", zap.String("ip", s.addr))
 	if ok {
 		delete(container.servers, s.addr)
 	}
@@ -167,6 +175,11 @@ func (c *executorClient) CancelBatchTasks(ctx context.Context, req *pb.CancelBat
 	return resp.(*pb.CancelBatchTasksResponse), err
 }
 
+func (c *executorClient) SuspendBatchTasks(ctx context.Context, req *pb.SuspendBatchTasksRequest, opts ...grpc.CallOption) (*pb.SuspendBatchTasksResponse, error) {
+	resp, err := c.conn.sendRequest(ctx, req)
+	return resp.(*pb.SuspendBatchTasksResponse), err
+}
+
 func (s *executorServerConn) Close() error {
 	return nil
 }
@@ -181,6 +194,8 @@ func (s *executorServerConn) sendRequest(ctx context.Context, req interface{}) (
 		return s.server.SubmitBatchTasks(ctx, x)
 	case *pb.CancelBatchTasksRequest:
 		return s.server.CancelBatchTasks(ctx, x)
+	case *pb.SuspendBatchTasksRequest:
+		return s.server.SuspendBatchTasks(ctx, x)
 	}
 	return nil, errors.New("unknown request")
 }
@@ -224,4 +239,10 @@ func NewExecutorServer(addr string, server pb.ExecutorServer) (GrpcServer, error
 type Conn interface {
 	Close() error
 	sendRequest(ctx context.Context, req interface{}) (interface{}, error)
+}
+
+func ResetGrpcCtx() {
+	container = &grpcContainer{
+		servers: make(map[string]GrpcServer),
+	}
 }

@@ -49,3 +49,15 @@ func (m *jobMaster) Stop(ctx context.Context) error {
 	m.Cancel()
 	return nil
 }
+
+func (m *jobMaster) SuspendAllTasks() error {
+	err := m.AsyncSuspendTasks(m.stage1...)
+	if err != nil {
+		return err
+	}
+	return m.AsyncSuspendTasks(m.stage2...)
+}
+
+func (m *jobMaster) SuspendTasks(tasks ...*model.Task) error {
+	return m.AsyncSuspendTasks(tasks...)
+}
