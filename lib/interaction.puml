@@ -1,0 +1,40 @@
+@startuml
+actor       masterA
+entity      workerA
+entity      workerB
+collections executors
+actor       masterB
+database    metastore
+control     serverMaster
+masterA ->o metastore : register itself
+masterA -> metastore : request config & status
+masterA <-- metastore : response config & status
+masterA -> serverMaster : request executor resources
+masterA <-- serverMaster : response executor quota
+masterA -> executors : request launch workerA
+masterA -> executors : request launch workerB
+create workerA
+workerA o<-[#0000FF] executors: launched
+masterA <-- executors : response launch workerA
+create workerB
+workerB o<-[#0000FF] executors: launched
+masterA <-- executors : response launch workerB
+masterA <-- workerA : heartbeat PING
+masterA -> workerA : heartbeat PONG
+masterA <-- workerB : heartbeat PING
+masterA -> workerB : heartbeat PONG
+destroy masterA
+
+create masterB
+serverMaster -> masterB : failover
+masterB ->o metastore : register itself
+masterB -> metastore : request config & status
+masterB <-- metastore : response config & status
+activate masterB
+masterB -> masterB : wait to be contacted by workers
+workerA --> masterB : heartbeat PING & update status
+workerA <-- masterB : heartbeat PONG
+workerB --> masterB : heartbeat PING & update status
+workerB <-- masterB : heartbeat PONG
+deactivate masterB
+@enduml

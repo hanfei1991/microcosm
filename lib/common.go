@@ -45,18 +45,12 @@ type workerToMasterHeartbeatMessage struct {
 	Status       WorkerStatus  `json:"status"`
 	FromWorkerID WorkerID      `json:"from-id"`
 	Epoch        epoch         `json:"epoch"`
-
-	// Info is for customized messages
-	Info interface{} `json:"info"`
 }
 
 type masterToWorkerHeartbeatMessage struct {
 	SendTime  monotonicTime `json:"send-time"`
 	ReplyTime time.Time     `json:"reply-time"`
 	Epoch     epoch         `json:"epoch"`
-
-	// Info is for customized messages
-	Info interface{} `json:"info"`
 }
 
 type MasterMetaKVData struct {

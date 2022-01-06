@@ -10,6 +10,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
+	"github.com/hanfei1991/microcosm/servermaster/resource"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -19,28 +20,43 @@ import (
 type Master interface {
 	Init(ctx context.Context) error
 	Poll(ctx context.Context) error
-	InternalID() MasterID
+	ID() MasterID
 }
 
-type master interface {
-	// Master defines all exported methods
-	Master
+type MasterImpl interface {
+	// Init provides customized logic for the business logic to initialize.
+	Init(ctx context.Context) error
 
-	// The following methods are "virtual" methods that can be
-	// overridden.
-	checkHeartBeats(ctx context.Context) error
-	onMessage(ctx context.Context, workerID WorkerID) error
+	// Tick is called on a fixed interval.
+	Tick(ctx context.Context) error
 
-	createWorker(ctx context.Context) error
+	// OnWorkerDispatched is called when a request to launch a worker is finished.
+	OnWorkerDispatched(worker WorkerHandle, result error) error
+
+	// OnWorkerOnline is called when the first heartbeat for a worker is received.
+	OnWorkerOnline(worker WorkerHandle) error
+
+	// OnWorkerOffline is called when a worker exits or has timed out.
+	OnWorkerOffline(worker WorkerHandle) error
+
+	// OnWorkerMessage is called when a customized message is received.
+	OnWorkerMessage(worker WorkerHandle, topic p2p.Topic, message interface{}) error
+}
+
+type WorkerHandle interface {
+	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) error
+	Status() WorkerStatus
+	Workload() resource.RescUnit
 }
 
 type BaseMaster struct {
-	master
+	impl Master
 
 	messageHandlerManager p2p.MessageHandlerManager
 	messageRouter         p2p.MessageRouter
 	metaKVClient          metadata.MetaKV
 	executorClientManager *client.Manager
+	serverMasterClient    *client.MasterClient
 	epochGenerator        EpochGenerator
 
 	workers *workerManager
@@ -67,7 +83,7 @@ func (m *BaseMaster) InternalID() MasterID {
 }
 
 func (m *BaseMaster) createWorker(ctx context.Context) error {
-	
+
 }
 
 func (m *BaseMaster) initMessageHandlers(ctx context.Context) error {
@@ -157,9 +173,9 @@ func (m *workerManager) Tick(ctx context.Context, router p2p.MessageRouter) erro
 			continue
 		}
 		reply := &masterToWorkerHeartbeatMessage{
-			SendTime: workerInfo.lastHeartBeatSendTime,
+			SendTime:  workerInfo.lastHeartBeatSendTime,
 			ReplyTime: time.Now(),
-			Epoch: m.masterEpoch,
+			Epoch:     m.masterEpoch,
 			// TODO put customized info
 		}
 		workerNodeID := workerInfo.NodeID
