@@ -12,6 +12,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -29,6 +30,8 @@ type master interface {
 	// overridden.
 	checkHeartBeats(ctx context.Context) error
 	onMessage(ctx context.Context, workerID WorkerID) error
+
+	createWorker(ctx context.Context) error
 }
 
 type BaseMaster struct {
@@ -61,6 +64,10 @@ func (m *BaseMaster) Init(ctx context.Context) error {
 
 func (m *BaseMaster) InternalID() MasterID {
 	return m.id
+}
+
+func (m *BaseMaster) createWorker(ctx context.Context) error {
+	
 }
 
 func (m *BaseMaster) initMessageHandlers(ctx context.Context) error {
@@ -124,6 +131,10 @@ type workerManager struct {
 	mu            sync.Mutex
 	initStartTime time.Time
 	workerInfos   map[WorkerID]*WorkerInfo
+
+	// read-only
+	masterEpoch epoch
+	masterID    MasterID
 }
 
 func (m *workerManager) Initialized(ctx context.Context) (bool, error) {
@@ -139,8 +150,40 @@ func (m *workerManager) Initialized(ctx context.Context) (bool, error) {
 	return false, nil
 }
 
-func (m *workerManager) Tick(ctx context.Context) {
+func (m *workerManager) Tick(ctx context.Context, router p2p.MessageRouter) error {
 	// respond to worker heartbeats
+	for _, workerInfo := range m.workerInfos {
+		if !workerInfo.hasPendingHeartbeat {
+			continue
+		}
+		reply := &masterToWorkerHeartbeatMessage{
+			SendTime: workerInfo.lastHeartBeatSendTime,
+			ReplyTime: time.Now(),
+			Epoch: m.masterEpoch,
+			// TODO put customized info
+		}
+		workerNodeID := workerInfo.NodeID
+		log.L().Debug("Sending heartbeat response to worker",
+			zap.String("worker-id", string(workerInfo.ID)),
+			zap.String("worker-node-id", string(workerNodeID)),
+			zap.Any("message", reply))
+
+		msgClient := router.GetClient(workerNodeID)
+		if msgClient == nil {
+			// Retry on the next tick
+			continue
+		}
+		_, err := msgClient.TrySendMessage(ctx, masterToWorkerHeartbeatTopic(m.masterID), reply)
+		if cerror.ErrPeerMessageSendTryAgain.Equal(err) {
+			log.L().Warn("Sending heartbeat response to worker failed: message client congested",
+				zap.String("worker-id", string(workerInfo.ID)),
+				zap.String("worker-node-id", string(workerNodeID)),
+				zap.Any("message", reply))
+			// Retry on the next tick
+			continue
+		}
+		workerInfo.hasPendingHeartbeat = false
+	}
 }
 
 func (m *workerManager) HandleHeartBeat(msg *workerToMasterHeartbeatMessage) {
@@ -153,7 +196,9 @@ func (m *workerManager) HandleHeartBeat(msg *workerToMasterHeartbeatMessage) {
 		log.L().Info("discarding heartbeat for non-existing worker",
 			zap.Any("msg", msg))
 	}
-	workerInfo.lastHeartBeat = time.Now()
+	workerInfo.lastHeartBeatReceiveTime = time.Now()
+	workerInfo.lastHeartBeatSendTime = msg.SendTime
+	workerInfo.hasPendingHeartbeat = true
 }
 
 func (m *workerManager) GetWorkerInfo(id WorkerID) (*WorkerInfo, bool) {

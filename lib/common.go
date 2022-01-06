@@ -12,7 +12,8 @@ type (
 	WorkerID     string
 	WorkerStatus int32
 
-	epoch = int64
+	epoch         = int64
+	monotonicTime = uint64
 )
 
 const (
@@ -40,20 +41,19 @@ func masterToWorkerHeartbeatTopic(masterID MasterID) p2p.Topic {
 }
 
 type workerToMasterHeartbeatMessage struct {
-	SendTime     time.Time    `json:"send-time"`
-	Status       WorkerStatus `json:"status"`
-	FromWorkerID WorkerID     `json:"from-id"`
-	Epoch        epoch        `json:"epoch"`
+	SendTime     monotonicTime `json:"send-time"`
+	Status       WorkerStatus  `json:"status"`
+	FromWorkerID WorkerID      `json:"from-id"`
+	Epoch        epoch         `json:"epoch"`
 
 	// Info is for customized messages
 	Info interface{} `json:"info"`
 }
 
 type masterToWorkerHeartbeatMessage struct {
-	SendTime     time.Time `json:"send-time"`
-	ReplyTime    time.Time `json:"reply-time"`
-	FromMasterID MasterID  `json:"from-id"`
-	Epoch        epoch     `json:"epoch"`
+	SendTime  monotonicTime `json:"send-time"`
+	ReplyTime time.Time     `json:"reply-time"`
+	Epoch     epoch         `json:"epoch"`
 
 	// Info is for customized messages
 	Info interface{} `json:"info"`
@@ -67,9 +67,12 @@ type MasterMetaKVData struct {
 }
 
 type WorkerInfo struct {
-	ID     WorkerID   `json:"id"`
-	Addr   string     `json:"addr"`
-	NodeID p2p.NodeID `json:"node-id"`
+	ID     WorkerID
+	Addr   string
+	NodeID p2p.NodeID
 
-	lastHeartBeat time.Time
+	// fields for internal use by the Master.
+	lastHeartBeatReceiveTime time.Time
+	lastHeartBeatSendTime    monotonicTime
+	hasPendingHeartbeat      bool
 }
