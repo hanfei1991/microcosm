@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hanfei1991/microcosm/pb"
@@ -24,25 +25,51 @@ type clientHolder struct {
 }
 
 type MasterClient struct {
-	urls    []string
-	leader  string
-	clients map[string]*clientHolder
+	urls        []string
+	leader      string
+	clientsLock sync.RWMutex
+	clients     map[string]*clientHolder
+}
+
+func (c *MasterClient) dialMaster(ctx context.Context, addr string) error {
+	ctx, cancel := context.WithTimeout(ctx, dialTimeout)
+	defer cancel()
+	conn, err := grpc.DialContext(ctx, addr, grpc.WithInsecure(), grpc.WithBlock())
+	if err != nil {
+		return errors.Wrap(errors.ErrGrpcBuildConn, err)
+	}
+	c.clients[addr] = &clientHolder{
+		conn:   conn,
+		client: pb.NewMasterClient(conn),
+	}
+	return nil
+}
+
+// UpdateClients receives a list of server master addresses, dials to server
+// master that is not maintained in current MasterClient.
+func (c *MasterClient) UpdateClients(ctx context.Context, urls []string) {
+	for _, addr := range urls {
+		// TODO: refine address with and without scheme
+		addr = strings.Replace(addr, "http://", "", 1)
+		if _, ok := c.clients[addr]; !ok {
+			c.urls = append(c.urls, addr)
+			log.L().Info("add new server master client", zap.String("addr", addr))
+			err := c.dialMaster(ctx, addr)
+			if err != nil {
+				log.L().Warn("dial to server master failed", zap.String("addr", addr), zap.Error(err))
+			}
+		}
+	}
 }
 
 func (c *MasterClient) init(ctx context.Context) error {
 	log.L().Logger.Info("dialing master", zap.Strings("urls", c.urls))
+	c.clientsLock.Lock()
+	defer c.clientsLock.Unlock()
 	for _, addr := range c.urls {
-		ctx, cancel := context.WithTimeout(ctx, dialTimeout)
-		conn, err := grpc.DialContext(ctx, addr, grpc.WithInsecure(), grpc.WithBlock())
+		err := c.dialMaster(ctx, addr)
 		if err != nil {
 			log.L().Warn("dial to one of server master failed", zap.String("addr", addr))
-			cancel()
-			continue
-		}
-		cancel()
-		c.clients[addr] = &clientHolder{
-			conn:   conn,
-			client: pb.NewMasterClient(conn),
 		}
 	}
 	if len(c.clients) == 0 {
@@ -53,6 +80,8 @@ func (c *MasterClient) init(ctx context.Context) error {
 
 func (c *MasterClient) initForTest(_ context.Context) error {
 	log.L().Logger.Info("dialing master", zap.String("leader", c.leader))
+	c.clientsLock.Lock()
+	defer c.clientsLock.Unlock()
 	for _, addr := range c.urls {
 		conn, err := mock.Dial(addr)
 		if err != nil {
@@ -95,6 +124,8 @@ func (c *MasterClient) rpcWrap(ctx context.Context, req interface{}, respPointer
 	fullMethodName := runtime.FuncForPC(pc).Name()
 	methodName := fullMethodName[strings.LastIndexByte(fullMethodName, '.')+1:]
 
+	c.clientsLock.RLock()
+	defer c.clientsLock.RUnlock()
 	var err error
 	for _, cliH := range c.clients {
 		params := []reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(req)}
@@ -179,6 +210,8 @@ func (c *MasterClient) ReportExecutorWorkload(
 
 // Close closes underlying resources
 func (c *MasterClient) Close() (err error) {
+	c.clientsLock.Lock()
+	defer c.clientsLock.Unlock()
 	for _, cliH := range c.clients {
 		err1 := cliH.conn.Close()
 		if err1 != nil {
@@ -191,6 +224,8 @@ func (c *MasterClient) Close() (err error) {
 // GetLeaderClient exposes pb.MasterClient, note this can be used when c.leader
 // is up to date.
 func (c *MasterClient) GetLeaderClient() pb.MasterClient {
+	c.clientsLock.RLock()
+	defer c.clientsLock.RUnlock()
 	leader, ok := c.clients[c.leader]
 	if !ok {
 		log.L().Panic("leader client not found", zap.String("leader", c.leader))
