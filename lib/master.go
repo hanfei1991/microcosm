@@ -2,18 +2,18 @@ package lib
 
 import (
 	"context"
-	"encoding/json"
 	"sync"
 	"time"
 
 	"github.com/hanfei1991/microcosm/client"
-	"github.com/hanfei1991/microcosm/pkg/adapter"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/servermaster/resource"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/workerpool"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
 
@@ -24,8 +24,10 @@ type Master interface {
 }
 
 type MasterImpl interface {
-	// Init provides customized logic for the business logic to initialize.
-	Init(ctx context.Context) error
+	Master
+
+	// InitImpl provides customized logic for the business logic to initialize.
+	InitImpl(ctx context.Context) error
 
 	// Tick is called on a fixed interval.
 	Tick(ctx context.Context) error
@@ -37,10 +39,14 @@ type MasterImpl interface {
 	OnWorkerOnline(worker WorkerHandle) error
 
 	// OnWorkerOffline is called when a worker exits or has timed out.
-	OnWorkerOffline(worker WorkerHandle) error
+	OnWorkerOffline(worker WorkerHandle, reason error) error
 
 	// OnWorkerMessage is called when a customized message is received.
 	OnWorkerMessage(worker WorkerHandle, topic p2p.Topic, message interface{}) error
+
+	// OnMetadataInit is called when the master is initialized and the metadata might
+	// need to be checked and fixed.
+	OnMetadataInit(etx interface{}) (interface{}, error)
 }
 
 type WorkerHandle interface {
@@ -50,20 +56,47 @@ type WorkerHandle interface {
 }
 
 type BaseMaster struct {
-	impl Master
+	MasterImpl
 
 	messageHandlerManager p2p.MessageHandlerManager
 	messageRouter         p2p.MessageRouter
 	metaKVClient          metadata.MetaKV
 	executorClientManager *client.Manager
 	serverMasterClient    *client.MasterClient
-	epochGenerator        EpochGenerator
+	metadataManager       MasterMetadataManager
 
 	workers *workerManager
+	
+	pool workerpool.AsyncPool
 
 	// read-only fields
-	currentEpoch epoch
+	currentEpoch atomic.Int64
 	id           MasterID
+}
+
+func NewBaseMaster(
+	ctx context.Context,
+	impl MasterImpl,
+	id MasterID,
+	messageHandlerManager p2p.MessageHandlerManager,
+	messageRouter p2p.MessageRouter,
+	metaKVClient metadata.MetaKV,
+	executorClientManager *client.Manager,
+	serverMasterClient *client.MasterClient,
+	metadataManager MasterMetadataManager,
+) *BaseMaster {
+	return &BaseMaster{
+		MasterImpl:            impl,
+		messageHandlerManager: messageHandlerManager,
+		messageRouter:         messageRouter,
+		metaKVClient:          metaKVClient,
+		executorClientManager: executorClientManager,
+		serverMasterClient:    serverMasterClient,
+		metadataManager:       metadataManager,
+
+		pool:                  workerpool.NewDefaultAsyncPool(4),
+		id:                    id,
+	}
 }
 
 func (m *BaseMaster) Init(ctx context.Context) error {
@@ -71,10 +104,15 @@ func (m *BaseMaster) Init(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	if err := m.initMetadata(ctx); err != nil {
+	isInit, epoch, err := m.metadataManager.FixUpAndInit(ctx, m.OnMetadataInit)
+	if err != nil {
 		return errors.Trace(err)
 	}
-
+	m.currentEpoch.Store(epoch)
+	m.workers = newWorkerManager(m.id, !isInit, epoch)
+	if err := m.InitImpl(ctx); err != nil {
+		return errors.Trace(err)
+	}
 	return nil
 }
 
@@ -82,22 +120,19 @@ func (m *BaseMaster) InternalID() MasterID {
 	return m.id
 }
 
-func (m *BaseMaster) createWorker(ctx context.Context) error {
-
-}
-
 func (m *BaseMaster) initMessageHandlers(ctx context.Context) error {
-	topic := workerToMasterHeartbeatTopic(m.id)
+	topic := HeartbeatPingTopic(m.id)
 	ok, err := m.messageHandlerManager.RegisterHandler(
 		ctx,
 		topic,
-		&workerToMasterHeartbeatMessage{},
+		&HeartbeatPingMessage{},
 		func(sender p2p.NodeID, value p2p.MessageValue) error {
-			heartBeatMsg := value.(*workerToMasterHeartbeatMessage)
-			if heartBeatMsg.Epoch < m.currentEpoch {
+			heartBeatMsg := value.(*HeartbeatPingMessage)
+			curEpoch := m.currentEpoch.Load()
+			if heartBeatMsg.Epoch < curEpoch {
 				log.L().Info("stale message dropped",
 					zap.Any("message", heartBeatMsg),
-					zap.Int64("cur-epoch", m.currentEpoch))
+					zap.Int64("cur-epoch", curEpoch))
 				return nil
 			}
 			m.workers.HandleHeartBeat(heartBeatMsg)
@@ -113,49 +148,34 @@ func (m *BaseMaster) initMessageHandlers(ctx context.Context) error {
 	return nil
 }
 
-func (m *BaseMaster) initMetadata(ctx context.Context) error {
-	key := adapter.JobKeyAdapter.Encode(string(m.InternalID()))
-	epoch, err := m.epochGenerator.NewEpoch(ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	masterInfo := &MasterMetaKVData{
-		ID: m.id,
-		// TODO get Addr and NodeID from ctx
-		Addr:   "",
-		NodeID: "",
-		Epoch:  epoch,
-	}
-	log.L().Info("initializing master to metastore",
-		zap.Any("info", masterInfo))
-
-	jsonBytes, err := json.Marshal(masterInfo)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	_, err = m.metaKVClient.Put(ctx, key, string(jsonBytes))
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
-}
-
 // workerManager is for private use by BaseMaster.
 type workerManager struct {
-	mu            sync.Mutex
-	initStartTime time.Time
-	workerInfos   map[WorkerID]*WorkerInfo
+	mu                   sync.Mutex
+	needWaitForHeartBeat bool
+	initStartTime        time.Time
+	workerInfos          map[WorkerID]*WorkerInfo
 
 	// read-only
 	masterEpoch epoch
 	masterID    MasterID
 }
 
+func newWorkerManager(id MasterID, needWait bool, curEpoch epoch) *workerManager {
+	return &workerManager{
+		needWaitForHeartBeat: needWait,
+		workerInfos:          make(map[WorkerID]*WorkerInfo),
+		masterEpoch:          curEpoch,
+		masterID:             id,
+	}
+}
+
 func (m *workerManager) Initialized(ctx context.Context) (bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	if !m.needWaitForHeartBeat {
+		return true, nil
+	}
 
 	if m.initStartTime.IsZero() {
 		m.initStartTime = time.Now()
@@ -172,7 +192,7 @@ func (m *workerManager) Tick(ctx context.Context, router p2p.MessageRouter) erro
 		if !workerInfo.hasPendingHeartbeat {
 			continue
 		}
-		reply := &masterToWorkerHeartbeatMessage{
+		reply := &HeartbeatPongMessage{
 			SendTime:  workerInfo.lastHeartBeatSendTime,
 			ReplyTime: time.Now(),
 			Epoch:     m.masterEpoch,
@@ -189,7 +209,7 @@ func (m *workerManager) Tick(ctx context.Context, router p2p.MessageRouter) erro
 			// Retry on the next tick
 			continue
 		}
-		_, err := msgClient.TrySendMessage(ctx, masterToWorkerHeartbeatTopic(m.masterID), reply)
+		_, err := msgClient.TrySendMessage(ctx, HeartbeatPongTopic(m.masterID), reply)
 		if cerror.ErrPeerMessageSendTryAgain.Equal(err) {
 			log.L().Warn("Sending heartbeat response to worker failed: message client congested",
 				zap.String("worker-id", string(workerInfo.ID)),
@@ -202,7 +222,7 @@ func (m *workerManager) Tick(ctx context.Context, router p2p.MessageRouter) erro
 	}
 }
 
-func (m *workerManager) HandleHeartBeat(msg *workerToMasterHeartbeatMessage) {
+func (m *workerManager) HandleHeartBeat(msg *HeartbeatPingMessage) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 

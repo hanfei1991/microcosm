@@ -32,22 +32,22 @@ const (
 	workerTimeoutGracefulDuration = time.Second * 5
 )
 
-func workerToMasterHeartbeatTopic(masterID MasterID) p2p.Topic {
-	return fmt.Sprintf("heartbeat-%s", string(masterID))
+func HeartbeatPingTopic(masterID MasterID) p2p.Topic {
+	return fmt.Sprintf("heartbeat-ping-%s", string(masterID))
 }
 
-func masterToWorkerHeartbeatTopic(masterID MasterID) p2p.Topic {
-	return fmt.Sprintf("heartbeat-%s-resp", string(masterID))
+func HeartbeatPongTopic(masterID MasterID) p2p.Topic {
+	return fmt.Sprintf("heartbeat-pong-%s", string(masterID))
 }
 
-type workerToMasterHeartbeatMessage struct {
+type HeartbeatPingMessage struct {
 	SendTime     monotonicTime `json:"send-time"`
 	Status       WorkerStatus  `json:"status"`
 	FromWorkerID WorkerID      `json:"from-id"`
 	Epoch        epoch         `json:"epoch"`
 }
 
-type masterToWorkerHeartbeatMessage struct {
+type HeartbeatPongMessage struct {
 	SendTime  monotonicTime `json:"send-time"`
 	ReplyTime time.Time     `json:"reply-time"`
 	Epoch     epoch         `json:"epoch"`
@@ -58,6 +58,9 @@ type MasterMetaKVData struct {
 	Addr   string     `json:"addr"`
 	NodeID p2p.NodeID `json:"node-id"`
 	Epoch  epoch      `json:"epoch"`
+
+	// Ext holds business-specific data
+	Ext    interface{} `json:"ext"`
 }
 
 type WorkerInfo struct {
