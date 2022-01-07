@@ -133,7 +133,7 @@ func (s *Server) startForTest(ctx context.Context) (err error) {
 }
 
 func (s *Server) Run(ctx context.Context) error {
-	if test.GlobalTestFlag {
+	if test.GetGlobalTestFlag() {
 		return s.startForTest(ctx)
 	}
 
@@ -291,7 +291,7 @@ func (s *Server) keepHeartbeat(ctx context.Context) error {
 	ticker := time.NewTicker(s.cfg.KeepAliveInterval)
 	s.lastHearbeatTime = time.Now()
 	defer func() {
-		if test.GlobalTestFlag {
+		if test.GetGlobalTestFlag() {
 			s.testCtx.NotifyExecutorChange(&test.ExecutorChangeEvent{
 				Tp:   test.Delete,
 				Time: time.Now(),

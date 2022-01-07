@@ -12,12 +12,8 @@ import (
 )
 
 func TestMasterClient(t *testing.T) {
-	t.Parallel()
-	testFlag := test.GlobalTestFlag
-	test.GlobalTestFlag = true
-	defer func() {
-		test.GlobalTestFlag = testFlag
-	}()
+	test.UpdateTestFlag(true)
+	defer test.UpdateTestFlag(false)
 
 	ctx := context.Background()
 	abnormalHost := "127.0.0.1:10003"

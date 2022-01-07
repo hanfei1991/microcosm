@@ -92,7 +92,7 @@ func NewMasterClient(ctx context.Context, join []string) (*MasterClient, error) 
 		clients: make(map[string]*clientHolder),
 		dialer:  dialImpl,
 	}
-	if test.GlobalTestFlag {
+	if test.GetGlobalTestFlag() {
 		client.dialer = mockDialImpl
 	}
 	err := client.init(ctx, join)

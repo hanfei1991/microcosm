@@ -281,7 +281,7 @@ func (s *Server) Stop() {
 
 // Run the master-server.
 func (s *Server) Run(ctx context.Context) (err error) {
-	if test.GlobalTestFlag {
+	if test.GetGlobalTestFlag() {
 		return s.startForTest(ctx)
 	}
 
