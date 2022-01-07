@@ -13,7 +13,7 @@ func GetGlobalTestFlag() bool {
 	return globalTestFlag.Load()
 }
 
-// UpdateTestFlag update global test flag to given value
-func UpdateTestFlag(val bool) {
+// SetGlobalTestFlag sets global test flag to given value
+func SetGlobalTestFlag(val bool) {
 	globalTestFlag.Store(val)
 }

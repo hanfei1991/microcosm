@@ -14,8 +14,8 @@ import (
 )
 
 func TestClientManager(t *testing.T) {
-	test.UpdateTestFlag(true)
-	defer test.UpdateTestFlag(false)
+	test.SetGlobalTestFlag(true)
+	defer test.SetGlobalTestFlag(false)
 
 	manager := client.NewClientManager()
 	require.Nil(t, manager.MasterClient())
