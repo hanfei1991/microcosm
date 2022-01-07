@@ -143,7 +143,8 @@ func (c *MasterClient) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) 
 }
 
 func (c *MasterClient) SuspendJob(ctx context.Context, req *pb.SuspendJobRequest) (resp *pb.SuspendJobResponse, err error) {
-	return c.client.SuspendJob(ctx, req)
+	err = c.rpcWrap(ctx, req, &resp)
+	return
 }
 
 func (c *MasterClient) CancelJob(ctx context.Context, req *pb.CancelJobRequest) (resp *pb.CancelJobResponse, err error) {
