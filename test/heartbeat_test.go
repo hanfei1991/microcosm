@@ -21,8 +21,8 @@ func TestT(t *testing.T) {
 		panic(err)
 	}
 
-	test.UpdateTestFlag(true)
-	defer test.UpdateTestFlag(false)
+	test.SetGlobalTestFlag(true)
+	defer test.SetGlobalTestFlag(false)
 	TestingT(t)
 }
 
