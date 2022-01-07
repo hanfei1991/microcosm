@@ -29,92 +29,84 @@ type MasterClient struct {
 	leader      string
 	clientsLock sync.RWMutex
 	clients     map[string]*clientHolder
+	dialer      dialFunc
 }
 
-func (c *MasterClient) dialMaster(ctx context.Context, addr string) error {
+type dialFunc func(ctx context.Context, addr string) (*clientHolder, error)
+
+var dialImpl = func(ctx context.Context, addr string) (*clientHolder, error) {
 	ctx, cancel := context.WithTimeout(ctx, dialTimeout)
 	defer cancel()
 	conn, err := grpc.DialContext(ctx, addr, grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {
-		return errors.Wrap(errors.ErrGrpcBuildConn, err)
+		return nil, errors.Wrap(errors.ErrGrpcBuildConn, err)
 	}
-	c.clients[addr] = &clientHolder{
+	return &clientHolder{
 		conn:   conn,
 		client: pb.NewMasterClient(conn),
+	}, nil
+}
+
+var mockDialImpl = func(ctx context.Context, addr string) (*clientHolder, error) {
+	conn, err := mock.Dial(addr)
+	if err != nil {
+		return nil, errors.Wrap(errors.ErrGrpcBuildConn, err)
 	}
-	return nil
+	return &clientHolder{
+		conn:   conn,
+		client: mock.NewMasterClient(conn),
+	}, nil
 }
 
 // UpdateClients receives a list of server master addresses, dials to server
 // master that is not maintained in current MasterClient.
 func (c *MasterClient) UpdateClients(ctx context.Context, urls []string) {
+	c.clientsLock.Lock()
+	defer c.clientsLock.Unlock()
 	for _, addr := range urls {
 		// TODO: refine address with and without scheme
 		addr = strings.Replace(addr, "http://", "", 1)
 		if _, ok := c.clients[addr]; !ok {
-			c.urls = append(c.urls, addr)
 			log.L().Info("add new server master client", zap.String("addr", addr))
-			err := c.dialMaster(ctx, addr)
+			cliH, err := c.dialer(ctx, addr)
 			if err != nil {
 				log.L().Warn("dial to server master failed", zap.String("addr", addr), zap.Error(err))
+				continue
 			}
+			c.urls = append(c.urls, addr)
+			c.clients[addr] = cliH
 		}
 	}
 }
 
-func (c *MasterClient) init(ctx context.Context) error {
-	log.L().Logger.Info("dialing master", zap.Strings("urls", c.urls))
-	c.clientsLock.Lock()
-	defer c.clientsLock.Unlock()
-	for _, addr := range c.urls {
-		err := c.dialMaster(ctx, addr)
-		if err != nil {
-			log.L().Warn("dial to one of server master failed", zap.String("addr", addr))
-		}
-	}
+func (c *MasterClient) init(ctx context.Context, urls []string) error {
+	c.UpdateClients(ctx, urls)
 	if len(c.clients) == 0 {
 		return errors.ErrGrpcBuildConn.GenWithStack("failed to dial to master, urls: %v", c.urls)
 	}
 	return nil
 }
 
-func (c *MasterClient) initForTest(_ context.Context) error {
-	log.L().Logger.Info("dialing master", zap.String("leader", c.leader))
-	c.clientsLock.Lock()
-	defer c.clientsLock.Unlock()
-	for _, addr := range c.urls {
-		conn, err := mock.Dial(addr)
-		if err != nil {
-			log.L().Warn("mock dial to one of server master failed", zap.String("addr", addr))
-			continue
-		}
-		c.clients[addr] = &clientHolder{
-			conn:   conn,
-			client: mock.NewMasterClient(conn),
-		}
-	}
-	if len(c.clients) == 0 {
-		return errors.ErrGrpcBuildConn.GenWithStack("failed to dial to server master, urls: %v", c.urls)
-	}
-	return nil
-}
-
 func NewMasterClient(ctx context.Context, join []string) (*MasterClient, error) {
 	client := &MasterClient{
-		urls:    join,
 		clients: make(map[string]*clientHolder),
+		dialer:  dialImpl,
 	}
-	client.leader = client.urls[0]
-	var err error
 	if test.GlobalTestFlag {
-		err = client.initForTest(ctx)
-	} else {
-		err = client.init(ctx)
+		client.dialer = mockDialImpl
 	}
+	err := client.init(ctx, join)
 	if err != nil {
 		return nil, err
 	}
+	// TODO: use correct leader
+	client.leader = client.urls[0]
 	return client, nil
+}
+
+// Endpoints returns current server master addresses
+func (c *MasterClient) Endpoints() []string {
+	return c.urls
 }
 
 // rpcWrap calls rpc to server master via pb.MasterClient in clients one by one,
