@@ -2,6 +2,7 @@ package lib
 
 import (
 	"context"
+	"github.com/hanfei1991/microcosm/pb"
 	"sync"
 	"time"
 
@@ -21,6 +22,7 @@ type Master interface {
 	Init(ctx context.Context) error
 	Poll(ctx context.Context) error
 	ID() MasterID
+	Close(ctx context.Context) error
 }
 
 type MasterImpl interface {
@@ -47,6 +49,9 @@ type MasterImpl interface {
 	// OnMetadataInit is called when the master is initialized and the metadata might
 	// need to be checked and fixed.
 	OnMetadataInit(etx interface{}) (interface{}, error)
+
+	// CloseImpl is called when the master is being closed
+	CloseImpl(ctx context.Context) error
 }
 
 type WorkerHandle interface {
@@ -66,12 +71,15 @@ type BaseMaster struct {
 	metadataManager       MasterMetadataManager
 
 	workers *workerManager
-	
+
 	pool workerpool.AsyncPool
 
 	// read-only fields
 	currentEpoch atomic.Int64
 	id           MasterID
+
+	wg    sync.WaitGroup
+	errCh chan error
 }
 
 func NewBaseMaster(
@@ -94,8 +102,8 @@ func NewBaseMaster(
 		serverMasterClient:    serverMasterClient,
 		metadataManager:       metadataManager,
 
-		pool:                  workerpool.NewDefaultAsyncPool(4),
-		id:                    id,
+		pool: workerpool.NewDefaultAsyncPool(4),
+		id:   id,
 	}
 }
 
@@ -118,6 +126,23 @@ func (m *BaseMaster) Init(ctx context.Context) error {
 
 func (m *BaseMaster) InternalID() MasterID {
 	return m.id
+}
+
+func (m *BaseMaster) startBackgroundTasks(ctx context.Context) {
+	m.wg.Add(1)
+	go func() {
+		defer m.wg.Done()
+		if err := m.pool.Run(ctx); err != nil {
+			m.OnError(err)
+		}
+	}()
+}
+
+func (m *BaseMaster) OnError(err error) {
+	select {
+	case m.errCh <- err:
+	default:
+	}
 }
 
 func (m *BaseMaster) initMessageHandlers(ctx context.Context) error {
@@ -146,6 +171,15 @@ func (m *BaseMaster) initMessageHandlers(ctx context.Context) error {
 			zap.String("topic", topic))
 	}
 	return nil
+}
+
+func (m *BaseMaster) CreateWorker(ctx context.Context) error {
+	err := m.pool.Go(ctx, func() {
+
+	})
+	if err != nil {
+		return errors.Trace(err)
+	}
 }
 
 // workerManager is for private use by BaseMaster.
@@ -196,7 +230,6 @@ func (m *workerManager) Tick(ctx context.Context, router p2p.MessageRouter) erro
 			SendTime:  workerInfo.lastHeartBeatSendTime,
 			ReplyTime: time.Now(),
 			Epoch:     m.masterEpoch,
-			// TODO put customized info
 		}
 		workerNodeID := workerInfo.NodeID
 		log.L().Debug("Sending heartbeat response to worker",
@@ -220,6 +253,7 @@ func (m *workerManager) Tick(ctx context.Context, router p2p.MessageRouter) erro
 		}
 		workerInfo.hasPendingHeartbeat = false
 	}
+	return nil
 }
 
 func (m *workerManager) HandleHeartBeat(msg *HeartbeatPingMessage) {

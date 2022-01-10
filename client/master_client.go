@@ -205,6 +205,15 @@ func (c *MasterClient) ReportExecutorWorkload(
 	return
 }
 
+func (c *MasterClient) RequestForScheduleV2(
+	ctx context.Context,
+	req *pb.TaskSchedulerRequest,
+) (*pb.TaskSchedulerResponse, error) {
+	ctx1, cancel := context.WithCancel(ctx)
+	defer cancel()
+	return c.client.ScheduleTask(ctx1, req)
+}
+
 // Close closes underlying resources
 func (c *MasterClient) Close() (err error) {
 	c.clientsLock.Lock()
