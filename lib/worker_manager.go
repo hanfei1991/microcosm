@@ -1,0 +1,243 @@
+package lib
+
+import (
+	"context"
+	"fmt"
+	"sync"
+	"time"
+
+	"github.com/hanfei1991/microcosm/model"
+	derror "github.com/hanfei1991/microcosm/pkg/errors"
+	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/p2p"
+	"go.uber.org/zap"
+)
+
+// workerManager is for private use by BaseMaster.
+type workerManager struct {
+	mu                   sync.Mutex
+	needWaitForHeartBeat bool
+	initStartTime        time.Time
+	workerInfos          map[WorkerID]*WorkerInfo
+
+	// read-only
+	masterEpoch epoch
+	masterID    MasterID
+
+	messageRouter p2p.MessageRouter
+}
+
+type WorkerHandle interface {
+	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) error
+	Status() *WorkerStatus
+	Workload() model.RescUnit
+}
+
+type workerHandleImpl struct {
+	manager  *workerManager
+	workerID WorkerID
+}
+
+func (w *workerHandleImpl) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) error {
+	info, ok := w.manager.getWorkerInfo(w.workerID)
+	if !ok {
+		return derror.ErrWorkerNotFound.GenWithStackByArgs(w.workerID)
+	}
+
+	executorNodeID := info.NodeID
+	messageClient := w.manager.messageRouter.GetClient(executorNodeID)
+
+	prefixedTopic := fmt.Sprintf("worker-message/%s/%s", w.workerID, topic)
+	if messageClient == nil {
+		return derror.ErrMessageClientNotFoundForWorker.GenWithStackByArgs(w.workerID)
+	}
+	_, err := messageClient.TrySendMessage(ctx, prefixedTopic, message)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+func (w *workerHandleImpl) Status() *WorkerStatus {
+	w.manager.mu.Lock()
+	defer w.manager.mu.Unlock()
+
+	info, ok := w.manager.workerInfos[w.workerID]
+	if !ok {
+		// TODO think about how to handle this
+		return nil
+	}
+
+	return &info.status
+}
+
+func (w *workerHandleImpl) Workload() model.RescUnit {
+	w.manager.mu.Lock()
+	defer w.manager.mu.Unlock()
+
+	info, ok := w.manager.workerInfos[w.workerID]
+	if !ok {
+		// worker not found
+		// TODO think about how to handle this
+		return 0
+	}
+
+	return info.workload
+}
+
+func newWorkerManager(id MasterID, needWait bool, curEpoch epoch) *workerManager {
+	return &workerManager{
+		needWaitForHeartBeat: needWait,
+		workerInfos:          make(map[WorkerID]*WorkerInfo),
+		masterEpoch:          curEpoch,
+		masterID:             id,
+	}
+}
+
+func (m *workerManager) Initialized(ctx context.Context) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if !m.needWaitForHeartBeat {
+		return true, nil
+	}
+
+	if m.initStartTime.IsZero() {
+		m.initStartTime = time.Now()
+	}
+	if time.Since(m.initStartTime) > workerTimeoutDuration+workerTimeoutGracefulDuration {
+		return true, nil
+	}
+	return false, nil
+}
+
+func (m *workerManager) Tick(ctx context.Context, router p2p.MessageRouter) error {
+	// respond to worker heartbeats
+	for _, workerInfo := range m.workerInfos {
+		if !workerInfo.hasPendingHeartbeat {
+			continue
+		}
+		reply := &HeartbeatPongMessage{
+			SendTime:  workerInfo.lastHeartBeatSendTime,
+			ReplyTime: time.Now(),
+			Epoch:     m.masterEpoch,
+		}
+		workerNodeID := workerInfo.NodeID
+		log.L().Debug("Sending heartbeat response to worker",
+			zap.String("worker-id", string(workerInfo.ID)),
+			zap.String("worker-node-id", string(workerNodeID)),
+			zap.Any("message", reply))
+
+		msgClient := router.GetClient(workerNodeID)
+		if msgClient == nil {
+			// Retry on the next tick
+			continue
+		}
+		_, err := msgClient.TrySendMessage(ctx, HeartbeatPongTopic(m.masterID), reply)
+		if cerror.ErrPeerMessageSendTryAgain.Equal(err) {
+			log.L().Warn("Sending heartbeat response to worker failed: message client congested",
+				zap.String("worker-id", string(workerInfo.ID)),
+				zap.String("worker-node-id", string(workerNodeID)),
+				zap.Any("message", reply))
+			// Retry on the next tick
+			continue
+		}
+		workerInfo.hasPendingHeartbeat = false
+	}
+	return nil
+}
+
+func (m *workerManager) HandleHeartBeat(msg *HeartbeatPingMessage) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	log.L().Debug("received heartbeat", zap.Any("msg", msg))
+	workerInfo, ok := m.workerInfos[msg.FromWorkerID]
+	if !ok {
+		log.L().Info("discarding heartbeat for non-existing worker",
+			zap.Any("msg", msg))
+		return
+	}
+	workerInfo.lastHeartBeatReceiveTime = time.Now()
+	workerInfo.lastHeartBeatSendTime = msg.SendTime
+	workerInfo.hasPendingHeartbeat = true
+}
+
+func (m *workerManager) UpdateWorkload(msg *WorkloadReportMessage) {
+	info, ok := m.getWorkerInfo(msg.WorkerID)
+	if !ok {
+		log.L().Info("received workload update for non-existing worker",
+			zap.String("master-id", string(m.masterID)),
+			zap.Any("msg", msg))
+		return
+	}
+	info.workload = msg.Workload
+	log.L().Debug("workload updated",
+		zap.String("master-id", string(m.masterID)),
+		zap.Any("msg", msg))
+}
+
+func (m *workerManager) UpdateStatus(msg *StatusUpdateMessage) {
+	info, ok := m.getWorkerInfo(msg.WorkerID)
+	if !ok {
+		log.L().Info("received status update for non-existing worker",
+			zap.String("master-id", string(m.masterID)),
+			zap.Any("msg", msg))
+		return
+	}
+	info.status = msg.Status
+	log.L().Debug("worker status updated",
+		zap.String("master-id", string(m.masterID)),
+		zap.Any("msg", msg))
+}
+
+func (m *workerManager) getWorkerInfo(id WorkerID) (*WorkerInfo, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	value, ok := m.workerInfos[id]
+	if !ok {
+		return nil, false
+	}
+	return value, true
+}
+
+func (m *workerManager) putWorkerInfo(info *WorkerInfo) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	id := info.ID
+	_, exists := m.workerInfos[id]
+	return !exists
+}
+
+func (m *workerManager) removeWorkerInfo(id WorkerID) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	_, exists := m.workerInfos[id]
+	delete(m.workerInfos, id)
+	return exists
+}
+
+func (m *workerManager) onWorkerCreated(id WorkerID, exeuctorNodeID p2p.NodeID) {
+	m.putWorkerInfo(&WorkerInfo{
+		ID:                       id,
+		NodeID:                   exeuctorNodeID,
+		lastHeartBeatReceiveTime: time.Now(),
+		status: WorkerStatus{
+			Code: WorkerStatusInit,
+		},
+		// TODO fix workload
+		workload: 10, // 10 is the initial workload for now.
+	})
+}
+
+func (m *workerManager) getWorkerHandle(id WorkerID) WorkerHandle {
+	return &workerHandleImpl{
+		manager:  m,
+		workerID: id,
+	}
+}
