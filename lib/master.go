@@ -2,14 +2,16 @@ package lib
 
 import (
 	"context"
-	"github.com/hanfei1991/microcosm/pb"
+	"fmt"
 	"sync"
 	"time"
 
 	"github.com/hanfei1991/microcosm/client"
+	"github.com/hanfei1991/microcosm/model"
+	"github.com/hanfei1991/microcosm/pb"
+	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
-	"github.com/hanfei1991/microcosm/servermaster/resource"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -52,12 +54,6 @@ type MasterImpl interface {
 
 	// CloseImpl is called when the master is being closed
 	CloseImpl(ctx context.Context) error
-}
-
-type WorkerHandle interface {
-	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) error
-	Status() WorkerStatus
-	Workload() resource.RescUnit
 }
 
 type BaseMaster struct {
@@ -108,6 +104,8 @@ func NewBaseMaster(
 }
 
 func (m *BaseMaster) Init(ctx context.Context) error {
+	m.startBackgroundTasks(ctx)
+
 	if err := m.initMessageHandlers(ctx); err != nil {
 		return errors.Trace(err)
 	}
@@ -170,16 +168,108 @@ func (m *BaseMaster) initMessageHandlers(ctx context.Context) error {
 		log.L().Panic("duplicate handler",
 			zap.String("topic", topic))
 	}
+
+	topic = WorkloadReportTopic(m.id)
+	ok, err = m.messageHandlerManager.RegisterHandler(
+		ctx,
+		topic,
+		&WorkloadReportMessage{},
+		func(sender p2p.NodeID, value p2p.MessageValue) error {
+			workloadMessage := value.(*WorkloadReportMessage)
+			m.workers.UpdateWorkload(workloadMessage)
+			return nil
+		})
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if !ok {
+		log.L().Panic("duplicate handler",
+			zap.String("topic", topic))
+	}
+
+	topic = StatusUpdateTopic(m.id)
+	ok, err = m.messageHandlerManager.RegisterHandler(
+		ctx,
+		topic,
+		&StatusUpdateMessage{},
+		func(sender p2p.NodeID, value p2p.MessageValue) error {
+			statusUpdateMessage := value.(*StatusUpdateMessage)
+			m.workers.UpdateStatus(statusUpdateMessage)
+			return nil
+		})
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if !ok {
+		log.L().Panic("duplicate handler",
+			zap.String("topic", topic))
+	}
 	return nil
 }
 
-func (m *BaseMaster) CreateWorker(ctx context.Context) error {
+func (m *BaseMaster) CreateWorker(ctx context.Context, workerType WorkerType, config []byte) error {
 	err := m.pool.Go(ctx, func() {
+		// This following API should be refined.
+		resp, err := m.serverMasterClient.ScheduleTask(ctx, &pb.TaskSchedulerRequest{Tasks: []*pb.ScheduleTask{{
+			Task: &pb.TaskRequest{
+				Id: 0,
+			},
+			// TODO (zixiong) implement the real cost.
+			Cost: 10,
+		}}},
+			// TODO (zixiong) make the timeout configurable
+			time.Second*10)
+		if err != nil {
+			err1 := m.OnWorkerDispatched(nil, errors.Trace(err))
+			if err1 != nil {
+				m.OnError(errors.Trace(err))
+			}
+			return
+		}
+		schedule := resp.GetSchedule()
+		if len(schedule) != 1 {
+			panic("unreachable")
+		}
+		executorID := schedule[0].ExecutorId
 
+		executorClient := m.executorClientManager.ExecutorClient(model.ExecutorID(executorID))
+		executorResp, err := executorClient.Send(ctx, &client.ExecutorRequest{
+			Cmd: client.CmdDispatchTask,
+			Req: &pb.DispatchTaskRequest{
+				TaskTypeId: int64(workerType),
+				TaskConfig: config,
+			},
+		})
+		if err != nil {
+			err1 := m.OnWorkerDispatched(nil, errors.Trace(err))
+			if err1 != nil {
+				m.OnError(errors.Trace(err))
+			}
+			return
+		}
+		dispatchTaskResp := executorResp.Resp.(*pb.DispatchTaskResponse)
+		errCode := dispatchTaskResp.GetErrorCode()
+		if errCode != pb.DispatchTaskErrorCode_OK {
+			err1 := m.OnWorkerDispatched(
+				nil, errors.Errorf("dispatch worker failed with error code: %d", errCode))
+			if err1 != nil {
+				m.OnError(errors.Trace(err))
+			}
+			return
+		}
+
+		workerID := WorkerID(dispatchTaskResp.GetWorkerId())
+		m.workers.onWorkerCreated(workerID, executorID)
+		handle := m.workers.getWorkerHandle(workerID)
+
+		if err := m.OnWorkerDispatched(handle, nil); err != nil {
+			m.OnError(errors.Trace(err))
+		}
 	})
 	if err != nil {
 		return errors.Trace(err)
 	}
+	return nil
 }
 
 // workerManager is for private use by BaseMaster.
@@ -192,6 +282,66 @@ type workerManager struct {
 	// read-only
 	masterEpoch epoch
 	masterID    MasterID
+
+	messageRouter p2p.MessageRouter
+}
+
+type WorkerHandle interface {
+	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) error
+	Status() *WorkerStatus
+	Workload() model.RescUnit
+}
+
+type workerHandleImpl struct {
+	manager  *workerManager
+	workerID WorkerID
+}
+
+func (w *workerHandleImpl) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) error {
+	info, ok := w.manager.getWorkerInfo(w.workerID)
+	if !ok {
+		return derror.ErrWorkerNotFound.GenWithStackByArgs(w.workerID)
+	}
+
+	executorNodeID := info.NodeID
+	messageClient := w.manager.messageRouter.GetClient(executorNodeID)
+
+	prefixedTopic := fmt.Sprintf("worker-message/%s/%s", w.workerID, topic)
+	if messageClient == nil {
+		return derror.ErrMessageClientNotFoundForWorker.GenWithStackByArgs(w.workerID)
+	}
+	_, err := messageClient.TrySendMessage(ctx, prefixedTopic, message)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+func (w *workerHandleImpl) Status() *WorkerStatus {
+	w.manager.mu.Lock()
+	defer w.manager.mu.Unlock()
+
+	info, ok := w.manager.workerInfos[w.workerID]
+	if !ok {
+		// TODO think about how to handle this
+		return nil
+	}
+
+	return &info.status
+}
+
+func (w *workerHandleImpl) Workload() model.RescUnit {
+	w.manager.mu.Lock()
+	defer w.manager.mu.Unlock()
+
+	info, ok := w.manager.workerInfos[w.workerID]
+	if !ok {
+		// worker not found
+		// TODO think about how to handle this
+		return 0
+	}
+
+	return info.workload
 }
 
 func newWorkerManager(id MasterID, needWait bool, curEpoch epoch) *workerManager {
@@ -265,13 +415,42 @@ func (m *workerManager) HandleHeartBeat(msg *HeartbeatPingMessage) {
 	if !ok {
 		log.L().Info("discarding heartbeat for non-existing worker",
 			zap.Any("msg", msg))
+		return
 	}
 	workerInfo.lastHeartBeatReceiveTime = time.Now()
 	workerInfo.lastHeartBeatSendTime = msg.SendTime
 	workerInfo.hasPendingHeartbeat = true
 }
 
-func (m *workerManager) GetWorkerInfo(id WorkerID) (*WorkerInfo, bool) {
+func (m *workerManager) UpdateWorkload(msg *WorkloadReportMessage) {
+	info, ok := m.getWorkerInfo(msg.WorkerID)
+	if !ok {
+		log.L().Info("received workload update for non-existing worker",
+			zap.String("master-id", string(m.masterID)),
+			zap.Any("msg", msg))
+		return
+	}
+	info.workload = msg.Workload
+	log.L().Debug("workload updated",
+		zap.String("master-id", string(m.masterID)),
+		zap.Any("msg", msg))
+}
+
+func (m *workerManager) UpdateStatus(msg *StatusUpdateMessage) {
+	info, ok := m.getWorkerInfo(msg.WorkerID)
+	if !ok {
+		log.L().Info("received status update for non-existing worker",
+			zap.String("master-id", string(m.masterID)),
+			zap.Any("msg", msg))
+		return
+	}
+	info.status = msg.Status
+	log.L().Debug("worker status updated",
+		zap.String("master-id", string(m.masterID)),
+		zap.Any("msg", msg))
+}
+
+func (m *workerManager) getWorkerInfo(id WorkerID) (*WorkerInfo, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -282,7 +461,7 @@ func (m *workerManager) GetWorkerInfo(id WorkerID) (*WorkerInfo, bool) {
 	return value, true
 }
 
-func (m *workerManager) PutWorkerInfo(info *WorkerInfo) bool {
+func (m *workerManager) putWorkerInfo(info *WorkerInfo) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -291,11 +470,31 @@ func (m *workerManager) PutWorkerInfo(info *WorkerInfo) bool {
 	return !exists
 }
 
-func (m *workerManager) RemoveWorkerInfo(id WorkerID) bool {
+func (m *workerManager) removeWorkerInfo(id WorkerID) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	_, exists := m.workerInfos[id]
 	delete(m.workerInfos, id)
 	return exists
+}
+
+func (m *workerManager) onWorkerCreated(id WorkerID, exeuctorNodeID p2p.NodeID) {
+	m.putWorkerInfo(&WorkerInfo{
+		ID:                       id,
+		NodeID:                   exeuctorNodeID,
+		lastHeartBeatReceiveTime: time.Now(),
+		status: WorkerStatus{
+			Code: WorkerStatusInit,
+		},
+		// TODO fix workload
+		workload: 10, // 10 is the initial workload for now.
+	})
+}
+
+func (m *workerManager) getWorkerHandle(id WorkerID) WorkerHandle {
+	return &workerHandleImpl{
+		manager:  m,
+		workerID: id,
+	}
 }

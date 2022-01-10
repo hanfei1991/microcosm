@@ -21,6 +21,7 @@ message DispatchTaskRequest {
 message DispatchTaskResponse {
     DispatchTaskErrorCode error_code = 1;
     string error_message = 2;
+    string worker_id = 3;
 }
 
 enum DispatchTaskErrorCode {

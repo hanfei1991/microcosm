@@ -2,22 +2,24 @@ package lib
 
 import (
 	"fmt"
+	"github.com/hanfei1991/microcosm/model"
 	"time"
 
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
 type (
-	MasterID     string
-	WorkerID     string
-	WorkerStatus int32
+	MasterID         string
+	WorkerID         string
+	WorkerStatusCode int32
+	WorkerType       int64
 
 	epoch         = int64
 	monotonicTime = uint64
 )
 
 const (
-	WorkerStatusNormal = WorkerStatus(iota + 1)
+	WorkerStatusNormal = WorkerStatusCode(iota + 1)
 	WorkerStatusInit
 	WorkerStatusError
 )
@@ -32,6 +34,12 @@ const (
 	workerTimeoutGracefulDuration = time.Second * 5
 )
 
+type WorkerStatus struct {
+	Code         WorkerStatusCode `json:"code"`
+	ErrorMessage string           `json:"error-message"`
+	Ext          interface{}      `json:"ext"`
+}
+
 func HeartbeatPingTopic(masterID MasterID) p2p.Topic {
 	return fmt.Sprintf("heartbeat-ping-%s", string(masterID))
 }
@@ -40,9 +48,16 @@ func HeartbeatPongTopic(masterID MasterID) p2p.Topic {
 	return fmt.Sprintf("heartbeat-pong-%s", string(masterID))
 }
 
+func WorkloadReportTopic(masterID MasterID) p2p.Topic {
+	return fmt.Sprintf("workload-report-%s", masterID)
+}
+
+func StatusUpdateTopic(masterID MasterID) p2p.Topic {
+	return fmt.Sprintf("status-update-%s", masterID)
+}
+
 type HeartbeatPingMessage struct {
 	SendTime     monotonicTime `json:"send-time"`
-	Status       WorkerStatus  `json:"status"`
 	FromWorkerID WorkerID      `json:"from-id"`
 	Epoch        epoch         `json:"epoch"`
 }
@@ -53,6 +68,16 @@ type HeartbeatPongMessage struct {
 	Epoch     epoch         `json:"epoch"`
 }
 
+type StatusUpdateMessage struct {
+	WorkerID WorkerID     `json:"worker-id"`
+	Status   WorkerStatus `json:"status"`
+}
+
+type WorkloadReportMessage struct {
+	WorkerID WorkerID       `json:"worker-id"`
+	Workload model.RescUnit `json:"workload"`
+}
+
 type MasterMetaKVData struct {
 	ID     MasterID   `json:"id"`
 	Addr   string     `json:"addr"`
@@ -60,16 +85,18 @@ type MasterMetaKVData struct {
 	Epoch  epoch      `json:"epoch"`
 
 	// Ext holds business-specific data
-	Ext    interface{} `json:"ext"`
+	Ext interface{} `json:"ext"`
 }
 
 type WorkerInfo struct {
 	ID     WorkerID
-	Addr   string
 	NodeID p2p.NodeID
 
 	// fields for internal use by the Master.
 	lastHeartBeatReceiveTime time.Time
 	lastHeartBeatSendTime    monotonicTime
 	hasPendingHeartbeat      bool
+
+	status   WorkerStatus
+	workload model.RescUnit
 }
