@@ -71,22 +71,22 @@ func (m *CancelBatchTasksRequest) GetTaskIdList() []int64 {
 	return nil
 }
 
-type SuspendBatchTasksRequest struct {
+type PauseBatchTasksRequest struct {
 	TaskIdList []int64 `protobuf:"varint,1,rep,packed,name=task_id_list,json=taskIdList,proto3" json:"task_id_list,omitempty"`
 }
 
-func (m *SuspendBatchTasksRequest) Reset()         { *m = SuspendBatchTasksRequest{} }
-func (m *SuspendBatchTasksRequest) String() string { return proto.CompactTextString(m) }
-func (*SuspendBatchTasksRequest) ProtoMessage()    {}
-func (*SuspendBatchTasksRequest) Descriptor() ([]byte, []int) {
+func (m *PauseBatchTasksRequest) Reset()         { *m = PauseBatchTasksRequest{} }
+func (m *PauseBatchTasksRequest) String() string { return proto.CompactTextString(m) }
+func (*PauseBatchTasksRequest) ProtoMessage()    {}
+func (*PauseBatchTasksRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_12d1cdcda51e000f, []int{1}
 }
-func (m *SuspendBatchTasksRequest) XXX_Unmarshal(b []byte) error {
+func (m *PauseBatchTasksRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *SuspendBatchTasksRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *PauseBatchTasksRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_SuspendBatchTasksRequest.Marshal(b, m, deterministic)
+		return xxx_messageInfo_PauseBatchTasksRequest.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -96,19 +96,19 @@ func (m *SuspendBatchTasksRequest) XXX_Marshal(b []byte, deterministic bool) ([]
 		return b[:n], nil
 	}
 }
-func (m *SuspendBatchTasksRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_SuspendBatchTasksRequest.Merge(m, src)
+func (m *PauseBatchTasksRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PauseBatchTasksRequest.Merge(m, src)
 }
-func (m *SuspendBatchTasksRequest) XXX_Size() int {
+func (m *PauseBatchTasksRequest) XXX_Size() int {
 	return m.Size()
 }
-func (m *SuspendBatchTasksRequest) XXX_DiscardUnknown() {
-	xxx_messageInfo_SuspendBatchTasksRequest.DiscardUnknown(m)
+func (m *PauseBatchTasksRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_PauseBatchTasksRequest.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_SuspendBatchTasksRequest proto.InternalMessageInfo
+var xxx_messageInfo_PauseBatchTasksRequest proto.InternalMessageInfo
 
-func (m *SuspendBatchTasksRequest) GetTaskIdList() []int64 {
+func (m *PauseBatchTasksRequest) GetTaskIdList() []int64 {
 	if m != nil {
 		return m.TaskIdList
 	}
@@ -323,22 +323,22 @@ func (m *CancelBatchTasksResponse) GetErr() *Error {
 	return nil
 }
 
-type SuspendBatchTasksResponse struct {
+type PauseBatchTasksResponse struct {
 	Err *Error `protobuf:"bytes,1,opt,name=err,proto3" json:"err,omitempty"`
 }
 
-func (m *SuspendBatchTasksResponse) Reset()         { *m = SuspendBatchTasksResponse{} }
-func (m *SuspendBatchTasksResponse) String() string { return proto.CompactTextString(m) }
-func (*SuspendBatchTasksResponse) ProtoMessage()    {}
-func (*SuspendBatchTasksResponse) Descriptor() ([]byte, []int) {
+func (m *PauseBatchTasksResponse) Reset()         { *m = PauseBatchTasksResponse{} }
+func (m *PauseBatchTasksResponse) String() string { return proto.CompactTextString(m) }
+func (*PauseBatchTasksResponse) ProtoMessage()    {}
+func (*PauseBatchTasksResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_12d1cdcda51e000f, []int{6}
 }
-func (m *SuspendBatchTasksResponse) XXX_Unmarshal(b []byte) error {
+func (m *PauseBatchTasksResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *SuspendBatchTasksResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *PauseBatchTasksResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_SuspendBatchTasksResponse.Marshal(b, m, deterministic)
+		return xxx_messageInfo_PauseBatchTasksResponse.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -348,19 +348,19 @@ func (m *SuspendBatchTasksResponse) XXX_Marshal(b []byte, deterministic bool) ([
 		return b[:n], nil
 	}
 }
-func (m *SuspendBatchTasksResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_SuspendBatchTasksResponse.Merge(m, src)
+func (m *PauseBatchTasksResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PauseBatchTasksResponse.Merge(m, src)
 }
-func (m *SuspendBatchTasksResponse) XXX_Size() int {
+func (m *PauseBatchTasksResponse) XXX_Size() int {
 	return m.Size()
 }
-func (m *SuspendBatchTasksResponse) XXX_DiscardUnknown() {
-	xxx_messageInfo_SuspendBatchTasksResponse.DiscardUnknown(m)
+func (m *PauseBatchTasksResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_PauseBatchTasksResponse.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_SuspendBatchTasksResponse proto.InternalMessageInfo
+var xxx_messageInfo_PauseBatchTasksResponse proto.InternalMessageInfo
 
-func (m *SuspendBatchTasksResponse) GetErr() *Error {
+func (m *PauseBatchTasksResponse) GetErr() *Error {
 	if m != nil {
 		return m.Err
 	}
@@ -369,42 +369,42 @@ func (m *SuspendBatchTasksResponse) GetErr() *Error {
 
 func init() {
 	proto.RegisterType((*CancelBatchTasksRequest)(nil), "pb.CancelBatchTasksRequest")
-	proto.RegisterType((*SuspendBatchTasksRequest)(nil), "pb.SuspendBatchTasksRequest")
+	proto.RegisterType((*PauseBatchTasksRequest)(nil), "pb.PauseBatchTasksRequest")
 	proto.RegisterType((*SubmitBatchTasksRequest)(nil), "pb.SubmitBatchTasksRequest")
 	proto.RegisterType((*TaskRequest)(nil), "pb.TaskRequest")
 	proto.RegisterType((*SubmitBatchTasksResponse)(nil), "pb.SubmitBatchTasksResponse")
 	proto.RegisterType((*CancelBatchTasksResponse)(nil), "pb.CancelBatchTasksResponse")
-	proto.RegisterType((*SuspendBatchTasksResponse)(nil), "pb.SuspendBatchTasksResponse")
+	proto.RegisterType((*PauseBatchTasksResponse)(nil), "pb.PauseBatchTasksResponse")
 }
 
 func init() { proto.RegisterFile("executor.proto", fileDescriptor_12d1cdcda51e000f) }
 
 var fileDescriptor_12d1cdcda51e000f = []byte{
-	// 379 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x53, 0x41, 0x4b, 0xe3, 0x40,
-	0x18, 0xcd, 0x24, 0x4d, 0x77, 0xf7, 0x4b, 0xe9, 0xee, 0xce, 0xc2, 0x76, 0x6c, 0x35, 0x84, 0x80,
-	0x90, 0x53, 0x0f, 0xf5, 0xa0, 0xa0, 0x07, 0xa9, 0xf4, 0x20, 0x08, 0xc2, 0xb4, 0xf7, 0x92, 0x34,
-	0x03, 0x86, 0xd6, 0xcc, 0x98, 0x99, 0x80, 0x47, 0x7f, 0x82, 0x3f, 0xcb, 0x63, 0x8f, 0x1e, 0xa5,
-	0xfd, 0x23, 0x32, 0x49, 0x0a, 0xd2, 0x36, 0x50, 0x3c, 0xce, 0x7b, 0xf3, 0x5e, 0xde, 0xf7, 0xf2,
-	0x0d, 0xb4, 0xd9, 0x33, 0x9b, 0xe5, 0x8a, 0x67, 0x7d, 0x91, 0x71, 0xc5, 0xb1, 0x29, 0xa2, 0xae,
-	0xc3, 0xb2, 0x6c, 0x03, 0xf8, 0x97, 0xd0, 0xb9, 0x09, 0xd3, 0x19, 0x5b, 0x0c, 0x43, 0x35, 0x7b,
-	0x98, 0x84, 0x72, 0x2e, 0x29, 0x7b, 0xca, 0x99, 0x54, 0xd8, 0x83, 0x96, 0x0a, 0xe5, 0x7c, 0x9a,
-	0xc4, 0xd3, 0x45, 0x22, 0x15, 0x41, 0x9e, 0x15, 0x58, 0x14, 0x34, 0x76, 0x1b, 0xdf, 0x25, 0x52,
-	0xf9, 0x57, 0x40, 0xc6, 0xb9, 0x14, 0x2c, 0x8d, 0xbf, 0xa3, 0xbe, 0x86, 0xce, 0x38, 0x8f, 0x1e,
-	0x13, 0xb5, 0x2b, 0x3e, 0x05, 0x5b, 0x5f, 0x94, 0xc4, 0xf4, 0xac, 0xc0, 0x19, 0xfc, 0xee, 0x8b,
-	0xa8, 0xaf, 0x2f, 0x54, 0x3c, 0x2d, 0x59, 0x5f, 0x81, 0xf3, 0x05, 0xc5, 0x6d, 0x30, 0x93, 0x98,
-	0x20, 0x0f, 0x05, 0x16, 0x35, 0x93, 0x18, 0xff, 0x87, 0x66, 0x92, 0x8a, 0x5c, 0x95, 0x36, 0x16,
-	0xad, 0x4e, 0x98, 0xc0, 0x0f, 0x9e, 0xab, 0x82, 0xb0, 0x0a, 0x62, 0x73, 0xd4, 0x0e, 0x5c, 0x90,
-	0x86, 0x87, 0x82, 0x16, 0x35, 0xb9, 0xc0, 0xff, 0xc0, 0xe6, 0x62, 0xaa, 0x04, 0xb1, 0x3d, 0x14,
-	0xd8, 0xb4, 0xc1, 0xc5, 0x44, 0xf8, 0xe7, 0x7a, 0xea, 0xed, 0xdc, 0x52, 0xf0, 0x54, 0x32, 0xdc,
-	0x03, 0x8b, 0x65, 0x59, 0x91, 0xc1, 0x19, 0xfc, 0xd2, 0xb1, 0x47, 0xba, 0x6c, 0xaa, 0x51, 0x2d,
-	0xdc, 0xed, 0xfa, 0x10, 0xe1, 0x05, 0x1c, 0xed, 0xe9, 0xf9, 0x00, 0xe5, 0xe0, 0xc5, 0x84, 0x9f,
-	0xa3, 0x6a, 0x05, 0xf0, 0x3d, 0xfc, 0xd9, 0x0e, 0x8e, 0x7b, 0x5a, 0x50, 0xf3, 0x1b, 0xba, 0xc7,
-	0xfb, 0xc9, 0xf2, 0xc3, 0xbe, 0xa1, 0x0d, 0xb7, 0x07, 0x2a, 0x0d, 0x6b, 0x56, 0xaa, 0x34, 0xac,
-	0xeb, 0xc0, 0x37, 0x30, 0x85, 0xbf, 0x3b, 0x83, 0xe2, 0x2a, 0xc5, 0xfe, 0x3d, 0xeb, 0x9e, 0xd4,
-	0xb0, 0x1b, 0xcf, 0x21, 0x79, 0x5b, 0xb9, 0x68, 0xb9, 0x72, 0xd1, 0xc7, 0xca, 0x45, 0xaf, 0x6b,
-	0xd7, 0x58, 0xae, 0x5d, 0xe3, 0x7d, 0xed, 0x1a, 0x51, 0xb3, 0x78, 0x02, 0x67, 0x9f, 0x01, 0x00,
-	0x00, 0xff, 0xff, 0x45, 0x60, 0x5d, 0x28, 0x25, 0x03, 0x00, 0x00,
+	// 374 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x52, 0x41, 0x6b, 0xea, 0x40,
+	0x18, 0xcc, 0x26, 0xc6, 0xf7, 0xde, 0x17, 0xd1, 0xc7, 0x16, 0x74, 0x89, 0x25, 0x84, 0x40, 0x21,
+	0x27, 0x0f, 0x16, 0x5a, 0x68, 0x2f, 0xc5, 0xe2, 0xa1, 0x20, 0xb4, 0x6c, 0xbd, 0x4b, 0x62, 0x16,
+	0x1a, 0xb4, 0xee, 0x36, 0xbb, 0x81, 0xfe, 0x8c, 0xfe, 0xac, 0x1e, 0x3d, 0xf6, 0x58, 0xf4, 0x5f,
+	0xf4, 0x54, 0x36, 0x51, 0x28, 0x46, 0x41, 0x7a, 0xdc, 0x99, 0x9d, 0xd9, 0xd9, 0xf9, 0x3e, 0x68,
+	0xb2, 0x57, 0x36, 0xcd, 0x15, 0xcf, 0x7a, 0x22, 0xe3, 0x8a, 0x63, 0x53, 0xc4, 0xae, 0xc3, 0xb2,
+	0x6c, 0x0b, 0x04, 0xd7, 0xd0, 0xb9, 0x8d, 0x16, 0x53, 0x36, 0x1f, 0x44, 0x6a, 0xfa, 0x34, 0x8e,
+	0xe4, 0x4c, 0x52, 0xf6, 0x92, 0x33, 0xa9, 0xb0, 0x0f, 0x0d, 0x15, 0xc9, 0xd9, 0x24, 0x4d, 0x26,
+	0xf3, 0x54, 0x2a, 0x82, 0x7c, 0x2b, 0xb4, 0x28, 0x68, 0xec, 0x2e, 0x19, 0xa5, 0x52, 0x05, 0x57,
+	0xd0, 0x7e, 0x88, 0x72, 0xc9, 0x7e, 0xa3, 0xbd, 0x81, 0xce, 0x63, 0x1e, 0x3f, 0xa7, 0xaa, 0x2a,
+	0x3e, 0x03, 0x5b, 0x5f, 0x94, 0xc4, 0xf4, 0xad, 0xd0, 0xe9, 0xb7, 0x7a, 0x22, 0xee, 0xe9, 0x0b,
+	0x1b, 0x9e, 0x96, 0x6c, 0xa0, 0xc0, 0xf9, 0x81, 0xe2, 0x26, 0x98, 0x69, 0x42, 0x90, 0x8f, 0x42,
+	0x8b, 0x9a, 0x69, 0x82, 0xdb, 0x50, 0x4f, 0x17, 0x22, 0x57, 0xa5, 0x8d, 0x45, 0x37, 0x27, 0x4c,
+	0xe0, 0x0f, 0xcf, 0x55, 0x41, 0x58, 0x05, 0xb1, 0x3d, 0x6a, 0x07, 0x2e, 0x48, 0xcd, 0x47, 0x61,
+	0x83, 0x9a, 0x5c, 0xe0, 0x13, 0xb0, 0xb9, 0x98, 0x28, 0x41, 0x6c, 0x1f, 0x85, 0x36, 0xad, 0x71,
+	0x31, 0x16, 0xc1, 0x25, 0x90, 0x6a, 0x6e, 0x29, 0xf8, 0x42, 0x32, 0xdc, 0x05, 0x8b, 0x65, 0x59,
+	0x91, 0xc1, 0xe9, 0xff, 0xd3, 0xb1, 0x87, 0xba, 0x6a, 0xaa, 0x51, 0x2d, 0xac, 0x36, 0x7d, 0x8c,
+	0xf0, 0x02, 0x3a, 0x95, 0x96, 0x8f, 0xd0, 0xf5, 0xbf, 0x10, 0xfc, 0x1d, 0x6e, 0xc6, 0x8f, 0xef,
+	0xe1, 0xff, 0x6e, 0x6c, 0xdc, 0xd5, 0x82, 0x03, 0x43, 0x70, 0x4f, 0xf7, 0x93, 0xe5, 0xc3, 0x81,
+	0xa1, 0x0d, 0x77, 0xbf, 0x53, 0x1a, 0x1e, 0x58, 0xa7, 0xd2, 0xf0, 0x50, 0x03, 0x81, 0x81, 0x47,
+	0xd0, 0xda, 0xf9, 0x26, 0x76, 0xb5, 0x64, 0xff, 0x86, 0xb9, 0xdd, 0xbd, 0xdc, 0xd6, 0x6d, 0x40,
+	0xde, 0x57, 0x1e, 0x5a, 0xae, 0x3c, 0xf4, 0xb9, 0xf2, 0xd0, 0xdb, 0xda, 0x33, 0x96, 0x6b, 0xcf,
+	0xf8, 0x58, 0x7b, 0x46, 0x5c, 0x2f, 0x16, 0xff, 0xfc, 0x3b, 0x00, 0x00, 0xff, 0xff, 0xc7, 0x52,
+	0xd2, 0xb7, 0x1b, 0x03, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -421,7 +421,7 @@ const _ = grpc.SupportPackageIsVersion4
 type ExecutorClient interface {
 	SubmitBatchTasks(ctx context.Context, in *SubmitBatchTasksRequest, opts ...grpc.CallOption) (*SubmitBatchTasksResponse, error)
 	CancelBatchTasks(ctx context.Context, in *CancelBatchTasksRequest, opts ...grpc.CallOption) (*CancelBatchTasksResponse, error)
-	SuspendBatchTasks(ctx context.Context, in *SuspendBatchTasksRequest, opts ...grpc.CallOption) (*SuspendBatchTasksResponse, error)
+	PauseBatchTasks(ctx context.Context, in *PauseBatchTasksRequest, opts ...grpc.CallOption) (*PauseBatchTasksResponse, error)
 }
 
 type executorClient struct {
@@ -450,9 +450,9 @@ func (c *executorClient) CancelBatchTasks(ctx context.Context, in *CancelBatchTa
 	return out, nil
 }
 
-func (c *executorClient) SuspendBatchTasks(ctx context.Context, in *SuspendBatchTasksRequest, opts ...grpc.CallOption) (*SuspendBatchTasksResponse, error) {
-	out := new(SuspendBatchTasksResponse)
-	err := c.cc.Invoke(ctx, "/pb.Executor/SuspendBatchTasks", in, out, opts...)
+func (c *executorClient) PauseBatchTasks(ctx context.Context, in *PauseBatchTasksRequest, opts ...grpc.CallOption) (*PauseBatchTasksResponse, error) {
+	out := new(PauseBatchTasksResponse)
+	err := c.cc.Invoke(ctx, "/pb.Executor/PauseBatchTasks", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -463,7 +463,7 @@ func (c *executorClient) SuspendBatchTasks(ctx context.Context, in *SuspendBatch
 type ExecutorServer interface {
 	SubmitBatchTasks(context.Context, *SubmitBatchTasksRequest) (*SubmitBatchTasksResponse, error)
 	CancelBatchTasks(context.Context, *CancelBatchTasksRequest) (*CancelBatchTasksResponse, error)
-	SuspendBatchTasks(context.Context, *SuspendBatchTasksRequest) (*SuspendBatchTasksResponse, error)
+	PauseBatchTasks(context.Context, *PauseBatchTasksRequest) (*PauseBatchTasksResponse, error)
 }
 
 // UnimplementedExecutorServer can be embedded to have forward compatible implementations.
@@ -476,8 +476,8 @@ func (*UnimplementedExecutorServer) SubmitBatchTasks(ctx context.Context, req *S
 func (*UnimplementedExecutorServer) CancelBatchTasks(ctx context.Context, req *CancelBatchTasksRequest) (*CancelBatchTasksResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CancelBatchTasks not implemented")
 }
-func (*UnimplementedExecutorServer) SuspendBatchTasks(ctx context.Context, req *SuspendBatchTasksRequest) (*SuspendBatchTasksResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method SuspendBatchTasks not implemented")
+func (*UnimplementedExecutorServer) PauseBatchTasks(ctx context.Context, req *PauseBatchTasksRequest) (*PauseBatchTasksResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PauseBatchTasks not implemented")
 }
 
 func RegisterExecutorServer(s *grpc.Server, srv ExecutorServer) {
@@ -520,20 +520,20 @@ func _Executor_CancelBatchTasks_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Executor_SuspendBatchTasks_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SuspendBatchTasksRequest)
+func _Executor_PauseBatchTasks_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PauseBatchTasksRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ExecutorServer).SuspendBatchTasks(ctx, in)
+		return srv.(ExecutorServer).PauseBatchTasks(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/pb.Executor/SuspendBatchTasks",
+		FullMethod: "/pb.Executor/PauseBatchTasks",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ExecutorServer).SuspendBatchTasks(ctx, req.(*SuspendBatchTasksRequest))
+		return srv.(ExecutorServer).PauseBatchTasks(ctx, req.(*PauseBatchTasksRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -551,8 +551,8 @@ var _Executor_serviceDesc = grpc.ServiceDesc{
 			Handler:    _Executor_CancelBatchTasks_Handler,
 		},
 		{
-			MethodName: "SuspendBatchTasks",
-			Handler:    _Executor_SuspendBatchTasks_Handler,
+			MethodName: "PauseBatchTasks",
+			Handler:    _Executor_PauseBatchTasks_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
@@ -601,7 +601,7 @@ func (m *CancelBatchTasksRequest) MarshalToSizedBuffer(dAtA []byte) (int, error)
 	return len(dAtA) - i, nil
 }
 
-func (m *SuspendBatchTasksRequest) Marshal() (dAtA []byte, err error) {
+func (m *PauseBatchTasksRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -611,12 +611,12 @@ func (m *SuspendBatchTasksRequest) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *SuspendBatchTasksRequest) MarshalTo(dAtA []byte) (int, error) {
+func (m *PauseBatchTasksRequest) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *SuspendBatchTasksRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *PauseBatchTasksRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -828,7 +828,7 @@ func (m *CancelBatchTasksResponse) MarshalToSizedBuffer(dAtA []byte) (int, error
 	return len(dAtA) - i, nil
 }
 
-func (m *SuspendBatchTasksResponse) Marshal() (dAtA []byte, err error) {
+func (m *PauseBatchTasksResponse) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -838,12 +838,12 @@ func (m *SuspendBatchTasksResponse) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *SuspendBatchTasksResponse) MarshalTo(dAtA []byte) (int, error) {
+func (m *PauseBatchTasksResponse) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *SuspendBatchTasksResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *PauseBatchTasksResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -890,7 +890,7 @@ func (m *CancelBatchTasksRequest) Size() (n int) {
 	return n
 }
 
-func (m *SuspendBatchTasksRequest) Size() (n int) {
+func (m *PauseBatchTasksRequest) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -980,7 +980,7 @@ func (m *CancelBatchTasksResponse) Size() (n int) {
 	return n
 }
 
-func (m *SuspendBatchTasksResponse) Size() (n int) {
+func (m *PauseBatchTasksResponse) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -1125,7 +1125,7 @@ func (m *CancelBatchTasksRequest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *SuspendBatchTasksRequest) Unmarshal(dAtA []byte) error {
+func (m *PauseBatchTasksRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -1148,10 +1148,10 @@ func (m *SuspendBatchTasksRequest) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: SuspendBatchTasksRequest: wiretype end group for non-group")
+			return fmt.Errorf("proto: PauseBatchTasksRequest: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: SuspendBatchTasksRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: PauseBatchTasksRequest: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -1781,7 +1781,7 @@ func (m *CancelBatchTasksResponse) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *SuspendBatchTasksResponse) Unmarshal(dAtA []byte) error {
+func (m *PauseBatchTasksResponse) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -1804,10 +1804,10 @@ func (m *SuspendBatchTasksResponse) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: SuspendBatchTasksResponse: wiretype end group for non-group")
+			return fmt.Errorf("proto: PauseBatchTasksResponse: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: SuspendBatchTasksResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: PauseBatchTasksResponse: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:

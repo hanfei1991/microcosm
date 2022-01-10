@@ -7,14 +7,14 @@ import "error.proto";
 service Executor {
     rpc SubmitBatchTasks(SubmitBatchTasksRequest) returns (SubmitBatchTasksResponse) {}
     rpc CancelBatchTasks(CancelBatchTasksRequest) returns (CancelBatchTasksResponse) {}
-    rpc SuspendBatchTasks(SuspendBatchTasksRequest) returns (SuspendBatchTasksResponse) {}
+    rpc PauseBatchTasks(PauseBatchTasksRequest) returns (PauseBatchTasksResponse) {}
 }
 
 message CancelBatchTasksRequest {
     repeated int64 task_id_list = 1;
 }
 
-message SuspendBatchTasksRequest {
+message PauseBatchTasksRequest {
     repeated int64 task_id_list = 1;
 }
 
@@ -38,6 +38,6 @@ message CancelBatchTasksResponse {
     Error err = 1;
 }
 
-message SuspendBatchTasksResponse {
+message PauseBatchTasksResponse {
     Error err = 1;
 }

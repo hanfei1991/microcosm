@@ -22,7 +22,7 @@ service Master {
         //};
     }
 
-    rpc SuspendJob(SuspendJobRequest) returns(SuspendJobResponse) {}
+    rpc PauseJob(PauseJobRequest) returns(PauseJobResponse) {}
 
     rpc CancelJob(CancelJobRequest) returns(CancelJobResponse) {}
 
@@ -61,6 +61,8 @@ message HeartbeatRequest {
 
 message HeartbeatResponse {
     Error err = 1;
+    string leader = 2;
+    repeated string addrs = 3;
 }
 
 enum JobType {
@@ -81,7 +83,7 @@ message CancelJobRequest {
     int32 job_id = 1;
 }
 
-message SuspendJobRequest {
+message PauseJobRequest {
     int32 job_id = 1;
 }
 
@@ -90,7 +92,7 @@ message SubmitJobResponse {
     int32 job_id = 2;
 }
 
-message SuspendJobResponse {
+message PauseJobResponse {
     Error err = 1;
 }
 

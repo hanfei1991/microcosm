@@ -49,8 +49,8 @@ func (s *masterServerConn) sendRequest(ctx context.Context, req interface{}) (in
 	switch x := req.(type) {
 	case *pb.RegisterExecutorRequest:
 		return s.server.RegisterExecutor(ctx, x)
-	case *pb.SuspendJobRequest:
-		return s.server.SuspendJob(ctx, x)
+	case *pb.PauseJobRequest:
+		return s.server.PauseJob(ctx, x)
 	case *pb.SubmitJobRequest:
 		return s.server.SubmitJob(ctx, x)
 	case *pb.HeartbeatRequest:
@@ -72,9 +72,9 @@ func (c *masterServerClient) RegisterExecutor(ctx context.Context, req *pb.Regis
 	return resp.(*pb.RegisterExecutorResponse), err
 }
 
-func (c *masterServerClient) SuspendJob(ctx context.Context, req *pb.SuspendJobRequest, opts ...grpc.CallOption) (*pb.SuspendJobResponse, error) {
+func (c *masterServerClient) PauseJob(ctx context.Context, req *pb.PauseJobRequest, opts ...grpc.CallOption) (*pb.PauseJobResponse, error) {
 	resp, err := c.conn.sendRequest(ctx, req)
-	return resp.(*pb.SuspendJobResponse), err
+	return resp.(*pb.PauseJobResponse), err
 }
 
 func (c *masterServerClient) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest, opts ...grpc.CallOption) (*pb.SubmitJobResponse, error) {
@@ -175,9 +175,9 @@ func (c *executorClient) CancelBatchTasks(ctx context.Context, req *pb.CancelBat
 	return resp.(*pb.CancelBatchTasksResponse), err
 }
 
-func (c *executorClient) SuspendBatchTasks(ctx context.Context, req *pb.SuspendBatchTasksRequest, opts ...grpc.CallOption) (*pb.SuspendBatchTasksResponse, error) {
+func (c *executorClient) PauseBatchTasks(ctx context.Context, req *pb.PauseBatchTasksRequest, opts ...grpc.CallOption) (*pb.PauseBatchTasksResponse, error) {
 	resp, err := c.conn.sendRequest(ctx, req)
-	return resp.(*pb.SuspendBatchTasksResponse), err
+	return resp.(*pb.PauseBatchTasksResponse), err
 }
 
 func (s *executorServerConn) Close() error {
@@ -194,8 +194,8 @@ func (s *executorServerConn) sendRequest(ctx context.Context, req interface{}) (
 		return s.server.SubmitBatchTasks(ctx, x)
 	case *pb.CancelBatchTasksRequest:
 		return s.server.CancelBatchTasks(ctx, x)
-	case *pb.SuspendBatchTasksRequest:
-		return s.server.SuspendBatchTasks(ctx, x)
+	case *pb.PauseBatchTasksRequest:
+		return s.server.PauseBatchTasks(ctx, x)
 	}
 	return nil, errors.New("unknown request")
 }

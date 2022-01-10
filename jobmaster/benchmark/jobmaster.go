@@ -50,14 +50,14 @@ func (m *jobMaster) Stop(ctx context.Context) error {
 	return nil
 }
 
-func (m *jobMaster) SuspendAllTasks() error {
-	err := m.AsyncSuspendTasks(m.stage1...)
+func (m *jobMaster) PauseAllTasks() error {
+	err := m.AsyncPauseTasks(m.stage1...)
 	if err != nil {
 		return err
 	}
-	return m.AsyncSuspendTasks(m.stage2...)
+	return m.AsyncPauseTasks(m.stage2...)
 }
 
-func (m *jobMaster) SuspendTasks(tasks ...*model.Task) error {
-	return m.AsyncSuspendTasks(tasks...)
+func (m *jobMaster) PauseTasks(tasks ...*model.Task) error {
+	return m.AsyncPauseTasks(tasks...)
 }

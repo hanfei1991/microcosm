@@ -21,7 +21,7 @@ const (
 const (
 	Init TaskStatus = iota
 	Serving
-	Suspended
+	Pauseed
 	Stopped
 )
 

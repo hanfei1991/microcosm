@@ -34,8 +34,8 @@ func (c *executorClient) Send(ctx context.Context, req *ExecutorRequest) (*Execu
 		resp.Resp, err = c.client.SubmitBatchTasks(ctx, req.SubmitBatchTasks())
 	case CmdCancelBatchTasks:
 		resp.Resp, err = c.client.CancelBatchTasks(ctx, req.CancelBatchTasks())
-	case CmdSuspendBatchTasks:
-		resp.Resp, err = c.client.SuspendBatchTasks(ctx, req.SuspendBatchTasks())
+	case CmdPauseBatchTasks:
+		resp.Resp, err = c.client.PauseBatchTasks(ctx, req.PauseBatchTasks())
 	}
 	if err != nil {
 		log.L().Logger.Error("send req meet error", zap.Error(err))
@@ -55,7 +55,7 @@ func newExecutorClientForTest(addr string) (*executorClient, error) {
 }
 
 func newExecutorClient(addr string) (*executorClient, error) {
-	if test.GlobalTestFlag {
+	if test.GetGlobalTestFlag() {
 		return newExecutorClientForTest(addr)
 	}
 	conn, err := grpc.Dial(addr, grpc.WithInsecure(), grpc.WithConnectParams(grpc.ConnectParams{Backoff: backoff.DefaultConfig}))
@@ -73,7 +73,7 @@ type CmdType uint16
 const (
 	CmdSubmitBatchTasks CmdType = 1 + iota
 	CmdCancelBatchTasks
-	CmdSuspendBatchTasks
+	CmdPauseBatchTasks
 )
 
 type ExecutorRequest struct {
@@ -89,8 +89,8 @@ func (e *ExecutorRequest) CancelBatchTasks() *pb.CancelBatchTasksRequest {
 	return e.Req.(*pb.CancelBatchTasksRequest)
 }
 
-func (e *ExecutorRequest) SuspendBatchTasks() *pb.SuspendBatchTasksRequest {
-	return e.Req.(*pb.SuspendBatchTasksRequest)
+func (e *ExecutorRequest) PauseBatchTasks() *pb.PauseBatchTasksRequest {
+	return e.Req.(*pb.PauseBatchTasksRequest)
 }
 
 type ExecutorResponse struct {

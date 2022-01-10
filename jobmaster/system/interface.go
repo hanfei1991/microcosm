@@ -18,9 +18,9 @@ type JobMaster interface {
 	// Stop the job master.
 	Stop(ctx context.Context) error
 
-	SuspendTasks(tasks ...*model.Task) error
+	PauseTasks(tasks ...*model.Task) error
 
-	SuspendAllTasks() error
+	PauseAllTasks() error
 	// ID returns the current job id.
 	ID() model.ID
 }

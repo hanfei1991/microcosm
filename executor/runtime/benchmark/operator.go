@@ -24,7 +24,7 @@ import (
 
 type baseOp struct{}
 
-func (o *baseOp) Suspend() error {
+func (o *baseOp) Pause() error {
 	return nil
 }
 
@@ -121,7 +121,7 @@ func (o *opReceive) Close() error {
 func (o *opReceive) dial() (client pb.TestServiceClient, err error) {
 	// get connection
 	log.L().Info("dial to", zap.String("addr", o.addr))
-	if test.GlobalTestFlag {
+	if test.GetGlobalTestFlag() {
 		conn, err := mock.Dial(o.addr)
 		o.conn = conn
 		if err != nil {
@@ -263,7 +263,7 @@ func (o *opSink) Prepare(_ *runtime.TaskContext) (runtime.TaskRescUnit, error) {
 
 func (o *opSink) Next(ctx *runtime.TaskContext, r *runtime.Record, _ int) ([]runtime.Chunk, bool, error) {
 	r.End = time.Now()
-	if test.GlobalTestFlag {
+	if test.GetGlobalTestFlag() {
 		//	log.L().Info("send record", zap.Int32("table", r.Tid), zap.Int32("pk", r.payload.(*pb.Record).Pk))
 		ctx.TestCtx.SendRecord(r)
 		return nil, false, nil
@@ -336,7 +336,7 @@ func (o *opProducer) Next(ctx *runtime.TaskContext, _ *runtime.Record, _ int) ([
 		outputData[binlogID] = append(outputData[binlogID], &r)
 		binlogID = (binlogID + 1) % o.outputCnt
 	}
-	if !test.GlobalTestFlag {
+	if !test.GetGlobalTestFlag() {
 		o.checkpoint = time.Now()
 		go func() {
 			time.Sleep(55 * time.Millisecond)
@@ -370,7 +370,7 @@ func (o *opBinlog) Close() error {
 
 func (o *opBinlog) Prepare(_ *runtime.TaskContext) (runtime.TaskRescUnit, error) {
 	o.binlogChan = make(chan *runtime.Record, 1024)
-	if test.GlobalTestFlag {
+	if test.GetGlobalTestFlag() {
 		server, err := mock.NewTestServer(o.addr, o)
 		if err != nil {
 			return nil, err

@@ -67,7 +67,7 @@ func (t *testJobSuite) TestSubmit(c *C) {
 	cluster.StopCluster()
 }
 
-func (t *testJobSuite) TestSuspend(c *C) {
+func (t *testJobSuite) TestPause(c *C) {
 	cluster := NewEmptyMiniCluster()
 	_, executorCtx := cluster.Start1M1E(c)
 	client, err := client.NewMasterClient(context.Background(), []string{"127.0.0.1:1991"})
@@ -88,11 +88,11 @@ func (t *testJobSuite) TestSuspend(c *C) {
 	resp, err := client.SubmitJob(context.Background(), req)
 	c.Assert(err, IsNil)
 	c.Assert(resp.Err, IsNil)
-	susReq := &pb.SuspendJobRequest{
+	susReq := &pb.PauseJobRequest{
 		JobId: resp.JobId,
 	}
 	time.Sleep(100 * time.Millisecond)
-	susResp, err := client.SuspendJob(context.Background(), susReq)
+	susResp, err := client.PauseJob(context.Background(), susReq)
 	c.Assert(err, IsNil)
 	c.Assert(susResp.Err, IsNil)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)

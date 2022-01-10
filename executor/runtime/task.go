@@ -15,7 +15,7 @@ const (
 	Runnable TaskStatus = iota
 	Blocked
 	Waking
-	Suspended
+	Pauseed
 	Stop
 )
 
@@ -101,7 +101,7 @@ func (t *taskContainer) prepare() error {
 
 func (t *taskContainer) tryAwake() bool {
 	for {
-		if atomic.LoadInt32(&t.status) == int32(Stop) || atomic.LoadInt32(&t.status) == int32(Suspended) {
+		if atomic.LoadInt32(&t.status) == int32(Stop) || atomic.LoadInt32(&t.status) == int32(Pauseed) {
 			return false
 		}
 		//		log.Printf("try wake task %d", t.id)
@@ -120,7 +120,7 @@ func (t *taskContainer) tryAwake() bool {
 }
 
 func (t *taskContainer) tryBlock() bool {
-	if atomic.LoadInt32(&t.status) == int32(Suspended) {
+	if atomic.LoadInt32(&t.status) == int32(Pauseed) {
 		return true
 	}
 	return atomic.CompareAndSwapInt32(&t.status, int32(Runnable), int32(Blocked))
@@ -183,7 +183,7 @@ func (t *taskContainer) Stop() error {
 			break
 		}
 
-		if atomic.CompareAndSwapInt32(&t.status, int32(Suspended), int32(Stop)) {
+		if atomic.CompareAndSwapInt32(&t.status, int32(Pauseed), int32(Stop)) {
 			break
 		}
 
@@ -199,30 +199,30 @@ func (t *taskContainer) Stop() error {
 }
 
 func (t *taskContainer) Continue() {
-	if atomic.LoadInt32(&t.status) == int32(Suspended) {
+	if atomic.LoadInt32(&t.status) == int32(Pauseed) {
 		atomic.StoreInt32(&t.status, int32(Blocked))
 		t.ctx.Wake()
 	}
 }
 
-func (t *taskContainer) Suspended() error {
+func (t *taskContainer) Pauseed() error {
 	for {
-		if atomic.LoadInt32(&t.status) == int32(Suspended) || atomic.LoadInt32(&t.status) == int32(Stop) {
+		if atomic.LoadInt32(&t.status) == int32(Pauseed) || atomic.LoadInt32(&t.status) == int32(Stop) {
 			return nil
 		}
 
-		if atomic.CompareAndSwapInt32(&t.status, int32(Runnable), int32(Suspended)) {
+		if atomic.CompareAndSwapInt32(&t.status, int32(Runnable), int32(Pauseed)) {
 			break
 		}
 
-		if atomic.CompareAndSwapInt32(&t.status, int32(Blocked), int32(Suspended)) {
+		if atomic.CompareAndSwapInt32(&t.status, int32(Blocked), int32(Pauseed)) {
 			break
 		}
 	}
 	t.stopLock.Lock()
 	defer t.stopLock.Unlock()
 
-	return t.op.Suspend()
+	return t.op.Pause()
 }
 
 func (t *taskContainer) Poll() TaskStatus {
@@ -232,7 +232,7 @@ func (t *taskContainer) Poll() TaskStatus {
 		return Stop
 	}
 
-	if atomic.LoadInt32(&t.status) == int32(Suspended) {
+	if atomic.LoadInt32(&t.status) == int32(Pauseed) {
 		return Blocked
 	}
 

@@ -56,7 +56,7 @@ type TaskStatus int
 const (
 	Serving TaskStatus = iota
 	Scheduling
-	Suspended
+	Pauseed
 	Stopped
 )
 
@@ -236,7 +236,7 @@ func (m *Master) DispatchTasks(tasks ...*model.Task) {
 	m.addScheduleTasks(tasks)
 }
 
-func (m *Master) AsyncSuspendTasks(tasks ...*model.Task) error {
+func (m *Master) AsyncPauseTasks(tasks ...*model.Task) error {
 	for _, t := range tasks {
 		_, ok := m.runningTasks.Load(t.ID)
 		if !ok {
@@ -246,7 +246,7 @@ func (m *Master) AsyncSuspendTasks(tasks ...*model.Task) error {
 
 	for _, t := range tasks {
 		value, _ := m.runningTasks.Load(t.ID)
-		value.(*Task).setTargetStatus(Suspended)
+		value.(*Task).setTargetStatus(Pauseed)
 	}
 	return nil
 }
@@ -332,39 +332,39 @@ func (m *Master) monitorRunningTasks() {
 		m.runningTasks.Range(func(_, value interface{}) bool {
 			t := value.(*Task)
 			t.Lock()
-			if t.targetStatus == Suspended && t.currentStatus == Serving {
-				log.L().Logger.Info("plan to suspend", zap.Int32("id", int32(t.ID)))
+			if t.targetStatus == Pauseed && t.currentStatus == Serving {
+				log.L().Logger.Info("plan to pause", zap.Int32("id", int32(t.ID)))
 				tasksToPause = append(tasksToPause, t.Task)
 			}
 			t.Unlock()
 			return true
 		})
-		m.suspendTaskImpl(tasksToPause)
+		m.pauseTaskImpl(tasksToPause)
 	}
 }
 
-func (m *Master) suspendTaskImpl(tasks []*model.Task) {
+func (m *Master) pauseTaskImpl(tasks []*model.Task) {
 	arrangement := arrangeTasksByExecID(tasks)
 	for execID, tasks := range arrangement {
-		req := &pb.SuspendBatchTasksRequest{
+		req := &pb.PauseBatchTasksRequest{
 			TaskIdList: tasks.toIDListPB(),
 		}
 		resp, err := m.clients.ExecutorClient(execID).Send(m.ctx, &client.ExecutorRequest{
-			Cmd: client.CmdSuspendBatchTasks,
+			Cmd: client.CmdPauseBatchTasks,
 			Req: req,
 		})
 		if err != nil {
-			log.L().Logger.Info("suspend task failed", zap.Error(err))
+			log.L().Logger.Info("pause task failed", zap.Error(err))
 			continue
 		}
-		if err := resp.Resp.(*pb.SuspendBatchTasksResponse).Err; err != nil {
-			log.L().Logger.Info("suspend task failed", zap.String("error", err.Message))
+		if err := resp.Resp.(*pb.PauseBatchTasksResponse).Err; err != nil {
+			log.L().Logger.Info("pause task failed", zap.String("error", err.Message))
 			continue
 		}
 		for _, t := range tasks {
 			value, ok := m.runningTasks.Load(t.ID)
 			if ok {
-				value.(*Task).setCurStatus(Suspended)
+				value.(*Task).setCurStatus(Pauseed)
 			}
 		}
 	}

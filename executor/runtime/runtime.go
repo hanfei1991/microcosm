@@ -78,12 +78,12 @@ func (s *Runtime) Continue(tasks []int64) {
 	}
 }
 
-func (s *Runtime) Suspend(tasks []int64) error {
+func (s *Runtime) Pause(tasks []int64) error {
 	s.tasksLock.Lock()
 	defer s.tasksLock.Unlock()
 	for _, id := range tasks {
 		if task, ok := s.tasks[model.ID(id)]; ok {
-			err := task.Suspended()
+			err := task.Pauseed()
 			if err != nil {
 				return err
 			}
