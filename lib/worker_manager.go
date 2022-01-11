@@ -21,6 +21,7 @@ type workerManager struct {
 	needWaitForHeartBeat bool
 	initStartTime        time.Time
 	workerInfos          map[WorkerID]*WorkerInfo
+	tombstones           map[WorkerID]*WorkerStatus
 
 	// read-only
 	masterEpoch epoch
@@ -33,25 +34,27 @@ type WorkerHandle interface {
 	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) error
 	Status() *WorkerStatus
 	Workload() model.RescUnit
+	ID() WorkerID
+	IsTombStone() bool
 }
 
 type workerHandleImpl struct {
-	manager  *workerManager
-	workerID WorkerID
+	manager *workerManager
+	id      WorkerID
 }
 
 func (w *workerHandleImpl) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) error {
-	info, ok := w.manager.getWorkerInfo(w.workerID)
+	info, ok := w.manager.getWorkerInfo(w.id)
 	if !ok {
-		return derror.ErrWorkerNotFound.GenWithStackByArgs(w.workerID)
+		return derror.ErrWorkerNotFound.GenWithStackByArgs(w.id)
 	}
 
 	executorNodeID := info.NodeID
 	messageClient := w.manager.messageRouter.GetClient(executorNodeID)
 
-	prefixedTopic := fmt.Sprintf("worker-message/%s/%s", w.workerID, topic)
+	prefixedTopic := fmt.Sprintf("worker-message/%s/%s", w.id, topic)
 	if messageClient == nil {
-		return derror.ErrMessageClientNotFoundForWorker.GenWithStackByArgs(w.workerID)
+		return derror.ErrMessageClientNotFoundForWorker.GenWithStackByArgs(w.id)
 	}
 	_, err := messageClient.TrySendMessage(ctx, prefixedTopic, message)
 	if err != nil {
@@ -64,7 +67,7 @@ func (w *workerHandleImpl) Status() *WorkerStatus {
 	w.manager.mu.Lock()
 	defer w.manager.mu.Unlock()
 
-	info, ok := w.manager.workerInfos[w.workerID]
+	info, ok := w.manager.workerInfos[w.id]
 	if !ok {
 		// TODO think about how to handle this
 		return nil
@@ -77,7 +80,7 @@ func (w *workerHandleImpl) Workload() model.RescUnit {
 	w.manager.mu.Lock()
 	defer w.manager.mu.Unlock()
 
-	info, ok := w.manager.workerInfos[w.workerID]
+	info, ok := w.manager.workerInfos[w.id]
 	if !ok {
 		// worker not found
 		// TODO think about how to handle this
@@ -85,6 +88,39 @@ func (w *workerHandleImpl) Workload() model.RescUnit {
 	}
 
 	return info.workload
+}
+
+func (w *workerHandleImpl) ID() WorkerID {
+	return w.id
+}
+
+func (w *workerHandleImpl) IsTombStone() bool {
+	return false
+}
+
+type tombstoneWorkerHandleImpl struct {
+	id     WorkerID
+	status WorkerStatus
+}
+
+func (h *tombstoneWorkerHandleImpl) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) error {
+	return derror.ErrWorkerOffline.GenWithStackByArgs(h.id)
+}
+
+func (h *tombstoneWorkerHandleImpl) Status() *WorkerStatus {
+	return &h.status
+}
+
+func (h *tombstoneWorkerHandleImpl) Workload() model.RescUnit {
+	return 0
+}
+
+func (h *tombstoneWorkerHandleImpl) ID() WorkerID {
+	return h.id
+}
+
+func (h *tombstoneWorkerHandleImpl) IsTombStone() bool {
+	return true
 }
 
 func newWorkerManager(id MasterID, needWait bool, curEpoch epoch) *workerManager {
@@ -113,10 +149,18 @@ func (m *workerManager) Initialized(ctx context.Context) (bool, error) {
 	return false, nil
 }
 
-func (m *workerManager) Tick(ctx context.Context, router p2p.MessageRouter) error {
+func (m *workerManager) Tick(ctx context.Context, router p2p.MessageRouter) (timedOutWorkers []*WorkerInfo) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	// respond to worker heartbeats
-	for _, workerInfo := range m.workerInfos {
+	for workerID, workerInfo := range m.workerInfos {
 		if !workerInfo.hasPendingHeartbeat {
+			if workerInfo.hasTimedOut() {
+				timedOutWorkers = append(timedOutWorkers, workerInfo)
+				delete(m.workerInfos, workerID)
+				m.tombstones[workerID] = &workerInfo.status
+			}
 			continue
 		}
 		reply := &HeartbeatPongMessage{
@@ -127,7 +171,7 @@ func (m *workerManager) Tick(ctx context.Context, router p2p.MessageRouter) erro
 		workerNodeID := workerInfo.NodeID
 		log.L().Debug("Sending heartbeat response to worker",
 			zap.String("worker-id", string(workerInfo.ID)),
-			zap.String("worker-node-id", string(workerNodeID)),
+			zap.String("worker-node-id", workerNodeID),
 			zap.Any("message", reply))
 
 		msgClient := router.GetClient(workerNodeID)
@@ -139,7 +183,7 @@ func (m *workerManager) Tick(ctx context.Context, router p2p.MessageRouter) erro
 		if cerror.ErrPeerMessageSendTryAgain.Equal(err) {
 			log.L().Warn("Sending heartbeat response to worker failed: message client congested",
 				zap.String("worker-id", string(workerInfo.ID)),
-				zap.String("worker-node-id", string(workerNodeID)),
+				zap.String("worker-node-id", workerNodeID),
 				zap.Any("message", reply))
 			// Retry on the next tick
 			continue
@@ -237,7 +281,24 @@ func (m *workerManager) onWorkerCreated(id WorkerID, exeuctorNodeID p2p.NodeID) 
 
 func (m *workerManager) getWorkerHandle(id WorkerID) WorkerHandle {
 	return &workerHandleImpl{
-		manager:  m,
-		workerID: id,
+		manager: m,
+		id:      id,
 	}
+}
+
+type WorkerInfo struct {
+	ID     WorkerID
+	NodeID p2p.NodeID
+
+	// fields for internal use by the Master.
+	lastHeartBeatReceiveTime time.Time
+	lastHeartBeatSendTime    monotonicTime
+	hasPendingHeartbeat      bool
+
+	status   WorkerStatus
+	workload model.RescUnit
+}
+
+func (w *WorkerInfo) hasTimedOut() bool {
+	return time.Since(w.lastHeartBeatReceiveTime) > workerTimeoutDuration
 }

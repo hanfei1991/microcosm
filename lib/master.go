@@ -8,6 +8,7 @@ import (
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
+	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/pingcap/errors"
@@ -47,7 +48,7 @@ type MasterImpl interface {
 
 	// OnMetadataInit is called when the master is initialized and the metadata might
 	// need to be checked and fixed.
-	OnMetadataInit(etx interface{}) (interface{}, error)
+	OnMetadataInit(ext interface{}) (interface{}, error)
 
 	// CloseImpl is called when the master is being closed
 	CloseImpl(ctx context.Context) error
@@ -98,7 +99,12 @@ func NewBaseMaster(
 	}
 }
 
+func (m *BaseMaster) MetaKVClient() metadata.MetaKV {
+	return m.metaKVClient
+}
+
 func (m *BaseMaster) Init(ctx context.Context) error {
+	// TODO think about what ctx to use to call startBackgroundTasks.
 	m.startBackgroundTasks(ctx)
 
 	if err := m.initMessageHandlers(ctx); err != nil {
@@ -117,8 +123,46 @@ func (m *BaseMaster) Init(ctx context.Context) error {
 	return nil
 }
 
-func (m *BaseMaster) InternalID() MasterID {
+func (m *BaseMaster) Poll(ctx context.Context) error {
+	OfflinedWorkers := m.workers.Tick(ctx, m.messageRouter)
+	for _, workerInfo := range OfflinedWorkers {
+		log.L().Info("worker is offline", zap.Any("worker-info", workerInfo))
+		tombstoneHandle := &tombstoneWorkerHandleImpl{
+			id:     workerInfo.ID,
+			status: workerInfo.status,
+		}
+		offlineErr := derror.ErrWorkerTimedOut.GenWithStackByArgs(workerInfo.ID)
+		if err := m.OnWorkerOffline(tombstoneHandle, offlineErr); err != nil {
+			return errors.Trace(err)
+		}
+	}
+
+	select {
+	case err := <-m.errCh:
+		if err != nil {
+			return errors.Trace(err)
+		}
+	default:
+	}
+
+	if err := m.messageHandlerManager.CheckError(ctx); err != nil {
+		return errors.Trace(err)
+	}
+
+	return nil
+}
+
+func (m *BaseMaster) ID() MasterID {
 	return m.id
+}
+
+func (m *BaseMaster) Close(ctx context.Context) error {
+	if err := m.MasterImpl.CloseImpl(ctx); err != nil {
+		return errors.Trace(err)
+	}
+
+	m.wg.Wait()
+	return nil
 }
 
 func (m *BaseMaster) startBackgroundTasks(ctx context.Context) {

@@ -2,9 +2,9 @@ package lib
 
 import (
 	"fmt"
-	"github.com/hanfei1991/microcosm/model"
 	"time"
 
+	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
@@ -15,7 +15,7 @@ type (
 	WorkerType       int64
 
 	epoch         = int64
-	monotonicTime = uint64
+	monotonicTime = time.Duration
 )
 
 const (
@@ -32,6 +32,10 @@ const (
 	// If no heartbeat is received for workerTimeoutDuration + workerTimeoutGracefulDuration,
 	// the master will consider a worker dead.
 	workerTimeoutGracefulDuration = time.Second * 5
+
+	workerHeartbeatInterval = time.Second * 3
+
+	workerReportStatusInterval = time.Second * 3
 )
 
 type WorkerStatus struct {
@@ -88,15 +92,14 @@ type MasterMetaKVData struct {
 	Ext interface{} `json:"ext"`
 }
 
-type WorkerInfo struct {
-	ID     WorkerID
-	NodeID p2p.NodeID
+type MasterFailoverReasonCode int32
 
-	// fields for internal use by the Master.
-	lastHeartBeatReceiveTime time.Time
-	lastHeartBeatSendTime    monotonicTime
-	hasPendingHeartbeat      bool
+const (
+	MasterTimedOut = MasterFailoverReasonCode(iota + 1)
+	MasterReportedError
+)
 
-	status   WorkerStatus
-	workload model.RescUnit
+type MasterFailoverReason struct {
+	Code         MasterFailoverReasonCode
+	ErrorMessage string
 }

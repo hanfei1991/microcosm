@@ -7,8 +7,8 @@ import (
 
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/executor"
-	"github.com/hanfei1991/microcosm/servermaster"
 	"github.com/hanfei1991/microcosm/pkg/etcdutils"
+	"github.com/hanfei1991/microcosm/servermaster"
 	"github.com/hanfei1991/microcosm/test"
 	"github.com/stretchr/testify/require"
 )
