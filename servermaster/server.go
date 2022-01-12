@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/hanfei1991/microcosm/client"
+	"github.com/hanfei1991/microcosm/lib/fake"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
@@ -23,6 +24,7 @@ import (
 	"github.com/hanfei1991/microcosm/test/mock"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/pkg/p2p"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/embed"
@@ -48,6 +50,9 @@ type Server struct {
 	}
 	leaderClient *client.MasterClient
 
+	messageServer p2p.MessageServer
+	messageRouter p2p.MessageRouter
+
 	// sched scheduler
 	executorManager *ExecutorManager
 	jobManager      *JobManager
@@ -60,6 +65,8 @@ type Server struct {
 	mockGrpcServer mock.GrpcServer
 
 	testCtx *test.Context
+
+	fakeMaster *fake.Master
 }
 
 // NewServer creates a new master-server.
@@ -76,6 +83,9 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 		masterAddrs = append(masterAddrs, u.Host)
 	}
 	jobManager := NewJobManager(masterAddrs)
+
+	//messageServer := p2p.NewMessageServer(cfg.)
+
 	server := &Server{
 		cfg:             cfg,
 		executorManager: executorManager,

@@ -257,15 +257,6 @@ func (m *workerManager) putWorkerInfo(info *WorkerInfo) bool {
 	return !exists
 }
 
-func (m *workerManager) removeWorkerInfo(id WorkerID) bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	_, exists := m.workerInfos[id]
-	delete(m.workerInfos, id)
-	return exists
-}
-
 func (m *workerManager) onWorkerCreated(id WorkerID, exeuctorNodeID p2p.NodeID) {
 	m.putWorkerInfo(&WorkerInfo{
 		ID:                       id,

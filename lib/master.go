@@ -46,10 +46,6 @@ type MasterImpl interface {
 	// OnWorkerMessage is called when a customized message is received.
 	OnWorkerMessage(worker WorkerHandle, topic p2p.Topic, message interface{}) error
 
-	// OnMetadataInit is called when the master is initialized and the metadata might
-	// need to be checked and fixed.
-	OnMetadataInit(ext interface{}) (interface{}, error)
-
 	// CloseImpl is called when the master is being closed
 	CloseImpl(ctx context.Context) error
 }
@@ -78,7 +74,6 @@ type BaseMaster struct {
 }
 
 func NewBaseMaster(
-	ctx context.Context,
 	impl MasterImpl,
 	id MasterID,
 	messageHandlerManager p2p.MessageHandlerManager,
