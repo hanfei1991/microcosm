@@ -60,6 +60,27 @@ type BaseWorker struct {
 	errCh chan error
 }
 
+func NewBaseWorker(
+	ctx context.Context,
+	impl WorkerImpl,
+	messageHandlerManager p2p.MessageHandlerManager,
+	messageRouter p2p.MessageRouter,
+	metaKVClient metadata.MetaKV,
+	workerID WorkerID,
+	masterID MasterID,
+) *BaseWorker {
+	masterManager := newMasterManager(masterID, workerID, messageRouter)
+	return &BaseWorker{
+		impl:                  impl,
+		messageHandlerManager: messageHandlerManager,
+		messageRouter:         messageRouter,
+		metaKVClient:          metaKVClient,
+		master:                masterManager,
+		id:                    workerID,
+		errCh:                 make(chan error, 1),
+	}
+}
+
 func (w *BaseWorker) Init(ctx context.Context) error {
 	if err := w.initMessageHandlers(ctx); err != nil {
 		return errors.Trace(err)
@@ -111,10 +132,6 @@ func (w *BaseWorker) MetaKVClient() metadata.MetaKV {
 	return w.metaKVClient
 }
 
-func (w *BaseWorker) loadMasterInfo(ctx context.Context) {
-
-}
-
 func (w *BaseWorker) startBackgroundTasks(ctx context.Context) {
 	w.wg.Add(1)
 	go func() {
@@ -154,7 +171,15 @@ func (w *BaseWorker) runStatusWorker(ctx context.Context) error {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case <-ticker.C:
-			if err := w.master.SendStatus(ctx); err != nil {
+			status, err := w.impl.Status()
+			if err != nil {
+				return errors.Trace(err)
+			}
+			workload, err := w.impl.Workload()
+			if err != nil {
+				return errors.Trace(err)
+			}
+			if err := w.master.SendStatus(ctx, status, workload); err != nil {
 				return errors.Trace(err)
 			}
 		}
@@ -192,15 +217,40 @@ func (w *BaseWorker) onError(err error) {
 }
 
 type masterManager struct {
-	worker *BaseWorker
-
 	mu          sync.RWMutex
 	masterID    MasterID
 	masterNode  p2p.NodeID
-	masterEpoch epoch
+	masterEpoch Epoch
+
+	workerID WorkerID
 
 	messageRouter           p2p.MessageRouter
+	metaKVClient            metadata.MetaKV
 	lastMasterAckedPingTime monotonicTime
+}
+
+func newMasterManager(masterID MasterID, workerID WorkerID, messageRouter p2p.MessageRouter) *masterManager {
+	return &masterManager{
+		masterID:      masterID,
+		workerID:      workerID,
+		messageRouter: messageRouter,
+	}
+}
+
+func (m *masterManager) refreshMasterInfo(ctx context.Context) error {
+	metaClient := NewMetadataClient(m.masterID, m.metaKVClient)
+	masterMeta, err := metaClient.Load(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.masterNode = masterMeta.NodeID
+	m.masterEpoch = masterMeta.Epoch
+
+	return nil
 }
 
 func (m *masterManager) MasterID() MasterID {
@@ -250,7 +300,7 @@ func (m *masterManager) SendHeartBeat(ctx context.Context) error {
 
 	heartbeatMsg := &HeartbeatPingMessage{
 		SendTime:     monotime.Now(),
-		FromWorkerID: m.worker.id,
+		FromWorkerID: m.workerID,
 		Epoch:        m.masterEpoch,
 	}
 	_, err := client.TrySendMessage(ctx, HeartbeatPingTopic(m.masterID), heartbeatMsg)
@@ -264,7 +314,7 @@ func (m *masterManager) SendHeartBeat(ctx context.Context) error {
 	return nil
 }
 
-func (m *masterManager) SendStatus(ctx context.Context) error {
+func (m *masterManager) SendStatus(ctx context.Context, status WorkerStatus, workload model.RescUnit) error {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -275,16 +325,11 @@ func (m *masterManager) SendStatus(ctx context.Context) error {
 		return nil
 	}
 
-	status, err := m.worker.impl.Status()
-	if err != nil {
-		return errors.Trace(err)
-	}
-
 	statusUpdateMessage := &StatusUpdateMessage{
-		WorkerID: m.worker.id,
+		WorkerID: m.workerID,
 		Status:   status,
 	}
-	_, err = client.TrySendMessage(ctx, StatusUpdateTopic(m.masterID), statusUpdateMessage)
+	_, err := client.TrySendMessage(ctx, StatusUpdateTopic(m.masterID), statusUpdateMessage)
 	if err != nil {
 		if cerror.ErrPeerMessageSendTryAgain.Equal(err) {
 			log.L().Warn("sending status update encountered ErrPeerMessageSendTryAgain")
@@ -293,13 +338,8 @@ func (m *masterManager) SendStatus(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	workload, err := m.worker.impl.Workload()
-	if err != nil {
-		return errors.Trace(err)
-	}
-
 	workloadReportMessage := &WorkloadReportMessage{
-		WorkerID: m.worker.id,
+		WorkerID: m.workerID,
 		Workload: workload,
 	}
 	_, err = client.TrySendMessage(ctx, WorkloadReportTopic(m.masterID), workloadReportMessage)

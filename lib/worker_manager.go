@@ -24,7 +24,7 @@ type workerManager struct {
 	tombstones           map[WorkerID]*WorkerStatus
 
 	// read-only
-	masterEpoch epoch
+	masterEpoch Epoch
 	masterID    MasterID
 
 	messageRouter p2p.MessageRouter
@@ -123,7 +123,7 @@ func (h *tombstoneWorkerHandleImpl) IsTombStone() bool {
 	return true
 }
 
-func newWorkerManager(id MasterID, needWait bool, curEpoch epoch) *workerManager {
+func newWorkerManager(id MasterID, needWait bool, curEpoch Epoch) *workerManager {
 	return &workerManager{
 		needWaitForHeartBeat: needWait,
 		workerInfos:          make(map[WorkerID]*WorkerInfo),

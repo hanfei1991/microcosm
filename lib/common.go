@@ -14,7 +14,7 @@ type (
 	WorkerStatusCode int32
 	WorkerType       int64
 
-	epoch         = int64
+	Epoch         = int64
 	monotonicTime = time.Duration
 )
 
@@ -63,13 +63,13 @@ func StatusUpdateTopic(masterID MasterID) p2p.Topic {
 type HeartbeatPingMessage struct {
 	SendTime     monotonicTime `json:"send-time"`
 	FromWorkerID WorkerID      `json:"from-id"`
-	Epoch        epoch         `json:"epoch"`
+	Epoch        Epoch         `json:"epoch"`
 }
 
 type HeartbeatPongMessage struct {
 	SendTime  monotonicTime `json:"send-time"`
 	ReplyTime time.Time     `json:"reply-time"`
-	Epoch     epoch         `json:"epoch"`
+	Epoch     Epoch         `json:"epoch"`
 }
 
 type StatusUpdateMessage struct {
@@ -82,14 +82,16 @@ type WorkloadReportMessage struct {
 	Workload model.RescUnit `json:"workload"`
 }
 
+type MasterMetaExt = interface{}
 type MasterMetaKVData struct {
-	ID     MasterID   `json:"id"`
-	Addr   string     `json:"addr"`
-	NodeID p2p.NodeID `json:"node-id"`
-	Epoch  epoch      `json:"epoch"`
+	ID          MasterID   `json:"id"`
+	Addr        string     `json:"addr"`
+	NodeID      p2p.NodeID `json:"node-id"`
+	Epoch       Epoch      `json:"epoch"`
+	Initialized bool       `json:"initialized"`
 
 	// Ext holds business-specific data
-	Ext interface{} `json:"ext"`
+	Ext MasterMetaExt `json:"ext"`
 }
 
 type MasterFailoverReasonCode int32

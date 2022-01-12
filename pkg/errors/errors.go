@@ -48,8 +48,10 @@ var (
 	ErrMasterSessionDone              = errors.Normalize("master session is done", errors.RFCCodeText("DFLOW:ErrMasterSessionDone"))
 	ErrMasterRPCNotForward            = errors.Normalize("server grpc is not forwarded to leader", errors.RFCCodeText("DFLOW:ErrMasterRPCNotForward"))
 	ErrLeaderCtxCanceled              = errors.Normalize("leader context is canceled", errors.RFCCodeText("DFLOW:ErrLeaderCtxCanceled"))
-	ErrWorkerNotFound                 = errors.Normalize("worker is not found: worker ID %s", errors.RFCCodeText("DFLOW:ErrWorkerNotFound"))
 	ErrMessageClientNotFoundForWorker = errors.Normalize("peer message client is not found for worker: worker ID %s", errors.RFCCodeText("DFLOW:ErrMessageClientNotFoundForWorker"))
+	ErrMasterNotFound                 = errors.Normalize("master is not found: master ID %s", errors.RFCCodeText("DFLOW:ErrMasterNotFound"))
+
+	ErrWorkerNotFound                 = errors.Normalize("worker is not found: worker ID %s", errors.RFCCodeText("DFLOW:ErrWorkerNotFound"))
 	ErrWorkerOffline                  = errors.Normalize("worker is offline: workerID %s", errors.RFCCodeText("DFLOW:ErrWorkerOffline"))
 	ErrWorkerTimedOut                 = errors.Normalize("worker heartbeat timed out: workerID %s", errors.RFCCodeText("DFLOW:ErrWorkerTimedOut"))
 	ErrWorkerSuicide                  = errors.Normalize("worker has committed suicide due to master having timed out", errors.RFCCodeText("DFLOW:ErrWorkerSuicide"))

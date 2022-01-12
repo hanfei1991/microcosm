@@ -62,13 +62,16 @@ type BaseMaster struct {
 	metaKVClient          metadata.MetaKV
 	executorClientManager *client.Manager
 	serverMasterClient    *client.MasterClient
-	metadataManager       MasterMetadataManager
 	workers               *workerManager
 	pool                  workerpool.AsyncPool
 
 	// read-only fields
 	currentEpoch atomic.Int64
 	id           MasterID
+
+	// TODO put these two fields somewhere else.
+	advertiseAddr string
+	nodeID        p2p.NodeID
 
 	wg    sync.WaitGroup
 	errCh chan error
@@ -83,7 +86,6 @@ func NewBaseMaster(
 	metaKVClient metadata.MetaKV,
 	executorClientManager *client.Manager,
 	serverMasterClient *client.MasterClient,
-	metadataManager MasterMetadataManager,
 ) *BaseMaster {
 	return &BaseMaster{
 		MasterImpl:            impl,
@@ -92,10 +94,8 @@ func NewBaseMaster(
 		metaKVClient:          metaKVClient,
 		executorClientManager: executorClientManager,
 		serverMasterClient:    serverMasterClient,
-		metadataManager:       metadataManager,
-
-		pool: workerpool.NewDefaultAsyncPool(4),
-		id:   id,
+		pool:                  workerpool.NewDefaultAsyncPool(4),
+		id:                    id,
 	}
 }
 
@@ -111,13 +111,17 @@ func (m *BaseMaster) Init(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	isInit, epoch, err := m.metadataManager.FixUpAndInit(ctx, m.OnMetadataInit)
+	isInit, epoch, err := m.initMetadata(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	m.currentEpoch.Store(epoch)
 	m.workers = newWorkerManager(m.id, !isInit, epoch)
 	if err := m.InitImpl(ctx); err != nil {
+		return errors.Trace(err)
+	}
+
+	if err := m.markInitializedInMetadata(ctx); err != nil {
 		return errors.Trace(err)
 	}
 	return nil
@@ -180,6 +184,46 @@ func (m *BaseMaster) OnError(err error) {
 	case m.errCh <- err:
 	default:
 	}
+}
+
+func (m *BaseMaster) initMetadata(ctx context.Context) (isInit bool, epoch Epoch, err error) {
+	metaClient := NewMetadataClient(m.id, m.metaKVClient)
+	masterMeta, err := metaClient.Load(ctx)
+	if err != nil {
+		return false, 0, errors.Trace(err)
+	}
+
+	epoch, err = metaClient.GenerateEpoch(ctx)
+	if err != nil {
+		return false, 0, errors.Trace(err)
+	}
+
+	isInit = masterMeta.Initialized
+
+	// We should update the master data to reflect our current information
+	masterMeta.Addr = m.advertiseAddr
+	masterMeta.NodeID = m.nodeID
+	masterMeta.Epoch = epoch
+
+	if err := metaClient.Store(ctx, masterMeta); err != nil {
+		return false, 0, errors.Trace(err)
+	}
+	return
+}
+
+func (m *BaseMaster) markInitializedInMetadata(ctx context.Context) error {
+	metaClient := NewMetadataClient(m.id, m.metaKVClient)
+	masterMeta, err := metaClient.Load(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	masterMeta.Initialized = true
+	if err := metaClient.Store(ctx, masterMeta); err != nil {
+		return errors.Trace(err)
+	}
+
+	return nil
 }
 
 func (m *BaseMaster) initMessageHandlers(ctx context.Context) error {
