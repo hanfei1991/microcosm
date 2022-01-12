@@ -145,7 +145,7 @@ func (c *MasterClient) rpcWrap(ctx context.Context, req interface{}, respPointer
 }
 
 // Heartbeat wraps Heartbeat rpc to master-server.
-func (c *MasterClient) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest, timeout time.Duration) (resp *pb.HeartbeatResponse, err error) {
+func (c *MasterClient) Heartbeat(ctx context.Context, req *pb.MasterHeartbeatRequest, timeout time.Duration) (resp *pb.MasterHeartbeatResponse, err error) {
 	ctx1, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	err = c.rpcWrap(ctx1, req, &resp)

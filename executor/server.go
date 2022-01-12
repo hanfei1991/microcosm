@@ -34,7 +34,7 @@ type Server struct {
 	grpcSrv     *grpc.Server
 	cli         *client.MasterClient
 	cliUpdateCh chan []string
-	sch         *runtime.Runtime
+	rtm         *runtime.Runtime
 	info        *model.ExecutorInfo
 
 	lastHearbeatTime time.Time
@@ -51,6 +51,10 @@ func NewServer(cfg *Config, ctx *test.Context) *Server {
 		cliUpdateCh: make(chan []string),
 	}
 	return &s
+}
+
+func (s *Server) Heartbeat(ctx context.Context, req *pb.ExecutorHeartbeatRequest) (*pb.ExecutorHeartbeatResponse, error) {
+	return s.rtm.HandleHeartbeat(ctx, req)
 }
 
 // SubmitBatchTasks implements the pb interface.
@@ -72,7 +76,7 @@ func (s *Server) SubmitBatchTasks(ctx context.Context, req *pb.SubmitBatchTasksR
 	}
 	log.L().Logger.Info("executor receive submit sub job", zap.Int("task", len(tasks)))
 	resp := &pb.SubmitBatchTasksResponse{}
-	err := s.sch.SubmitTasks(tasks)
+	err := s.rtm.SubmitTasks(tasks)
 	if err != nil {
 		log.L().Logger.Error("submit subjob error", zap.Error(err))
 		resp.Err = errors.ToPBError(err)
@@ -83,7 +87,7 @@ func (s *Server) SubmitBatchTasks(ctx context.Context, req *pb.SubmitBatchTasksR
 // CancelBatchTasks implements pb interface.
 func (s *Server) CancelBatchTasks(ctx context.Context, req *pb.CancelBatchTasksRequest) (*pb.CancelBatchTasksResponse, error) {
 	log.L().Info("cancel tasks", zap.String("req", req.String()))
-	err := s.sch.Stop(req.TaskIdList)
+	err := s.rtm.Stop(req.TaskIdList)
 	if err != nil {
 		return &pb.CancelBatchTasksResponse{
 			Err: &pb.Error{
@@ -97,7 +101,7 @@ func (s *Server) CancelBatchTasks(ctx context.Context, req *pb.CancelBatchTasksR
 // PauseBatchTasks implements pb interface.
 func (s *Server) PauseBatchTasks(ctx context.Context, req *pb.PauseBatchTasksRequest) (*pb.PauseBatchTasksResponse, error) {
 	log.L().Info("pause tasks", zap.String("req", req.String()))
-	err := s.sch.Pause(req.TaskIdList)
+	err := s.rtm.Pause(req.TaskIdList)
 	if err != nil {
 		return &pb.PauseBatchTasksResponse{
 			Err: &pb.Error{
@@ -111,8 +115,19 @@ func (s *Server) PauseBatchTasks(ctx context.Context, req *pb.PauseBatchTasksReq
 // ResumeBatchTasks implements pb interface.
 func (s *Server) ResumeBatchTasks(ctx context.Context, req *pb.PauseBatchTasksRequest) (*pb.PauseBatchTasksResponse, error) {
 	log.L().Info("resume tasks", zap.String("req", req.String()))
-	s.sch.Continue(req.TaskIdList)
+	s.rtm.Continue(req.TaskIdList)
 	return &pb.PauseBatchTasksResponse{}, nil
+}
+
+// QueryBatchTasks implements pb interface.
+func (s *Server) QueryBatchTasks(ctx context.Context, req *pb.QueryBatchTasksRequest) (*pb.QueryBatchTasksResponse, error) {
+	log.L().Info("query tasks", zap.String("req", req.String()))
+	ret := &pb.QueryBatchTasksResponse{}
+	for _, id := range req.TaskIdList {
+		status := s.rtm.Query(id)
+		ret.TaskStatusList = append(ret.TaskStatusList, status)
+	}
+	return ret, nil
 }
 
 func (s *Server) Stop() {
@@ -137,9 +152,9 @@ func (s *Server) startForTest(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
-	s.sch = runtime.NewRuntime(s.testCtx)
+	s.rtm = runtime.NewRuntime(s.testCtx)
 	go func() {
-		s.sch.Run(ctx, 10)
+		s.rtm.Run(ctx, 10)
 	}()
 
 	err = s.selfRegister(ctx)
@@ -165,9 +180,9 @@ func (s *Server) Run(ctx context.Context) error {
 		return err
 	}
 
-	s.sch = runtime.NewRuntime(nil)
+	s.rtm = runtime.NewRuntime(nil)
 	wg.Go(func() error {
-		s.sch.Run(ctx, 10)
+		s.rtm.Run(ctx, 10)
 		return nil
 	})
 
@@ -327,7 +342,7 @@ func (s *Server) keepHeartbeat(ctx context.Context) error {
 			if s.lastHearbeatTime.Add(s.cfg.KeepAliveTTL).Before(time.Now()) {
 				return errors.ErrHeartbeat.GenWithStack("heartbeat timeout")
 			}
-			req := &pb.HeartbeatRequest{
+			req := &pb.MasterHeartbeatRequest{
 				ExecutorId: string(s.info.ID),
 				Status:     int32(model.Running),
 				Timestamp:  uint64(t.Unix()),
@@ -375,7 +390,7 @@ func getJoinURLs(addrs string) []string {
 }
 
 func (s *Server) reportTaskRescOnce(ctx context.Context) error {
-	rescs := s.sch.Resource()
+	rescs := s.rtm.Resource()
 	req := &pb.ExecWorkloadRequest{
 		// TODO: use which field as ExecutorId is more accurate
 		ExecutorId: s.cfg.WorkerAddr,

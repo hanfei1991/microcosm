@@ -29,7 +29,7 @@ service Master {
     //GetMembers returns the available master members
     //rpc GetMembers(GetMembersRequest) {}
 
-    rpc Heartbeat(HeartbeatRequest) returns(HeartbeatResponse) {}
+    rpc Heartbeat(MasterHeartbeatRequest) returns(MasterHeartbeatResponse) {}
     // TODO: Support more interface.
 
     // - PutClusterConfig
@@ -50,7 +50,7 @@ service Master {
     rpc ReportExecutorWorkload(ExecWorkloadRequest) returns(ExecWorkloadResponse) {}
 }
 
-message HeartbeatRequest {
+message MasterHeartbeatRequest {
     string executor_id = 1;
     int32 resource_usage = 2;
     int32 status = 3;
@@ -59,7 +59,7 @@ message HeartbeatRequest {
     uint64 ttl = 5;
 }
 
-message HeartbeatResponse {
+message MasterHeartbeatResponse {
     Error err = 1;
     string leader = 2;
     repeated string addrs = 3;

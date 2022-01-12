@@ -15,7 +15,7 @@ const (
 	Runnable TaskStatus = iota
 	Blocked
 	Waking
-	Pauseed
+	Paused
 	Stop
 )
 
@@ -101,7 +101,7 @@ func (t *taskContainer) prepare() error {
 
 func (t *taskContainer) tryAwake() bool {
 	for {
-		if atomic.LoadInt32(&t.status) == int32(Stop) || atomic.LoadInt32(&t.status) == int32(Pauseed) {
+		if atomic.LoadInt32(&t.status) == int32(Stop) || atomic.LoadInt32(&t.status) == int32(Paused) {
 			return false
 		}
 		//		log.Printf("try wake task %d", t.id)
@@ -120,7 +120,7 @@ func (t *taskContainer) tryAwake() bool {
 }
 
 func (t *taskContainer) tryBlock() bool {
-	if atomic.LoadInt32(&t.status) == int32(Pauseed) {
+	if atomic.LoadInt32(&t.status) == int32(Paused) {
 		return true
 	}
 	return atomic.CompareAndSwapInt32(&t.status, int32(Runnable), int32(Blocked))
@@ -183,7 +183,7 @@ func (t *taskContainer) Stop() error {
 			break
 		}
 
-		if atomic.CompareAndSwapInt32(&t.status, int32(Pauseed), int32(Stop)) {
+		if atomic.CompareAndSwapInt32(&t.status, int32(Paused), int32(Stop)) {
 			break
 		}
 
@@ -199,23 +199,27 @@ func (t *taskContainer) Stop() error {
 }
 
 func (t *taskContainer) Continue() {
-	if atomic.LoadInt32(&t.status) == int32(Pauseed) {
+	if atomic.LoadInt32(&t.status) == int32(Paused) {
 		atomic.StoreInt32(&t.status, int32(Blocked))
 		t.ctx.Wake()
 	}
 }
 
-func (t *taskContainer) Pauseed() error {
+func (t *taskContainer) GetStatus() TaskStatus {
+	return TaskStatus(atomic.LoadInt32(&t.status))
+}
+
+func (t *taskContainer) Pause() error {
 	for {
-		if atomic.LoadInt32(&t.status) == int32(Pauseed) || atomic.LoadInt32(&t.status) == int32(Stop) {
+		if atomic.LoadInt32(&t.status) == int32(Paused) || atomic.LoadInt32(&t.status) == int32(Stop) {
 			return nil
 		}
 
-		if atomic.CompareAndSwapInt32(&t.status, int32(Runnable), int32(Pauseed)) {
+		if atomic.CompareAndSwapInt32(&t.status, int32(Runnable), int32(Paused)) {
 			break
 		}
 
-		if atomic.CompareAndSwapInt32(&t.status, int32(Blocked), int32(Pauseed)) {
+		if atomic.CompareAndSwapInt32(&t.status, int32(Blocked), int32(Paused)) {
 			break
 		}
 	}
@@ -232,7 +236,7 @@ func (t *taskContainer) Poll() TaskStatus {
 		return Stop
 	}
 
-	if atomic.LoadInt32(&t.status) == int32(Pauseed) {
+	if atomic.LoadInt32(&t.status) == int32(Paused) {
 		return Blocked
 	}
 

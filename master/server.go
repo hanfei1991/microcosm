@@ -88,9 +88,9 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 }
 
 // Heartbeat implements pb interface.
-func (s *Server) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
+func (s *Server) Heartbeat(ctx context.Context, req *pb.MasterHeartbeatRequest) (*pb.MasterHeartbeatResponse, error) {
 	var (
-		resp2 *pb.HeartbeatResponse
+		resp2 *pb.MasterHeartbeatResponse
 		err2  error
 	)
 	shouldRet := s.rpcForwardIfNeeded(ctx, req, &resp2, &err2)
@@ -100,7 +100,7 @@ func (s *Server) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.H
 
 	checkErr := s.apiPreCheck()
 	if checkErr != nil {
-		return &pb.HeartbeatResponse{Err: checkErr}, nil
+		return &pb.MasterHeartbeatResponse{Err: checkErr}, nil
 	}
 	resp, err := s.executorManager.HandleHeartbeat(req)
 	if err == nil && resp.Err == nil {

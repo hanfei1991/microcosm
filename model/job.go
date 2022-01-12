@@ -21,7 +21,7 @@ const (
 const (
 	Init TaskStatus = iota
 	Serving
-	Pauseed
+	Paused
 	Stopped
 )
 
@@ -46,8 +46,14 @@ type Task struct {
 	Cost              int          `json:"cost"`
 	PreferredLocation string       `json:"location"`
 
-	Exec   ExecutorID `json:"exec"`
-	Status TaskStatus
+	Exec         ExecutorID `json:"exec"`
+	TargetStatus TaskStatus `json:"status"`
+}
+
+func (t *Task) Copy() (ret *Task) {
+	ret = new(Task)
+	*ret = *t
+	return ret
 }
 
 func (t *Task) ToPB() *pb.TaskRequest {

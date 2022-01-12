@@ -34,6 +34,7 @@ type JobManager struct {
 }
 
 func (j *JobManager) recover(ctx context.Context) error {
+	// We get all the jobs and recover them one by one.
 	resp, err := j.MetaKV.Get(ctx, adapter.JobKeyAdapter.Path())
 	if err != nil {
 		return err

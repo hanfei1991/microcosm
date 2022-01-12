@@ -8,6 +8,19 @@ service Executor {
     rpc SubmitBatchTasks(SubmitBatchTasksRequest) returns (SubmitBatchTasksResponse) {}
     rpc CancelBatchTasks(CancelBatchTasksRequest) returns (CancelBatchTasksResponse) {}
     rpc PauseBatchTasks(PauseBatchTasksRequest) returns (PauseBatchTasksResponse) {}
+    rpc QueryBatchTasks(QueryBatchTasksRequest) returns (QueryBatchTasksResponse) {}
+    rpc Heartbeat(ExecutorHeartbeatRequest) returns (ExecutorHeartbeatResponse) {}
+}
+
+message ExecutorHeartbeatRequest {
+    repeated int64 register_task_id_list = 1; // new watched tasks
+    repeated int64 unregister_task_id_list = 2; // new watched tasks
+    string exec_id = 3;
+    string addr = 4;
+}
+
+message ExecutorHeartbeatResponse {
+    repeated TaskStatus task_status = 1;
 }
 
 message CancelBatchTasksRequest {
@@ -22,12 +35,31 @@ message SubmitBatchTasksRequest {
     repeated TaskRequest tasks = 2;
 }
 
+enum TaskStatusType {
+    Running = 0;
+    Pause = 1;
+    Finished = 2;
+    Blocked = 3;
+    NotFound = 4;
+    Err = 5;
+}
+
+message QueryBatchTasksRequest {
+    repeated int64 task_id_list = 1;
+}
+
 message TaskRequest {
     int64 id = 1;
     repeated int64 inputs = 2;
     repeated int64 outputs = 3;
     bytes op = 4;
     int32 op_tp = 5;
+}
+
+message TaskStatus {
+    int64 id = 1;
+    TaskStatusType status = 2;
+    Error err = 3;
 }
 
 message SubmitBatchTasksResponse {
@@ -40,4 +72,8 @@ message CancelBatchTasksResponse {
 
 message PauseBatchTasksResponse {
     Error err = 1;
+}
+
+message QueryBatchTasksResponse {
+    repeated TaskStatus task_status_list = 1;
 }

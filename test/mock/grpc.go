@@ -53,7 +53,7 @@ func (s *masterServerConn) sendRequest(ctx context.Context, req interface{}) (in
 		return s.server.PauseJob(ctx, x)
 	case *pb.SubmitJobRequest:
 		return s.server.SubmitJob(ctx, x)
-	case *pb.HeartbeatRequest:
+	case *pb.MasterHeartbeatRequest:
 		return s.server.Heartbeat(ctx, x)
 	case *pb.TaskSchedulerRequest:
 		return s.server.ScheduleTask(ctx, x)
@@ -87,9 +87,9 @@ func (c *masterServerClient) CancelJob(ctx context.Context, req *pb.CancelJobReq
 	return resp.(*pb.CancelJobResponse), err
 }
 
-func (c *masterServerClient) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest, opts ...grpc.CallOption) (*pb.HeartbeatResponse, error) {
+func (c *masterServerClient) Heartbeat(ctx context.Context, req *pb.MasterHeartbeatRequest, opts ...grpc.CallOption) (*pb.MasterHeartbeatResponse, error) {
 	resp, err := c.conn.sendRequest(ctx, req)
-	return resp.(*pb.HeartbeatResponse), err
+	return resp.(*pb.MasterHeartbeatResponse), err
 }
 
 func (c *masterServerClient) ScheduleTask(ctx context.Context, req *pb.TaskSchedulerRequest, opts ...grpc.CallOption) (*pb.TaskSchedulerResponse, error) {
@@ -180,6 +180,16 @@ func (c *executorClient) PauseBatchTasks(ctx context.Context, req *pb.PauseBatch
 	return resp.(*pb.PauseBatchTasksResponse), err
 }
 
+func (c *executorClient) Heartbeat(ctx context.Context, req *pb.ExecutorHeartbeatRequest, opts ...grpc.CallOption) (*pb.ExecutorHeartbeatResponse, error) {
+	resp, err := c.conn.sendRequest(ctx, req)
+	return resp.(*pb.ExecutorHeartbeatResponse), err
+}
+
+func (c *executorClient) QueryBatchTasks(ctx context.Context, req *pb.QueryBatchTasksRequest, opts ...grpc.CallOption) (*pb.QueryBatchTasksResponse, error) {
+	resp, err := c.conn.sendRequest(ctx, req)
+	return resp.(*pb.QueryBatchTasksResponse), err
+}
+
 func (s *executorServerConn) Close() error {
 	return nil
 }
@@ -196,6 +206,8 @@ func (s *executorServerConn) sendRequest(ctx context.Context, req interface{}) (
 		return s.server.CancelBatchTasks(ctx, x)
 	case *pb.PauseBatchTasksRequest:
 		return s.server.PauseBatchTasks(ctx, x)
+	case *pb.QueryBatchTasksRequest:
+		return s.server.QueryBatchTasks(ctx, x)
 	}
 	return nil, errors.New("unknown request")
 }

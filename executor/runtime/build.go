@@ -91,6 +91,8 @@ func (s *Runtime) SubmitTasks(tasks []*model.Task) error {
 			return err
 		}
 		s.tasks[t.id] = t
+		// register to heartbeat manager.
+		// s.hb.Register(t)
 	}
 
 	log.L().Logger.Info("begin to push")

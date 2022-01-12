@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 
+	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/test"
@@ -24,6 +25,7 @@ type closeableConnIface interface {
 type executorClient struct {
 	conn   closeableConnIface
 	client pb.ExecutorClient
+	prober executorProber
 }
 
 func (c *executorClient) Send(ctx context.Context, req *ExecutorRequest) (*ExecutorResponse, error) {
@@ -36,6 +38,8 @@ func (c *executorClient) Send(ctx context.Context, req *ExecutorRequest) (*Execu
 		resp.Resp, err = c.client.CancelBatchTasks(ctx, req.CancelBatchTasks())
 	case CmdPauseBatchTasks:
 		resp.Resp, err = c.client.PauseBatchTasks(ctx, req.PauseBatchTasks())
+	case CmdQueryBatchTasks:
+		resp.Resp, err = c.client.QueryBatchTasks(ctx, req.QueryBatchTasks())
 	}
 	if err != nil {
 		log.L().Logger.Error("send req meet error", zap.Error(err))
@@ -54,7 +58,7 @@ func newExecutorClientForTest(addr string) (*executorClient, error) {
 	}, nil
 }
 
-func newExecutorClient(addr string) (*executorClient, error) {
+func newExecutorClient(id model.ExecutorID, addr string, onClose func()) (*executorClient, error) {
 	if test.GetGlobalTestFlag() {
 		return newExecutorClientForTest(addr)
 	}
@@ -65,6 +69,10 @@ func newExecutorClient(addr string) (*executorClient, error) {
 	return &executorClient{
 		conn:   conn,
 		client: pb.NewExecutorClient(conn),
+		prober: executorProber{
+			executorID: id,
+			onClose:    onClose,
+		},
 	}, nil
 }
 
@@ -74,6 +82,7 @@ const (
 	CmdSubmitBatchTasks CmdType = 1 + iota
 	CmdCancelBatchTasks
 	CmdPauseBatchTasks
+	CmdQueryBatchTasks
 )
 
 type ExecutorRequest struct {
@@ -91,6 +100,10 @@ func (e *ExecutorRequest) CancelBatchTasks() *pb.CancelBatchTasksRequest {
 
 func (e *ExecutorRequest) PauseBatchTasks() *pb.PauseBatchTasksRequest {
 	return e.Req.(*pb.PauseBatchTasksRequest)
+}
+
+func (e *ExecutorRequest) QueryBatchTasks() *pb.QueryBatchTasksRequest {
+	return e.Req.(*pb.QueryBatchTasksRequest)
 }
 
 type ExecutorResponse struct {

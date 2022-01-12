@@ -44,6 +44,12 @@ func (c *Manager) AddMasterClient(ctx context.Context, addrs []string) error {
 	return err
 }
 
+func (c *Manager) removeExecutor(id model.ExecutorID) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	delete(c.executors, id)
+}
+
 func (c *Manager) AddExecutor(id model.ExecutorID, addr string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -51,7 +57,7 @@ func (c *Manager) AddExecutor(id model.ExecutorID, addr string) error {
 		return nil
 	}
 	log.L().Info("client manager adds executor", zap.String("id", string(id)), zap.String("addr", addr))
-	client, err := newExecutorClient(addr)
+	client, err := newExecutorClient(id, addr, func() { c.removeExecutor(id) })
 	if err != nil {
 		return err
 	}

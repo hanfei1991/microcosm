@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/hanfei1991/microcosm/model"
+	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/test"
 )
@@ -34,16 +35,21 @@ func (q *queue) push(t *taskContainer) {
 
 type Runtime struct {
 	testCtx   *test.Context
-	tasksLock sync.Mutex
+	tasksLock sync.RWMutex
 	tasks     map[model.ID]*taskContainer
 	q         queue
 	wg        sync.WaitGroup
+	hb        HeartbeatManager
+}
+
+func (s *Runtime) HandleHeartbeat(ctx context.Context, req *pb.ExecutorHeartbeatRequest) (*pb.ExecutorHeartbeatResponse, error) {
+	return s.hb.Heartbeat(ctx, req)
 }
 
 // Resource returns current usage resource snapshot of this runtime
 func (s *Runtime) Resource() map[model.WorkloadType]model.RescUnit {
-	s.tasksLock.Lock()
-	defer s.tasksLock.Unlock()
+	s.tasksLock.RLock()
+	defer s.tasksLock.RUnlock()
 	res := make(map[model.WorkloadType]model.RescUnit)
 	for _, t := range s.tasks {
 		res[t.tru.GetType()] += t.tru.GetUsage()
@@ -68,8 +74,8 @@ func (s *Runtime) Stop(tasks []int64) error {
 }
 
 func (s *Runtime) Continue(tasks []int64) {
-	s.tasksLock.Lock()
-	defer s.tasksLock.Unlock()
+	s.tasksLock.RLock()
+	defer s.tasksLock.RUnlock()
 	for _, id := range tasks {
 		if task, ok := s.tasks[model.ID(id)]; ok {
 			task.Continue()
@@ -79,11 +85,11 @@ func (s *Runtime) Continue(tasks []int64) {
 }
 
 func (s *Runtime) Pause(tasks []int64) error {
-	s.tasksLock.Lock()
-	defer s.tasksLock.Unlock()
+	s.tasksLock.RLock()
+	defer s.tasksLock.RUnlock()
 	for _, id := range tasks {
 		if task, ok := s.tasks[model.ID(id)]; ok {
-			err := task.Pauseed()
+			err := task.Pause()
 			if err != nil {
 				return err
 			}
@@ -92,6 +98,35 @@ func (s *Runtime) Pause(tasks []int64) error {
 		}
 	}
 	return nil
+}
+
+func (s *Runtime) Query(taskID int64) *pb.TaskStatus {
+	s.tasksLock.RLock()
+	defer s.tasksLock.RUnlock()
+	status := &pb.TaskStatus{
+		Id: taskID,
+	}
+	if task, ok := s.tasks[model.ID(taskID)]; ok {
+		ts := task.GetStatus()
+		switch ts {
+		case Runnable, Waking:
+			status.Status = pb.TaskStatusType_Running
+		case Blocked:
+			status.Status = pb.TaskStatusType_Blocked
+		case Stop:
+			status.Status = pb.TaskStatusType_Finished
+		case Paused:
+			status.Status = pb.TaskStatusType_Pause
+		default:
+			err := errors.ErrUnknownExecutorID.FastGenByArgs(taskID, ts)
+			status.Err = &pb.Error{
+				Message: err.Error(),
+			}
+		}
+	} else {
+		status.Status = pb.TaskStatusType_NotFound
+	}
+	return status
 }
 
 func (s *Runtime) Run(ctx context.Context, cur int) {

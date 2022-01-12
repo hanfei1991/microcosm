@@ -73,7 +73,7 @@ func (e *ExecutorManager) removeExecutorImpl(id model.ExecutorID) error {
 }
 
 // HandleHeartbeat implements pb interface,
-func (e *ExecutorManager) HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
+func (e *ExecutorManager) HandleHeartbeat(req *pb.MasterHeartbeatRequest) (*pb.MasterHeartbeatResponse, error) {
 	log.L().Logger.Info("handle heart beat", zap.Stringer("req", req))
 	e.mu.Lock()
 	exec, ok := e.executors[model.ExecutorID(req.ExecutorId)]
@@ -82,7 +82,7 @@ func (e *ExecutorManager) HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.Heartbe
 	if !ok {
 		e.mu.Unlock()
 		err := errors.ErrUnknownExecutorID.FastGenByArgs(req.ExecutorId)
-		return &pb.HeartbeatResponse{Err: errors.ToPBError(err)}, nil
+		return &pb.MasterHeartbeatResponse{Err: errors.ToPBError(err)}, nil
 	}
 	e.mu.Unlock()
 
@@ -91,7 +91,7 @@ func (e *ExecutorManager) HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.Heartbe
 	defer exec.mu.Unlock()
 	if exec.Status == model.Tombstone {
 		err := errors.ErrTombstoneExecutor.FastGenByArgs(req.ExecutorId)
-		return &pb.HeartbeatResponse{Err: errors.ToPBError(err)}, nil
+		return &pb.MasterHeartbeatResponse{Err: errors.ToPBError(err)}, nil
 	}
 	exec.lastUpdateTime = time.Now()
 	exec.heartbeatTTL = time.Duration(req.Ttl) * time.Millisecond
@@ -101,7 +101,7 @@ func (e *ExecutorManager) HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.Heartbe
 	if err != nil {
 		return nil, err
 	}
-	resp := &pb.HeartbeatResponse{}
+	resp := &pb.MasterHeartbeatResponse{}
 	return resp, nil
 }
 

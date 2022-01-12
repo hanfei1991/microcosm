@@ -56,15 +56,19 @@ type TaskStatus int
 const (
 	Serving TaskStatus = iota
 	Scheduling
-	Pauseed
+	Paused
 	Stopped
+	Initializing // we dispatch the task but has not receive heartbeat.
 )
 
 type Task struct {
 	sync.Mutex
 	*model.Task
+	// currentStatus records the current inner status of task.
+	// The difference is, that is possible to be under scheduling for current status.
+	// But the target shall never be `scheduling`. Scheduling is the approach to make status serve,
+	// rather than a particular target.
 	currentStatus TaskStatus
-	targetStatus  TaskStatus
 }
 
 func (t *Task) setCurStatus(status TaskStatus) {
@@ -73,9 +77,9 @@ func (t *Task) setCurStatus(status TaskStatus) {
 	t.Unlock()
 }
 
-func (t *Task) setTargetStatus(status TaskStatus) {
+func (t *Task) setTargetStatus(status model.TaskStatus) {
 	t.Lock()
-	t.targetStatus = status
+	t.TargetStatus = status
 	t.Unlock()
 }
 
@@ -116,15 +120,16 @@ func (m *Master) ID() model.ID {
 	return m.id
 }
 
-func (m *Master) RestoreTask(ctx context.Context, task *model.Task) error {
-	res, err := m.MetaKV.Get(ctx, adapter.TaskKeyAdapter.Encode(strconv.Itoa(int(task.ID))), clientv3.WithLimit(1))
-	// TODO: If we cant communicate with etcd, shall we wait the task timeout and dispatch this task again?
+// RestoreTask is to recover the task. If the task is still running normally, we should watch their status.
+// originalTask is the original config of a task/job.
+func (m *Master) RestoreTask(ctx context.Context, originalTask *model.Task) error {
+	res, err := m.MetaKV.Get(ctx, adapter.TaskKeyAdapter.Encode(strconv.Itoa(int(originalTask.ID))), clientv3.WithLimit(1))
 	if err != nil {
 		return err
 	}
 	result := res.(*clientv3.GetResponse)
 	if len(result.Kvs) == 0 {
-		m.DispatchTasks(task)
+		m.DispatchTasks(originalTask)
 		return nil
 	}
 	taskInfo := new(model.Task)
@@ -132,8 +137,14 @@ func (m *Master) RestoreTask(ctx context.Context, task *model.Task) error {
 	if err != nil {
 		return err
 	}
-	m.runningTasks.Store(taskInfo.ID, taskInfo)
-	// TODO: wait task to report heartbeat.
+	// Right now, we get the task info from etcd successfully.
+	// Then we should check if the task is running, and get the internal status of task.
+	// TODO: expect executor client to implement watch interface.
+	task := &Task{
+		Task:          taskInfo,
+		currentStatus: Initializing,
+	}
+	m.runningTasks.Store(taskInfo.ID, task)
 	return nil
 }
 
@@ -193,7 +204,6 @@ func (m *Master) dispatch(ctx context.Context, tasks []*model.Task) error {
 				task := &Task{
 					Task:          t,
 					currentStatus: Serving,
-					targetStatus:  Serving,
 				}
 				m.runningTasks.Store(t.ID, task)
 			}
@@ -237,16 +247,29 @@ func (m *Master) DispatchTasks(tasks ...*model.Task) {
 }
 
 func (m *Master) AsyncPauseTasks(tasks ...*model.Task) error {
+	// check if every tasks exist
 	for _, t := range tasks {
 		_, ok := m.runningTasks.Load(t.ID)
 		if !ok {
 			return errors.ErrTaskNotFound.FastGenByArgs(t.ID)
 		}
+		// TODO: If this task has been cancelled, it shouldn't be paused.
 	}
-
+	// set the target status to pause and update to etcd.
+	updateTasks := make([]*model.Task, 0, len(tasks))
 	for _, t := range tasks {
 		value, _ := m.runningTasks.Load(t.ID)
-		value.(*Task).setTargetStatus(Pauseed)
+		task := value.(*Task).Copy()
+		task.TargetStatus = model.Paused
+		updateTasks = append(updateTasks, task)
+	}
+	err := m.updateEtcd(m.ctx, updateTasks)
+	if err != nil {
+		return err
+	}
+	for _, t := range tasks {
+		value, _ := m.runningTasks.Load(t.ID)
+		value.(*Task).setTargetStatus(model.Paused)
 	}
 	return nil
 }
@@ -298,7 +321,6 @@ func (m *Master) addScheduleTasks(group scheduleGroup) {
 			task := &Task{
 				Task:          t,
 				currentStatus: Scheduling,
-				targetStatus:  Serving,
 			}
 			m.runningTasks.Store(t.ID, task)
 		}
@@ -332,7 +354,7 @@ func (m *Master) monitorRunningTasks() {
 		m.runningTasks.Range(func(_, value interface{}) bool {
 			t := value.(*Task)
 			t.Lock()
-			if t.targetStatus == Pauseed && t.currentStatus == Serving {
+			if t.TargetStatus == model.Paused && t.currentStatus == Serving {
 				log.L().Logger.Info("plan to pause", zap.Int32("id", int32(t.ID)))
 				tasksToPause = append(tasksToPause, t.Task)
 			}
@@ -364,7 +386,7 @@ func (m *Master) pauseTaskImpl(tasks []*model.Task) {
 		for _, t := range tasks {
 			value, ok := m.runningTasks.Load(t.ID)
 			if ok {
-				value.(*Task).setCurStatus(Pauseed)
+				value.(*Task).setCurStatus(Paused)
 			}
 		}
 	}
