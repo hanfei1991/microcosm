@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/edwingeng/deque"
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
@@ -26,8 +27,6 @@ type Master interface {
 }
 
 type MasterImpl interface {
-	Master
-
 	// InitImpl provides customized logic for the business logic to initialize.
 	InitImpl(ctx context.Context) error
 
@@ -51,7 +50,7 @@ type MasterImpl interface {
 }
 
 type BaseMaster struct {
-	MasterImpl
+	impl MasterImpl
 
 	messageHandlerManager p2p.MessageHandlerManager
 	messageRouter         p2p.MessageRouter
@@ -71,6 +70,9 @@ type BaseMaster struct {
 
 	wg    sync.WaitGroup
 	errCh chan error
+
+	offlinedWorkerQueueMu sync.Mutex
+	offlinedWorkerQueue   deque.Deque
 }
 
 func NewBaseMaster(
@@ -83,7 +85,7 @@ func NewBaseMaster(
 	serverMasterClient *client.MasterClient,
 ) *BaseMaster {
 	return &BaseMaster{
-		MasterImpl:            impl,
+		impl:                  impl,
 		messageHandlerManager: messageHandlerManager,
 		messageRouter:         messageRouter,
 		metaKVClient:          metaKVClient,
@@ -112,7 +114,7 @@ func (m *BaseMaster) Init(ctx context.Context) error {
 	}
 	m.currentEpoch.Store(epoch)
 	m.workers = newWorkerManager(m.id, !isInit, epoch)
-	if err := m.InitImpl(ctx); err != nil {
+	if err := m.impl.InitImpl(ctx); err != nil {
 		return errors.Trace(err)
 	}
 
@@ -123,19 +125,6 @@ func (m *BaseMaster) Init(ctx context.Context) error {
 }
 
 func (m *BaseMaster) Poll(ctx context.Context) error {
-	OfflinedWorkers := m.workers.Tick(ctx, m.messageRouter)
-	for _, workerInfo := range OfflinedWorkers {
-		log.L().Info("worker is offline", zap.Any("worker-info", workerInfo))
-		tombstoneHandle := &tombstoneWorkerHandleImpl{
-			id:     workerInfo.ID,
-			status: workerInfo.status,
-		}
-		offlineErr := derror.ErrWorkerTimedOut.GenWithStackByArgs(workerInfo.ID)
-		if err := m.OnWorkerOffline(tombstoneHandle, offlineErr); err != nil {
-			return errors.Trace(err)
-		}
-	}
-
 	select {
 	case err := <-m.errCh:
 		if err != nil {
@@ -148,6 +137,24 @@ func (m *BaseMaster) Poll(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
+	for {
+		m.offlinedWorkerQueueMu.Lock()
+		if m.offlinedWorkerQueue.Empty() {
+			break
+		}
+		handle := m.offlinedWorkerQueue.PopFront().(*tombstoneWorkerHandleImpl)
+		m.offlinedWorkerQueueMu.Unlock()
+
+		offlineErr := derror.ErrWorkerTimedOut.GenWithStackByArgs(handle.ID())
+		if err := m.impl.OnWorkerOffline(handle, offlineErr); err != nil {
+			return errors.Trace(err)
+		}
+	}
+
+	if err := m.impl.Tick(ctx); err != nil {
+		return errors.Trace(err)
+	}
+
 	return nil
 }
 
@@ -156,7 +163,7 @@ func (m *BaseMaster) ID() MasterID {
 }
 
 func (m *BaseMaster) Close(ctx context.Context) error {
-	if err := m.MasterImpl.CloseImpl(ctx); err != nil {
+	if err := m.impl.CloseImpl(ctx); err != nil {
 		return errors.Trace(err)
 	}
 
@@ -172,6 +179,39 @@ func (m *BaseMaster) startBackgroundTasks(ctx context.Context) {
 			m.OnError(err)
 		}
 	}()
+
+	m.wg.Add(1)
+	go func() {
+		defer m.wg.Done()
+		if err := m.runWorkerCheck(ctx); err != nil {
+			m.OnError(err)
+		}
+	}()
+}
+
+func (m *BaseMaster) runWorkerCheck(ctx context.Context) error {
+	ticker := time.NewTicker(masterHeartbeatCheckLoopInterval)
+	for {
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		case <-ticker.C:
+		}
+
+		OfflinedWorkers := m.workers.Tick(ctx, m.messageRouter)
+		for _, workerInfo := range OfflinedWorkers {
+			log.L().Info("worker is offline", zap.Any("worker-info", workerInfo))
+
+			tombstoneHandle := &tombstoneWorkerHandleImpl{
+				id:     workerInfo.ID,
+				status: workerInfo.status,
+			}
+
+			m.offlinedWorkerQueueMu.Lock()
+			m.offlinedWorkerQueue.PushBack(tombstoneHandle)
+			m.offlinedWorkerQueueMu.Unlock()
+		}
+	}
 }
 
 func (m *BaseMaster) OnError(err error) {
@@ -182,6 +222,8 @@ func (m *BaseMaster) OnError(err error) {
 }
 
 func (m *BaseMaster) initMetadata(ctx context.Context) (isInit bool, epoch Epoch, err error) {
+	// TODO refine this logic to make it correct and easier to understand.
+
 	metaClient := NewMetadataClient(m.id, m.metaKVClient)
 	masterMeta, err := metaClient.Load(ctx)
 	if err != nil {
@@ -298,7 +340,7 @@ func (m *BaseMaster) CreateWorker(ctx context.Context, workerType WorkerType, co
 			// TODO (zixiong) make the timeout configurable
 			time.Second*10)
 		if err != nil {
-			err1 := m.OnWorkerDispatched(nil, errors.Trace(err))
+			err1 := m.impl.OnWorkerDispatched(nil, errors.Trace(err))
 			if err1 != nil {
 				m.OnError(errors.Trace(err))
 			}
@@ -319,7 +361,7 @@ func (m *BaseMaster) CreateWorker(ctx context.Context, workerType WorkerType, co
 			},
 		})
 		if err != nil {
-			err1 := m.OnWorkerDispatched(nil, errors.Trace(err))
+			err1 := m.impl.OnWorkerDispatched(nil, errors.Trace(err))
 			if err1 != nil {
 				m.OnError(errors.Trace(err))
 			}
@@ -328,7 +370,7 @@ func (m *BaseMaster) CreateWorker(ctx context.Context, workerType WorkerType, co
 		dispatchTaskResp := executorResp.Resp.(*pb.DispatchTaskResponse)
 		errCode := dispatchTaskResp.GetErrorCode()
 		if errCode != pb.DispatchTaskErrorCode_OK {
-			err1 := m.OnWorkerDispatched(
+			err1 := m.impl.OnWorkerDispatched(
 				nil, errors.Errorf("dispatch worker failed with error code: %d", errCode))
 			if err1 != nil {
 				m.OnError(errors.Trace(err))
@@ -340,7 +382,7 @@ func (m *BaseMaster) CreateWorker(ctx context.Context, workerType WorkerType, co
 		m.workers.onWorkerCreated(workerID, executorID)
 		handle := m.workers.getWorkerHandle(workerID)
 
-		if err := m.OnWorkerDispatched(handle, nil); err != nil {
+		if err := m.impl.OnWorkerDispatched(handle, nil); err != nil {
 			m.OnError(errors.Trace(err))
 		}
 	})

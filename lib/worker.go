@@ -20,12 +20,11 @@ type Worker interface {
 	Init(ctx context.Context) error
 	Poll(ctx context.Context) error
 	ID() WorkerID
+	Workload() model.RescUnit
 	Close()
 }
 
 type WorkerImpl interface {
-	Worker
-
 	// InitImpl provides customized logic for the business logic to initialize.
 	InitImpl(ctx context.Context) error
 
@@ -110,7 +109,7 @@ func (w *BaseWorker) Poll(ctx context.Context) error {
 	default:
 	}
 
-	if err := w.impl.Poll(ctx); err != nil {
+	if err := w.impl.Tick(ctx); err != nil {
 		return errors.Trace(err)
 	}
 	return nil

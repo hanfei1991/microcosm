@@ -36,6 +36,8 @@ const (
 	workerHeartbeatInterval = time.Second * 3
 
 	workerReportStatusInterval = time.Second * 3
+
+	masterHeartbeatCheckLoopInterval = time.Second * 1
 )
 
 type WorkerStatus struct {
@@ -82,17 +84,19 @@ type WorkloadReportMessage struct {
 	Workload model.RescUnit `json:"workload"`
 }
 
-type MasterMetaExt = interface{}
-type MasterMetaKVData struct {
-	ID          MasterID   `json:"id"`
-	Addr        string     `json:"addr"`
-	NodeID      p2p.NodeID `json:"node-id"`
-	Epoch       Epoch      `json:"epoch"`
-	Initialized bool       `json:"initialized"`
+type (
+	MasterMetaExt    = interface{}
+	MasterMetaKVData struct {
+		ID          MasterID   `json:"id"`
+		Addr        string     `json:"addr"`
+		NodeID      p2p.NodeID `json:"node-id"`
+		Epoch       Epoch      `json:"epoch"`
+		Initialized bool       `json:"initialized"`
 
-	// Ext holds business-specific data
-	Ext MasterMetaExt `json:"ext"`
-}
+		// Ext holds business-specific data
+		Ext MasterMetaExt `json:"ext"`
+	}
+)
 
 type MasterFailoverReasonCode int32
 
