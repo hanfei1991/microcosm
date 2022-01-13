@@ -1,4 +1,4 @@
-package servermaster
+package master
 
 import (
 	"net/http"

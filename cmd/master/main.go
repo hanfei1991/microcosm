@@ -8,7 +8,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/hanfei1991/microcosm/servermaster"
+	"github.com/hanfei1991/microcosm/master"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
@@ -20,7 +20,7 @@ import (
 // 4. start server
 func main() {
 	// 1. parse config
-	cfg := servermaster.NewConfig()
+	cfg := master.NewConfig()
 	err := cfg.Parse(os.Args[1:])
 	switch errors.Cause(err) {
 	case nil:
@@ -42,7 +42,7 @@ func main() {
 
 	// 3. start server
 	ctx, cancel := context.WithCancel(context.Background())
-	server, err := servermaster.NewServer(cfg, nil)
+	server, err := master.NewServer(cfg, nil)
 	if err != nil {
 		log.L().Error("fail to start dataflow master", zap.Error(err))
 		os.Exit(2)

@@ -17,9 +17,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/hanfei1991/microcosm/client"
-	"github.com/hanfei1991/microcosm/pkg/metadata"
-	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
@@ -27,9 +24,8 @@ import (
 // * go context
 // * logger.
 type Context struct {
-	Ctx          context.Context
-	Logger       log.Logger
-	Dependencies RuntimeDependencies
+	Ctx    context.Context
+	Logger log.Logger
 }
 
 // Background return a nop context.
@@ -81,12 +77,4 @@ func (c *Context) WithLogger(logger log.Logger) *Context {
 // L returns real logger.
 func (c *Context) L() log.Logger {
 	return c.Logger
-}
-
-type RuntimeDependencies struct {
-	MessageHandlerManager p2p.MessageHandlerManager
-	MessageRouter         p2p.MessageRouter
-	MetaKVClient          metadata.MetaKV
-	ExecutorClientManager *client.Manager
-	ServerMasterClient    *client.MasterClient
 }
