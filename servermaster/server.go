@@ -47,6 +47,7 @@ type Server struct {
 		m []*Member
 	}
 	leaderClient *client.MasterClient
+	membership   Membership
 
 	// sched scheduler
 	executorManager *ExecutorManager
@@ -111,12 +112,12 @@ func (s *Server) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.H
 		defer s.members.RUnlock()
 		addrs := make([]string, 0, len(s.members.m))
 		for _, member := range s.members.m {
-			addrs = append(addrs, strings.Join(member.Addrs, ","))
+			addrs = append(addrs, member.AdvertiseAddr)
 		}
 		resp.Addrs = addrs
 		leader, exists := s.checkLeader()
 		if exists {
-			resp.Leader = strings.Join(leader.Addrs, ",")
+			resp.Leader = leader.AdvertiseAddr
 		}
 	}
 	return resp, err
@@ -305,7 +306,7 @@ func (s *Server) Run(ctx context.Context) (err error) {
 		return s.startForTest(ctx)
 	}
 
-	err = s.startGrpcSrv()
+	err = s.startGrpcSrv(ctx)
 	if err != nil {
 		return
 	}
@@ -328,7 +329,7 @@ func (s *Server) Run(ctx context.Context) (err error) {
 	return wg.Wait()
 }
 
-func (s *Server) startGrpcSrv() (err error) {
+func (s *Server) startGrpcSrv(ctx context.Context) (err error) {
 	etcdCfg := etcdutils.GenEmbedEtcdConfigWithLogger(s.cfg.LogLevel)
 	// prepare to join an existing etcd cluster.
 	err = etcdutils.PrepareJoinEtcd(s.cfg.Etcd, s.cfg.MasterAddr)
@@ -359,7 +360,7 @@ func (s *Server) startGrpcSrv() (err error) {
 	}
 
 	// generate grpcServer
-	s.etcd, err = startEtcd(etcdCfg, gRPCSvr, httpHandlers, etcdStartTimeout)
+	s.etcd, err = startEtcd(ctx, etcdCfg, gRPCSvr, httpHandlers, etcdStartTimeout)
 	if err != nil {
 		return
 	}
@@ -373,8 +374,8 @@ func (s *Server) startGrpcSrv() (err error) {
 // member returns member information of the server
 func (s *Server) member() string {
 	m := &Member{
-		Name:  s.name(),
-		Addrs: []string{s.cfg.AdvertiseAddr},
+		Name:          s.name(),
+		AdvertiseAddr: s.cfg.AdvertiseAddr,
 	}
 	val, err := m.String()
 	if err != nil {
@@ -409,6 +410,7 @@ func (s *Server) reset(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	s.membership = &EtcdMembership{etcdCli: s.etcdClient}
 	err = s.updateServerMasterMembers(ctx)
 	if err != nil {
 		log.L().Warn("failed to update server master members", zap.Error(err))
@@ -431,10 +433,10 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	}
 
 	s.leader.Store(&Member{
-		Name:         s.name(),
-		IsServLeader: true,
-		IsEtcdLeader: true,
-		Addrs:        []string{s.cfg.AdvertiseAddr},
+		Name:          s.name(),
+		IsServLeader:  true,
+		IsEtcdLeader:  true,
+		AdvertiseAddr: s.cfg.AdvertiseAddr,
 	})
 	defer func() {
 		s.leader.Store(&Member{})
@@ -476,7 +478,7 @@ func (s *Server) isLeaderAndNeedForward(ctx context.Context) (isLeader, needForw
 		ticker := time.NewTicker(300 * time.Millisecond)
 		defer ticker.Stop()
 
-		for exist {
+		for !exist {
 			if retry == 0 {
 				log.L().Error("leader is not found, please retry later")
 				return false, false
@@ -563,7 +565,7 @@ func withHost(addr string) string {
 }
 
 func (s *Server) memberLoop(ctx context.Context) error {
-	ticker := time.NewTicker(time.Minute)
+	ticker := time.NewTicker(defaultMemberLoopInterval)
 	defer ticker.Stop()
 	for {
 		select {
