@@ -332,6 +332,10 @@ func (m *masterManager) SendHeartBeat(ctx context.Context) error {
 	}
 
 	heartbeatMsg := &HeartbeatPingMessage{
+		// We use `monotime` because we would like to serialize a local timestamp.
+		// The timestamp will be returned in a PONG for time-out check, so we need
+		// the timestamp to be a local monotonic timestamp, which is not exposed by the
+		// standard library `time`.
 		SendTime:     monotime.Now(),
 		FromWorkerID: m.workerID,
 		Epoch:        m.masterEpoch,
