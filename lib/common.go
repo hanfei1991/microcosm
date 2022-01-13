@@ -18,10 +18,15 @@ type (
 	monotonicTime = time.Duration
 )
 
+// Among these statuses, only WorkerStatusCreated is used by the framework
+// for now. The rest are for the business logic to use.
+// TODO think about whether to manage the transition of the statuses.
 const (
 	WorkerStatusNormal = WorkerStatusCode(iota + 1)
+	WorkerStatusCreated
 	WorkerStatusInit
 	WorkerStatusError
+	WorkerStatusFinished
 )
 
 const (
@@ -33,10 +38,14 @@ const (
 	// the master will consider a worker dead.
 	workerTimeoutGracefulDuration = time.Second * 5
 
+	// workerHeartbeatInterval is the interval between the working trying to send hearbeats.
 	workerHeartbeatInterval = time.Second * 3
 
+	// workerReportStatusInterval is the interval between the working trying to report statuses.
+	// TODO think of a way to implement sending statuses on demand by the business logic.
 	workerReportStatusInterval = time.Second * 3
 
+	// masterHeartbeatCheckLoopInterval is the interval between the master checking for heartbeat timeouts.
 	masterHeartbeatCheckLoopInterval = time.Second * 1
 )
 

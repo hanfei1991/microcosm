@@ -185,7 +185,7 @@ func (m *workerManager) OnWorkerCreated(id WorkerID, exeuctorNodeID p2p.NodeID) 
 		NodeID:                   exeuctorNodeID,
 		lastHeartBeatReceiveTime: time.Now(),
 		status: WorkerStatus{
-			Code: WorkerStatusInit,
+			Code: WorkerStatusCreated,
 		},
 		// TODO fix workload
 		workload: 10, // 10 is the initial workload for now.

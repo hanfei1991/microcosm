@@ -277,6 +277,7 @@ func (m *masterClient) refreshMasterInfo(ctx context.Context) error {
 	m.masterNode = masterMeta.NodeID
 	m.masterEpoch = masterMeta.Epoch
 
+	// TODO call OnMasterFailover at appropriate time
 	return nil
 }
 
