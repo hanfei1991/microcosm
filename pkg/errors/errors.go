@@ -50,6 +50,7 @@ var (
 	ErrLeaderCtxCanceled              = errors.Normalize("leader context is canceled", errors.RFCCodeText("DFLOW:ErrLeaderCtxCanceled"))
 	ErrMessageClientNotFoundForWorker = errors.Normalize("peer message client is not found for worker: worker ID %s", errors.RFCCodeText("DFLOW:ErrMessageClientNotFoundForWorker"))
 	ErrMasterNotFound                 = errors.Normalize("master is not found: master ID %s", errors.RFCCodeText("DFLOW:ErrMasterNotFound"))
+	ErrDuplicateWorkerID              = errors.Normalize("duplicate worker ID encountered: %s, report a bug", errors.RFCCodeText("DFLOW:ErrDuplicateWorkerID"))
 
 	ErrWorkerNotFound = errors.Normalize("worker is not found: worker ID %s", errors.RFCCodeText("DFLOW:ErrWorkerNotFound"))
 	ErrWorkerOffline  = errors.Normalize("worker is offline: workerID %s", errors.RFCCodeText("DFLOW:ErrWorkerOffline"))

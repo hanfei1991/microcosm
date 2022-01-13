@@ -342,7 +342,7 @@ func (m *BaseMaster) CreateWorker(ctx context.Context, workerType WorkerType, co
 		if err != nil {
 			err1 := m.impl.OnWorkerDispatched(nil, errors.Trace(err))
 			if err1 != nil {
-				m.OnError(errors.Trace(err))
+				m.OnError(errors.Trace(err1))
 			}
 			return
 		}
@@ -363,7 +363,7 @@ func (m *BaseMaster) CreateWorker(ctx context.Context, workerType WorkerType, co
 		if err != nil {
 			err1 := m.impl.OnWorkerDispatched(nil, errors.Trace(err))
 			if err1 != nil {
-				m.OnError(errors.Trace(err))
+				m.OnError(errors.Trace(err1))
 			}
 			return
 		}
@@ -373,13 +373,15 @@ func (m *BaseMaster) CreateWorker(ctx context.Context, workerType WorkerType, co
 			err1 := m.impl.OnWorkerDispatched(
 				nil, errors.Errorf("dispatch worker failed with error code: %d", errCode))
 			if err1 != nil {
-				m.OnError(errors.Trace(err))
+				m.OnError(errors.Trace(err1))
 			}
 			return
 		}
 
 		workerID := WorkerID(dispatchTaskResp.GetWorkerId())
-		m.workers.onWorkerCreated(workerID, executorID)
+		if err := m.workers.OnWorkerCreated(workerID, executorID); err != nil {
+			m.OnError(errors.Trace(err))
+		}
 		handle := m.workers.getWorkerHandle(workerID)
 
 		if err := m.impl.OnWorkerDispatched(handle, nil); err != nil {

@@ -30,99 +30,6 @@ type workerManager struct {
 	messageRouter p2p.MessageRouter
 }
 
-type WorkerHandle interface {
-	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) error
-	Status() *WorkerStatus
-	Workload() model.RescUnit
-	ID() WorkerID
-	IsTombStone() bool
-}
-
-type workerHandleImpl struct {
-	manager *workerManager
-	id      WorkerID
-}
-
-func (w *workerHandleImpl) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) error {
-	info, ok := w.manager.getWorkerInfo(w.id)
-	if !ok {
-		return derror.ErrWorkerNotFound.GenWithStackByArgs(w.id)
-	}
-
-	executorNodeID := info.NodeID
-	messageClient := w.manager.messageRouter.GetClient(executorNodeID)
-
-	prefixedTopic := fmt.Sprintf("worker-message/%s/%s", w.id, topic)
-	if messageClient == nil {
-		return derror.ErrMessageClientNotFoundForWorker.GenWithStackByArgs(w.id)
-	}
-	_, err := messageClient.TrySendMessage(ctx, prefixedTopic, message)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
-}
-
-func (w *workerHandleImpl) Status() *WorkerStatus {
-	w.manager.mu.Lock()
-	defer w.manager.mu.Unlock()
-
-	info, ok := w.manager.workerInfos[w.id]
-	if !ok {
-		// TODO think about how to handle this
-		return nil
-	}
-
-	return &info.status
-}
-
-func (w *workerHandleImpl) Workload() model.RescUnit {
-	w.manager.mu.Lock()
-	defer w.manager.mu.Unlock()
-
-	info, ok := w.manager.workerInfos[w.id]
-	if !ok {
-		// worker not found
-		// TODO think about how to handle this
-		return 0
-	}
-
-	return info.workload
-}
-
-func (w *workerHandleImpl) ID() WorkerID {
-	return w.id
-}
-
-func (w *workerHandleImpl) IsTombStone() bool {
-	return false
-}
-
-type tombstoneWorkerHandleImpl struct {
-	id     WorkerID
-	status WorkerStatus
-}
-
-func (h *tombstoneWorkerHandleImpl) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) error {
-	return derror.ErrWorkerOffline.GenWithStackByArgs(h.id)
-}
-
-func (h *tombstoneWorkerHandleImpl) Status() *WorkerStatus {
-	return &h.status
-}
-
-func (h *tombstoneWorkerHandleImpl) Workload() model.RescUnit {
-	return 0
-}
-
-func (h *tombstoneWorkerHandleImpl) ID() WorkerID {
-	return h.id
-}
-
-func (h *tombstoneWorkerHandleImpl) IsTombStone() bool {
-	return true
-}
-
 func newWorkerManager(id MasterID, needWait bool, curEpoch Epoch) *workerManager {
 	return &workerManager{
 		needWaitForHeartBeat: needWait,
@@ -210,6 +117,9 @@ func (m *workerManager) HandleHeartBeat(msg *HeartbeatPingMessage) {
 }
 
 func (m *workerManager) UpdateWorkload(msg *WorkloadReportMessage) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	info, ok := m.getWorkerInfo(msg.WorkerID)
 	if !ok {
 		log.L().Info("received workload update for non-existing worker",
@@ -224,6 +134,9 @@ func (m *workerManager) UpdateWorkload(msg *WorkloadReportMessage) {
 }
 
 func (m *workerManager) UpdateStatus(msg *StatusUpdateMessage) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	info, ok := m.getWorkerInfo(msg.WorkerID)
 	if !ok {
 		log.L().Info("received status update for non-existing worker",
@@ -237,7 +150,7 @@ func (m *workerManager) UpdateStatus(msg *StatusUpdateMessage) {
 		zap.Any("msg", msg))
 }
 
-func (m *workerManager) getWorkerInfo(id WorkerID) (*WorkerInfo, bool) {
+func (m *workerManager) GetWorkerInfo(id WorkerID) (*WorkerInfo, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -248,17 +161,26 @@ func (m *workerManager) getWorkerInfo(id WorkerID) (*WorkerInfo, bool) {
 	return value, true
 }
 
-func (m *workerManager) putWorkerInfo(info *WorkerInfo) bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+func (m *workerManager) getWorkerInfo(id WorkerID) (*WorkerInfo, bool) {
+	value, ok := m.workerInfos[id]
+	if !ok {
+		return nil, false
+	}
+	return value, true
+}
 
+func (m *workerManager) putWorkerInfo(info *WorkerInfo) bool {
 	id := info.ID
 	_, exists := m.workerInfos[id]
+	m.workerInfos[id] = info
 	return !exists
 }
 
-func (m *workerManager) onWorkerCreated(id WorkerID, exeuctorNodeID p2p.NodeID) {
-	m.putWorkerInfo(&WorkerInfo{
+func (m *workerManager) OnWorkerCreated(id WorkerID, exeuctorNodeID p2p.NodeID) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	ok := m.putWorkerInfo(&WorkerInfo{
 		ID:                       id,
 		NodeID:                   exeuctorNodeID,
 		lastHeartBeatReceiveTime: time.Now(),
@@ -268,6 +190,10 @@ func (m *workerManager) onWorkerCreated(id WorkerID, exeuctorNodeID p2p.NodeID) 
 		// TODO fix workload
 		workload: 10, // 10 is the initial workload for now.
 	})
+	if !ok {
+		return derror.ErrDuplicateWorkerID.GenWithStackByArgs(id)
+	}
+	return nil
 }
 
 func (m *workerManager) getWorkerHandle(id WorkerID) WorkerHandle {
@@ -292,4 +218,89 @@ type WorkerInfo struct {
 
 func (w *WorkerInfo) hasTimedOut() bool {
 	return time.Since(w.lastHeartBeatReceiveTime) > workerTimeoutDuration
+}
+
+type WorkerHandle interface {
+	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) error
+	Status() *WorkerStatus
+	Workload() model.RescUnit
+	ID() WorkerID
+	IsTombStone() bool
+}
+
+type workerHandleImpl struct {
+	manager *workerManager
+
+	// TODO think about how to handle the situation where the workerID has been removed from `manager`.
+	id WorkerID
+}
+
+func (w *workerHandleImpl) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) error {
+	info, ok := w.manager.GetWorkerInfo(w.id)
+	if !ok {
+		return derror.ErrWorkerNotFound.GenWithStackByArgs(w.id)
+	}
+
+	executorNodeID := info.NodeID
+	messageClient := w.manager.messageRouter.GetClient(executorNodeID)
+	if messageClient == nil {
+		return derror.ErrMessageClientNotFoundForWorker.GenWithStackByArgs(w.id)
+	}
+
+	prefixedTopic := fmt.Sprintf("worker-message/%s/%s", w.id, topic)
+	_, err := messageClient.TrySendMessage(ctx, prefixedTopic, message)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+func (w *workerHandleImpl) Status() *WorkerStatus {
+	info, ok := w.manager.GetWorkerInfo(w.id)
+	if !ok {
+		return nil
+	}
+	return &info.status
+}
+
+func (w *workerHandleImpl) Workload() model.RescUnit {
+	info, ok := w.manager.GetWorkerInfo(w.id)
+	if !ok {
+		return 0
+	}
+
+	return info.workload
+}
+
+func (w *workerHandleImpl) ID() WorkerID {
+	return w.id
+}
+
+func (w *workerHandleImpl) IsTombStone() bool {
+	return false
+}
+
+type tombstoneWorkerHandleImpl struct {
+	id     WorkerID
+	status WorkerStatus
+}
+
+func (h *tombstoneWorkerHandleImpl) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) error {
+	return derror.ErrWorkerOffline.GenWithStackByArgs(h.id)
+}
+
+func (h *tombstoneWorkerHandleImpl) Status() *WorkerStatus {
+	return &h.status
+}
+
+func (h *tombstoneWorkerHandleImpl) Workload() model.RescUnit {
+	return 0
+}
+
+func (h *tombstoneWorkerHandleImpl) ID() WorkerID {
+	return h.id
+}
+
+func (h *tombstoneWorkerHandleImpl) IsTombStone() bool {
+	return true
 }
