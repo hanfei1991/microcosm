@@ -112,10 +112,19 @@ func (t *testJobSuite) TestPause(c *C) {
 	cnt := int32(0)
 	for {
 		data := executorCtx.RecvRecord(ctx)
-		if data == nil {
-			break
+		if data != nil {
+			cnt++
+			continue
 		}
-		cnt++
+		// try to consume all data in data channel
+		for {
+			data = executorCtx.TryRecvRecord()
+			if data == nil {
+				break
+			}
+			cnt++
+		}
+		break
 	}
 	c.Assert(cnt, Less, testJobConfig.TableNum*testJobConfig.RecordCnt)
 	log.L().Logger.Info("has read", zap.Int32("cnt", cnt))
