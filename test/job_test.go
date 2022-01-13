@@ -107,7 +107,9 @@ func (t *testJobSuite) TestPause(c *C) {
 	susResp, err := client.PauseJob(context.Background(), susReq)
 	c.Assert(err, IsNil)
 	c.Assert(susResp.Err, IsNil)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	// TODO: sleep 2s here to ensure pauseJob is called in executor. Find a better
+	// way to check job is paused instead of waiting some time.
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
 	defer cancel()
 	cnt := int32(0)
 	for {
@@ -128,9 +130,9 @@ func (t *testJobSuite) TestPause(c *C) {
 	}
 	c.Assert(cnt, Less, testJobConfig.TableNum*testJobConfig.RecordCnt)
 	log.L().Logger.Info("has read", zap.Int32("cnt", cnt))
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 	c.Assert(executorCtx.TryRecvRecord(), IsNil)
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 	c.Assert(executorCtx.TryRecvRecord(), IsNil)
 	cluster.StopCluster()
 }
