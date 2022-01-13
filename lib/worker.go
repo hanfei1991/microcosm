@@ -51,7 +51,7 @@ type BaseWorker struct {
 	messageRouter         p2p.MessageRouter
 	metaKVClient          metadata.MetaKV
 
-	masterManager *masterManager
+	masterClient *masterClient
 
 	id WorkerID
 
@@ -73,7 +73,7 @@ func NewBaseWorker(
 		messageHandlerManager: messageHandlerManager,
 		messageRouter:         messageRouter,
 		metaKVClient:          metaKVClient,
-		masterManager:         masterManager,
+		masterClient:          masterManager,
 		id:                    workerID,
 		errCh:                 make(chan error, 1),
 	}
@@ -84,7 +84,7 @@ func (w *BaseWorker) Init(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	if err := w.masterManager.refreshMasterInfo(ctx); err != nil {
+	if err := w.masterClient.refreshMasterInfo(ctx); err != nil {
 		return errors.Trace(err)
 	}
 
@@ -164,7 +164,7 @@ func (w *BaseWorker) runHeartbeatWorker(ctx context.Context) error {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case <-ticker.C:
-			if err := w.masterManager.SendHeartBeat(ctx); err != nil {
+			if err := w.masterClient.SendHeartBeat(ctx); err != nil {
 				return errors.Trace(err)
 			}
 		}
@@ -188,7 +188,7 @@ func (w *BaseWorker) runStatusWorker(ctx context.Context) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
-		if err := w.masterManager.SendStatus(ctx, status, workload); err != nil {
+		if err := w.masterClient.SendStatus(ctx, status, workload); err != nil {
 			return errors.Trace(err)
 		}
 	}
@@ -203,7 +203,7 @@ func (w *BaseWorker) runWatchDog(ctx context.Context) error {
 		case <-ticker.C:
 		}
 
-		hasTimedOut, err := w.masterManager.CheckMasterTimeout(ctx)
+		hasTimedOut, err := w.masterClient.CheckMasterTimeout(ctx)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -214,7 +214,7 @@ func (w *BaseWorker) runWatchDog(ctx context.Context) error {
 }
 
 func (w *BaseWorker) initMessageHandlers(ctx context.Context) error {
-	topic := HeartbeatPongTopic(w.masterManager.MasterID())
+	topic := HeartbeatPongTopic(w.masterClient.MasterID())
 	ok, err := w.messageHandlerManager.RegisterHandler(
 		ctx,
 		topic,
@@ -223,7 +223,7 @@ func (w *BaseWorker) initMessageHandlers(ctx context.Context) error {
 			msg := value.(*HeartbeatPongMessage)
 			log.L().Debug("heartbeat pong received",
 				zap.Any("msg", msg))
-			w.masterManager.HandleHeartbeat(msg)
+			w.masterClient.HandleHeartbeat(msg)
 			return nil
 		})
 	if err != nil {
@@ -243,7 +243,7 @@ func (w *BaseWorker) onError(err error) {
 	}
 }
 
-type masterManager struct {
+type masterClient struct {
 	mu          sync.RWMutex
 	masterID    MasterID
 	masterNode  p2p.NodeID
@@ -256,15 +256,15 @@ type masterManager struct {
 	lastMasterAckedPingTime monotonicTime
 }
 
-func newMasterManager(masterID MasterID, workerID WorkerID, messageRouter p2p.MessageRouter) *masterManager {
-	return &masterManager{
+func newMasterManager(masterID MasterID, workerID WorkerID, messageRouter p2p.MessageRouter) *masterClient {
+	return &masterClient{
 		masterID:      masterID,
 		workerID:      workerID,
 		messageRouter: messageRouter,
 	}
 }
 
-func (m *masterManager) refreshMasterInfo(ctx context.Context) error {
+func (m *masterClient) refreshMasterInfo(ctx context.Context) error {
 	metaClient := NewMetadataClient(m.masterID, m.metaKVClient)
 	masterMeta, err := metaClient.Load(ctx)
 	if err != nil {
@@ -280,13 +280,13 @@ func (m *masterManager) refreshMasterInfo(ctx context.Context) error {
 	return nil
 }
 
-func (m *masterManager) MasterID() MasterID {
+func (m *masterClient) MasterID() MasterID {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.masterID
 }
 
-func (m *masterManager) HandleHeartbeat(msg *HeartbeatPongMessage) {
+func (m *masterClient) HandleHeartbeat(msg *HeartbeatPongMessage) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -301,7 +301,7 @@ func (m *masterManager) HandleHeartbeat(msg *HeartbeatPongMessage) {
 	m.lastMasterAckedPingTime = msg.SendTime
 }
 
-func (m *masterManager) CheckMasterTimeout(ctx context.Context) (ok bool, err error) {
+func (m *masterClient) CheckMasterTimeout(ctx context.Context) (ok bool, err error) {
 	m.mu.RLock()
 	lastMasterAckedPingTime := m.lastMasterAckedPingTime
 	m.mu.RUnlock()
@@ -320,7 +320,7 @@ func (m *masterManager) CheckMasterTimeout(ctx context.Context) (ok bool, err er
 	return false, nil
 }
 
-func (m *masterManager) SendHeartBeat(ctx context.Context) error {
+func (m *masterClient) SendHeartBeat(ctx context.Context) error {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -351,7 +351,7 @@ func (m *masterManager) SendHeartBeat(ctx context.Context) error {
 	return nil
 }
 
-func (m *masterManager) SendStatus(ctx context.Context, status WorkerStatus, workload model.RescUnit) error {
+func (m *masterClient) SendStatus(ctx context.Context, status WorkerStatus, workload model.RescUnit) error {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
