@@ -25,7 +25,8 @@ type WatchResp struct {
 // Discovery defines interface of a simple service discovery
 type Discovery interface {
 	// Snapshot returns a full set of service resources and the revision of snapshot
-	Snapshot(ctx context.Context) (map[UUID]ServiceResource, error)
+	// updateCache indicates whether to update the snapshot to Discovery cache.
+	Snapshot(ctx context.Context, updateCache bool) (map[UUID]ServiceResource, Revision, error)
 
 	// Watch watches the change of service resources, the watched events will be
 	// returned through a channel.

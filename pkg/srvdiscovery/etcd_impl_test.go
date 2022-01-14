@@ -101,7 +101,7 @@ func TestEtcdDiscoveryAPI(t *testing.T) {
 	}
 	tickDur := 50 * time.Millisecond
 	d := NewEtcdSrvDiscovery(client, tickDur)
-	snapshot, err := d.Snapshot(ctx)
+	snapshot, err := d.Snapshot(ctx, true /*updateCache*/)
 	require.Nil(t, err)
 	require.Equal(t, 3, len(snapshot))
 	require.Contains(t, snapshot, "uuid-1")

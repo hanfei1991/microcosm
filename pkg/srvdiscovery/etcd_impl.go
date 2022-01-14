@@ -33,17 +33,20 @@ func NewEtcdSrvDiscovery(etcdCli *clientv3.Client, watchTickDur time.Duration) *
 }
 
 // Snapshot implements Discovery.Snapshot
-func (d *EtcdSrvDiscovery) Snapshot(ctx context.Context) (map[UUID]ServiceResource, error) {
+func (d *EtcdSrvDiscovery) Snapshot(ctx context.Context, updateCache bool) (map[UUID]ServiceResource, error) {
 	snapshot, revision, err := d.getSnapshot(ctx)
 	if err != nil {
 		return nil, err
 	}
-	d.snapshot = snapshot
-	d.snapshotRev = revision
+	if updateCache {
+		d.snapshot = snapshot
+		d.snapshotRev = revision
+	}
 	return snapshot, nil
 }
 
-// Watch implements Discovery.Watch
+// Watch implements Discovery.Watch, note when `Watch` starts, we should avoid
+// to get Snapshot with `updateCache=true`
 func (d *EtcdSrvDiscovery) Watch(ctx context.Context) <-chan WatchResp {
 	notWatched := d.watched.CAS(false, true)
 	if !notWatched {
