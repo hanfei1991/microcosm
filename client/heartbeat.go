@@ -12,6 +12,8 @@ import (
 	"github.com/pingcap/tiflow/pkg/workerpool"
 )
 
+var SelfExecID model.ExecutorID
+
 const (
 	heartbeatTimeout  time.Duration = 8 * time.Second
 	heartbeatInterval time.Duration = 1 * time.Second
@@ -135,6 +137,8 @@ func (e *executorProber) run() {
 		for tid := range unRegisterTasks {
 			req.UnregisterTaskIdList = append(req.UnregisterTaskIdList, int64(tid))
 		}
+		req.TargetExecId = string(e.executorID)
+		req.SourceExecId = string(SelfExecID)
 		resp, err := e.pbClient.Heartbeat(e.ctx, req)
 		if err != nil {
 			log.L().Logger.Info("executor heartbeat meets error")
@@ -147,10 +151,10 @@ func (e *executorProber) run() {
 	}
 }
 
-func (e *executorClient) Register(tidList []model.ID, cbList []func(*pb.TaskStatus)) error {
+func (e *executorClient) Watch(tidList []model.ID, cbList []func(*pb.TaskStatus)) error {
 	return e.prober.register(tidList, cbList)
 }
 
-func (e *executorClient) UnRegister(tidList []model.ID) error {
+func (e *executorClient) UnWatch(tidList []model.ID) error {
 	return e.prober.unRegister(tidList)
 }

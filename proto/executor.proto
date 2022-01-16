@@ -15,12 +15,14 @@ service Executor {
 message ExecutorHeartbeatRequest {
     repeated int64 register_task_id_list = 1; // new watched tasks
     repeated int64 unregister_task_id_list = 2; // new watched tasks
-    string exec_id = 3;
-    string addr = 4;
+    string target_exec_id = 3;
+    string source_exec_id = 4; // 
+    string addr = 5;
 }
 
 message ExecutorHeartbeatResponse {
     repeated TaskStatus task_status = 1;
+    Error err = 2;
 }
 
 message CancelBatchTasksRequest {

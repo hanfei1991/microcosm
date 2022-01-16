@@ -70,7 +70,7 @@ func newExecutorClient(id model.ExecutorID, addr string, onClose func()) (*execu
 		conn:   conn,
 		client: pb.NewExecutorClient(conn),
 		prober: executorProber{
-			executorID: id,
+			executorID: id, // target id
 			onClose:    onClose,
 		},
 	}, nil

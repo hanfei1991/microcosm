@@ -313,6 +313,7 @@ func (s *Server) selfRegister(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
+	client.SelfExecID = model.ExecutorID(resp.ExecutorId)
 	s.info = &model.ExecutorInfo{
 		ID:   model.ExecutorID(resp.ExecutorId),
 		Addr: s.cfg.WorkerAddr,
