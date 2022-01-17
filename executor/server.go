@@ -30,11 +30,12 @@ type Server struct {
 	cfg     *Config
 	testCtx *test.Context
 
-	tcpServer tcpserver.TCPServer
-	grpcSrv   *grpc.Server
-	cli       *client.MasterClient
-	sch       *runtime.Runtime
-	info      *model.ExecutorInfo
+	tcpServer   tcpserver.TCPServer
+	grpcSrv     *grpc.Server
+	cli         *client.MasterClient
+	cliUpdateCh chan []string
+	sch         *runtime.Runtime
+	info        *model.ExecutorInfo
 
 	lastHearbeatTime time.Time
 
@@ -45,8 +46,9 @@ type Server struct {
 
 func NewServer(cfg *Config, ctx *test.Context) *Server {
 	s := Server{
-		cfg:     cfg,
-		testCtx: ctx,
+		cfg:         cfg,
+		testCtx:     ctx,
+		cliUpdateCh: make(chan []string),
 	}
 	return &s
 }
@@ -92,6 +94,31 @@ func (s *Server) CancelBatchTasks(ctx context.Context, req *pb.CancelBatchTasksR
 	return &pb.CancelBatchTasksResponse{}, nil
 }
 
+// PauseBatchTasks implements pb interface.
+func (s *Server) PauseBatchTasks(ctx context.Context, req *pb.PauseBatchTasksRequest) (*pb.PauseBatchTasksResponse, error) {
+	log.L().Info("pause tasks", zap.String("req", req.String()))
+	err := s.sch.Pause(req.TaskIdList)
+	if err != nil {
+		return &pb.PauseBatchTasksResponse{
+			Err: &pb.Error{
+				Message: err.Error(),
+			},
+		}, nil
+	}
+	return &pb.PauseBatchTasksResponse{}, nil
+}
+
+// ResumeBatchTasks implements pb interface.
+func (s *Server) ResumeBatchTasks(ctx context.Context, req *pb.PauseBatchTasksRequest) (*pb.PauseBatchTasksResponse, error) {
+	log.L().Info("resume tasks", zap.String("req", req.String()))
+	s.sch.Continue(req.TaskIdList)
+	return &pb.PauseBatchTasksResponse{}, nil
+}
+
+func (s *Server) DispatchTask(ctx context.Context, request *pb.DispatchTaskRequest) (*pb.DispatchTaskResponse, error) {
+	panic("implement me")
+}
+
 func (s *Server) Stop() {
 	if s.grpcSrv != nil {
 		s.grpcSrv.Stop()
@@ -131,7 +158,7 @@ func (s *Server) startForTest(ctx context.Context) (err error) {
 }
 
 func (s *Server) Run(ctx context.Context) error {
-	if test.GlobalTestFlag {
+	if test.GetGlobalTestFlag() {
 		return s.startForTest(ctx)
 	}
 
@@ -164,6 +191,10 @@ func (s *Server) Run(ctx context.Context) error {
 
 	wg.Go(func() error {
 		return s.reportTaskResc(ctx)
+	})
+
+	wg.Go(func() error {
+		return s.bgUpdateServerMasterClients(ctx)
 	})
 
 	return wg.Wait()
@@ -285,7 +316,7 @@ func (s *Server) keepHeartbeat(ctx context.Context) error {
 	ticker := time.NewTicker(s.cfg.KeepAliveInterval)
 	s.lastHearbeatTime = time.Now()
 	defer func() {
-		if test.GlobalTestFlag {
+		if test.GetGlobalTestFlag() {
 			s.testCtx.NotifyExecutorChange(&test.ExecutorChangeEvent{
 				Tp:   test.Delete,
 				Time: time.Now(),
@@ -308,7 +339,7 @@ func (s *Server) keepHeartbeat(ctx context.Context) error {
 				// executor actually wait for a timeout when ttl is nearly up.
 				Ttl: uint64(s.cfg.KeepAliveTTL.Milliseconds() + s.cfg.RPCTimeout.Milliseconds()),
 			}
-			resp, err := s.cli.SendHeartbeat(ctx, req, s.cfg.RPCTimeout)
+			resp, err := s.cli.Heartbeat(ctx, req, s.cfg.RPCTimeout)
 			if err != nil {
 				log.L().Error("heartbeat rpc meet error", zap.Error(err))
 				if s.lastHearbeatTime.Add(s.cfg.KeepAliveTTL).Before(time.Now()) {
@@ -331,7 +362,14 @@ func (s *Server) keepHeartbeat(ctx context.Context) error {
 			// later than master's, which might cause that master wait for less time than executor.
 			// This gap is unsafe.
 			s.lastHearbeatTime = t
-			log.L().Info("heartbeat success")
+			log.L().Info("heartbeat success", zap.String("leader", resp.Leader), zap.Strings("members", resp.Addrs))
+			// update master client could cost long time, we make it a background
+			// job and if there is running update task, we ignore once since more
+			// heartbeats will be called later.
+			select {
+			case s.cliUpdateCh <- resp.Addrs:
+			default:
+			}
 		}
 	}
 }
@@ -353,7 +391,7 @@ func (s *Server) reportTaskRescOnce(ctx context.Context) error {
 			Usage: int32(resc),
 		})
 	}
-	resp, err := s.cli.Client().ReportExecutorWorkload(ctx, req)
+	resp, err := s.cli.ReportExecutorWorkload(ctx, req)
 	if err != nil {
 		return err
 	}
@@ -376,6 +414,17 @@ func (s *Server) reportTaskResc(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
+		}
+	}
+}
+
+func (s *Server) bgUpdateServerMasterClients(ctx context.Context) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case urls := <-s.cliUpdateCh:
+			s.cli.UpdateClients(ctx, urls)
 		}
 	}
 }

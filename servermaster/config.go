@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package master
+package servermaster
 
 import (
 	"bytes"
@@ -32,9 +32,11 @@ import (
 )
 
 const (
-	defaultKeepAliveTTL      = "20s"
-	defaultKeepAliveInterval = "500ms"
-	defaultRPCTimeout        = "3s"
+	defaultSessionTTL         = 5 * time.Second
+	defaultKeepAliveTTL       = "20s"
+	defaultKeepAliveInterval  = "500ms"
+	defaultRPCTimeout         = "3s"
+	defaultMemberLoopInterval = 10 * time.Second
 
 	defaultPeerUrls            = "http://127.0.0.1:8291"
 	defaultInitialClusterState = embed.ClusterStateFlagNew
@@ -172,7 +174,7 @@ func (c *Config) adjust() (err error) {
 	c.Etcd.Adjust(defaultPeerUrls, defaultInitialClusterState)
 
 	if c.AdvertiseAddr == "" {
-		c.AdvertiseAddr = c.Etcd.PeerUrls
+		c.AdvertiseAddr = c.MasterAddr
 	}
 
 	if c.KeepAliveIntervalStr == "" {

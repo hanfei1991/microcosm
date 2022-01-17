@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/hanfei1991/microcosm/executor"
-	"github.com/hanfei1991/microcosm/master"
 	"github.com/hanfei1991/microcosm/pkg/etcdutils"
+	"github.com/hanfei1991/microcosm/servermaster"
 	"github.com/hanfei1991/microcosm/test"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -21,7 +21,8 @@ func TestT(t *testing.T) {
 		panic(err)
 	}
 
-	test.GlobalTestFlag = true
+	test.SetGlobalTestFlag(true)
+	defer test.SetGlobalTestFlag(false)
 	TestingT(t)
 }
 
@@ -40,7 +41,7 @@ func (t *testHeartbeatSuite) SetUpSuite(c *C) {
 }
 
 func (t *testHeartbeatSuite) TestHeartbeatExecutorCrush(c *C) {
-	masterCfg := &master.Config{
+	masterCfg := &servermaster.Config{
 		Etcd: &etcdutils.ConfigParams{
 			Name:    "master1",
 			DataDir: "/tmp/df",

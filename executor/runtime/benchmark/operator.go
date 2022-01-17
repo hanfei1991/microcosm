@@ -22,6 +22,19 @@ import (
 	"google.golang.org/grpc/backoff"
 )
 
+type baseOp struct {
+	paused bool
+}
+
+func (o *baseOp) Paused() bool {
+	return o.paused
+}
+
+func (o *baseOp) Pause() error {
+	o.paused = true
+	return nil
+}
+
 type fileWriter struct {
 	filePath string
 	fd       *os.File
@@ -90,6 +103,7 @@ type Closeable interface {
 }
 
 type opReceive struct {
+	baseOp
 	flowID string
 	addr   string
 	data   chan *runtime.Record
@@ -114,7 +128,7 @@ func (o *opReceive) Close() error {
 func (o *opReceive) dial() (client pb.TestServiceClient, err error) {
 	// get connection
 	log.L().Info("dial to", zap.String("addr", o.addr))
-	if test.GlobalTestFlag {
+	if test.GetGlobalTestFlag() {
 		conn, err := mock.Dial(o.addr)
 		o.conn = conn
 		if err != nil {
@@ -202,7 +216,9 @@ func (o *opReceive) Next(ctx *runtime.TaskContext, _ *runtime.Record, _ int) ([]
 	return []runtime.Chunk{o.cache}, false, nil
 }
 
-type opSyncer struct{}
+type opSyncer struct {
+	baseOp
+}
 
 func (o *opSyncer) Close() error { return nil }
 
@@ -238,6 +254,7 @@ func (s *recordStats) String() string {
 }
 
 type opSink struct {
+	baseOp
 	writer fileWriter
 	stats  *recordStats
 }
@@ -253,7 +270,10 @@ func (o *opSink) Prepare(_ *runtime.TaskContext) (runtime.TaskRescUnit, error) {
 
 func (o *opSink) Next(ctx *runtime.TaskContext, r *runtime.Record, _ int) ([]runtime.Chunk, bool, error) {
 	r.End = time.Now()
-	if test.GlobalTestFlag {
+	if test.GetGlobalTestFlag() {
+		if o.Paused() {
+			return nil, false, nil
+		}
 		//	log.L().Info("send record", zap.Int32("table", r.Tid), zap.Int32("pk", r.payload.(*pb.Record).Pk))
 		ctx.TestCtx.SendRecord(r)
 		return nil, false, nil
@@ -264,6 +284,7 @@ func (o *opSink) Next(ctx *runtime.TaskContext, r *runtime.Record, _ int) ([]run
 func (o *opSink) NextWantedInputIdx() int { return 0 }
 
 type opProducer struct {
+	baseOp
 	tid       int32
 	pk        int32
 	schemaVer int32
@@ -325,7 +346,7 @@ func (o *opProducer) Next(ctx *runtime.TaskContext, _ *runtime.Record, _ int) ([
 		outputData[binlogID] = append(outputData[binlogID], &r)
 		binlogID = (binlogID + 1) % o.outputCnt
 	}
-	if !test.GlobalTestFlag {
+	if !test.GetGlobalTestFlag() {
 		o.checkpoint = time.Now()
 		go func() {
 			time.Sleep(55 * time.Millisecond)
@@ -341,6 +362,7 @@ type stoppable interface {
 }
 
 type opBinlog struct {
+	baseOp
 	binlogChan chan *runtime.Record
 	wal        []*runtime.Record
 	addr       string
@@ -358,7 +380,7 @@ func (o *opBinlog) Close() error {
 
 func (o *opBinlog) Prepare(_ *runtime.TaskContext) (runtime.TaskRescUnit, error) {
 	o.binlogChan = make(chan *runtime.Record, 1024)
-	if test.GlobalTestFlag {
+	if test.GetGlobalTestFlag() {
 		server, err := mock.NewTestServer(o.addr, o)
 		if err != nil {
 			return nil, err
