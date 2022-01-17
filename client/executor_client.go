@@ -16,6 +16,8 @@ import (
 
 type ExecutorClient interface {
 	Send(context.Context, *ExecutorRequest) (*ExecutorResponse, error)
+	Watch(tid model.ID, cb func(*pb.TaskStatus))
+	UnWatch(tid model.ID)
 }
 
 type closeableConnIface interface {
@@ -23,9 +25,9 @@ type closeableConnIface interface {
 }
 
 type executorClient struct {
-	conn   closeableConnIface
-	client pb.ExecutorClient
-	prober executorProber
+	conn     closeableConnIface
+	client   pb.ExecutorClient
+	hbClient *heartbeatClient
 }
 
 func (c *executorClient) Send(ctx context.Context, req *ExecutorRequest) (*ExecutorResponse, error) {
@@ -66,13 +68,11 @@ func newExecutorClient(id model.ExecutorID, addr string, onClose func()) (*execu
 	if err != nil {
 		return nil, errors.ErrGrpcBuildConn.GenWithStackByArgs(addr)
 	}
+	pbClient := pb.NewExecutorClient(conn)
 	return &executorClient{
-		conn:   conn,
-		client: pb.NewExecutorClient(conn),
-		prober: executorProber{
-			executorID: id, // target id
-			onClose:    onClose,
-		},
+		conn:     conn,
+		client:   pbClient,
+		hbClient: newHeartbeatClient(id, onClose, pbClient),
 	}, nil
 }
 

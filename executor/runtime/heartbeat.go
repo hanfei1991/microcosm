@@ -41,10 +41,27 @@ type taskGroup struct {
 	removeTask       func(*taskWrapper)
 }
 
+func (h *HeartbeatServer) newTaskGroup(id model.ExecutorID) *taskGroup {
+	tg := &taskGroup{
+		id:         id,
+		taskList:   make(map[model.ID]*taskWrapper),
+		removeTask: h.removeTask,
+	}
+	tg.removeSelf = func() { h.removeGroup(tg) }
+	return tg
+}
+
 type homelessGroup struct {
 	*taskGroup
 
 	newOrphans chan *taskWrapper // use channel to accept orphans, in order to avoid silly lock.
+}
+
+func (h *homelessGroup) check() {
+	for {
+		h.checkImpl()
+		time.Sleep(time.Second)
+	}
 }
 
 func (h *homelessGroup) checkImpl() {
@@ -84,14 +101,26 @@ ABANDON: // See who have lost connection or have been stopped. Kick them out!
 	}
 }
 
-type HeartbeatManager struct {
+type HeartbeatServer struct {
 	taskList   sync.Map       // map[model.ID]*taskWrapper // hold all tasks
 	taskGroups sync.Map       // map[model.ExecutorID]*taskGroup // one group corresponds for one executor
 	orphanage  *homelessGroup // poor tasks who're not watched by anyone.
 	s          *Runtime
 }
 
-func (h *HeartbeatManager) removeTask(task *taskWrapper) {
+func NewHeartbeatServer(s *Runtime) *HeartbeatServer {
+	hb := &HeartbeatServer{
+		orphanage: &homelessGroup{
+			newOrphans: make(chan *taskWrapper, 1024),
+		},
+		s: s,
+	}
+	hb.orphanage.taskGroup = hb.newTaskGroup(none)
+	go hb.orphanage.check()
+	return hb
+}
+
+func (h *HeartbeatServer) removeTask(task *taskWrapper) {
 	task.Lock()
 	// TODO: But sometimes we can just pause it and await recovery.
 	task.stopped = true
@@ -106,7 +135,7 @@ func (h *HeartbeatManager) removeTask(task *taskWrapper) {
 
 // There are multiple places trying to stop and to remove a task.
 // To avoid complexity, we move the task to orphanage to dispose together.
-func (h *HeartbeatManager) moveToOrphanage(t *taskWrapper) {
+func (h *HeartbeatServer) moveToOrphanage(t *taskWrapper) {
 	t.Lock()
 	t.listenExec = none
 	t.registerTime = time.Now()
@@ -115,7 +144,7 @@ func (h *HeartbeatManager) moveToOrphanage(t *taskWrapper) {
 }
 
 // the executor has lost heartbeat so we removed it.
-func (h *HeartbeatManager) removeGroup(e *taskGroup) {
+func (h *HeartbeatServer) removeGroup(e *taskGroup) {
 	// step one, kick out the group
 	h.taskGroups.Delete(e.id)
 	// step two, kick every task out.
@@ -128,7 +157,7 @@ func (h *HeartbeatManager) removeGroup(e *taskGroup) {
 }
 
 // Register the tasks, at first they are all homeless
-func (h *HeartbeatManager) Register(tasks ...*taskContainer) {
+func (h *HeartbeatServer) Register(tasks ...*taskContainer) {
 	for _, task := range tasks {
 		wrapper := &taskWrapper{
 			listenExec:    none,
@@ -161,7 +190,7 @@ func (e *taskGroup) checkImpl() bool {
 	return true
 }
 
-func (h *HeartbeatManager) Heartbeat(ctx context.Context, req *pb.ExecutorHeartbeatRequest) (*pb.ExecutorHeartbeatResponse, error) {
+func (h *HeartbeatServer) Heartbeat(ctx context.Context, req *pb.ExecutorHeartbeatRequest) (*pb.ExecutorHeartbeatResponse, error) {
 	if req.TargetExecId != string(client.SelfExecID) {
 		return &pb.ExecutorHeartbeatResponse{
 			Err: &pb.Error{
@@ -176,11 +205,7 @@ func (h *HeartbeatManager) Heartbeat(ctx context.Context, req *pb.ExecutorHeartb
 	group := value.(*taskGroup)
 
 	if !ok {
-		group = &taskGroup{
-			lastResponseTime: time.Now(),
-		}
-		group.removeSelf = func() { h.removeGroup(group) }
-		group.removeTask = func(t *taskWrapper) { h.removeTask(t) }
+		group = h.newTaskGroup(exec)
 		go group.check()
 		h.taskGroups.Store(exec, group)
 	}

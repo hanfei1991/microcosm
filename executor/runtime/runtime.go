@@ -39,7 +39,7 @@ type Runtime struct {
 	tasks     map[model.ID]*taskContainer
 	q         queue
 	wg        sync.WaitGroup
-	hb        HeartbeatManager
+	hb        *HeartbeatServer
 }
 
 func (s *Runtime) HandleHeartbeat(ctx context.Context, req *pb.ExecutorHeartbeatRequest) (*pb.ExecutorHeartbeatResponse, error) {
@@ -170,5 +170,6 @@ func NewRuntime(ctx *test.Context) *Runtime {
 	s := &Runtime{
 		testCtx: ctx,
 	}
+	s.hb = NewHeartbeatServer(s)
 	return s
 }

@@ -145,6 +145,13 @@ func (m *Master) RestoreTask(ctx context.Context, originalTask *model.Task) erro
 		currentStatus: Initializing,
 	}
 	m.runningTasks.Store(taskInfo.ID, task)
+	// Watch the old task
+	eid := task.Exec
+	eClient := m.clients.ExecutorClient(eid)
+	if eClient == nil {
+		m.addScheduleTasks(scheduleGroup{taskInfo})
+	}
+	eClient.Watch(taskInfo.ID, func(status *pb.TaskStatus) { m.onTaskStatusChange(task, status) })
 	return nil
 }
 
@@ -162,6 +169,16 @@ func (m *Master) updateEtcd(ctx context.Context, tasks []*model.Task) error {
 	txn.Then(actions...)
 	_, err := txn.Commit()
 	return err
+}
+
+func (m *Master) onTaskStatusChange(task *Task, status *pb.TaskStatus) {
+	// task need to migrant
+	switch status.Status {
+	case pb.TaskStatusType_NotFound, pb.TaskStatusType_Err:
+		m.addScheduleTasks(scheduleGroup{task.Task})
+	case pb.TaskStatusType_Running:
+		task.setCurStatus(Serving)
+	}
 }
 
 // master dispatches a set of task.
@@ -184,7 +201,8 @@ func (m *Master) dispatch(ctx context.Context, tasks []*model.Task) error {
 			Cmd: client.CmdSubmitBatchTasks,
 			Req: reqPb,
 		}
-		resp, err := m.clients.ExecutorClient(execID).Send(ctx, request)
+		eClient := m.clients.ExecutorClient(execID)
+		resp, err := eClient.Send(ctx, request)
 		if err != nil {
 			log.L().Logger.Info("Dispatch task meet error", zap.Error(err))
 			errTasks = append(errTasks, taskList...)
@@ -197,19 +215,20 @@ func (m *Master) dispatch(ctx context.Context, tasks []*model.Task) error {
 			continue
 		}
 		for _, t := range taskList {
+			var task *Task
 			if value, ok := m.runningTasks.Load(t.ID); ok {
-				task := value.(*Task)
+				task = value.(*Task)
 				task.setCurStatus(Serving)
 			} else {
-				task := &Task{
+				task = &Task{
 					Task:          t,
 					currentStatus: Serving,
 				}
 				m.runningTasks.Store(t.ID, task)
 			}
+			eClient.Watch(task.ID, func(status *pb.TaskStatus) { m.onTaskStatusChange(task, status) })
 		}
 	}
-
 	m.addScheduleTasks(errTasks)
 
 	return nil
@@ -282,7 +301,14 @@ func (m *Master) StopTasks(ctx context.Context, tasks []*model.Task) error {
 			TaskIdList: taskList.toIDListPB(),
 		}
 		log.L().Info("begin to cancel tasks", zap.String("exec", string(exec)), zap.Any("task", taskList))
-		resp, err := m.clients.ExecutorClient(exec).Send(ctx, &client.ExecutorRequest{
+		eClient := m.clients.ExecutorClient(exec)
+		if eClient == nil {
+			continue
+		}
+		for _, task := range taskList {
+			eClient.UnWatch(task.ID)
+		}
+		resp, err := eClient.Send(ctx, &client.ExecutorRequest{
 			Cmd: client.CmdCancelBatchTasks,
 			Req: req,
 		})

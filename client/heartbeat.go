@@ -2,7 +2,6 @@ package client
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"time"
 
@@ -10,6 +9,7 @@ import (
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/pkg/workerpool"
+	"go.uber.org/zap"
 )
 
 var SelfExecID model.ExecutorID
@@ -19,13 +19,15 @@ const (
 	heartbeatInterval time.Duration = 1 * time.Second
 )
 
-type executorProber struct {
+type heartbeatClient struct {
 	sync.Mutex
-	ctx                context.Context
-	probeList          sync.Map
-	newProbeChannel    chan []model.ID
-	removeProbeChannel chan []model.ID
-	statsUpdateChannel chan []*pb.TaskStatus
+	ctx    context.Context
+	cancel func()
+
+	watchList          sync.Map
+	newWatchChannel    chan model.ID
+	unWatchChannel     chan model.ID
+	statsUpdateChannel chan *pb.TaskStatus
 	pbClient           pb.ExecutorClient
 	lastRespondTime    time.Time
 	closed             bool
@@ -35,35 +37,35 @@ type executorProber struct {
 	workerPool workerpool.AsyncPool
 }
 
-func (e *executorProber) processTaskStatus() {
+func (e *heartbeatClient) processTaskStatus() {
 	select {
 	case <-e.ctx.Done():
 		return
-	case stats := <-e.statsUpdateChannel:
-		for _, stat := range stats {
-			id := model.ID(stat.Id)
-			value, ok := e.probeList.Load(id)
-			if !ok {
-
-			}
-			err := e.workerPool.Go(e.ctx, func() {
-				value.(func(*pb.TaskStatus))(stat)
-			})
-			if err != nil {
-				// that means the worker pool has been closed.
-				return
-			}
+	case stat := <-e.statsUpdateChannel:
+		id := model.ID(stat.Id)
+		value, ok := e.watchList.Load(id)
+		if !ok {
+			// this tid has been unwatched.
+			return
+		}
+		err := e.workerPool.Go(e.ctx, func() {
+			value.(func(*pb.TaskStatus))(stat)
+		})
+		if err != nil {
+			// that means the worker pool has been closed.
+			panic("worker pool closed, we can't call cbs")
 		}
 	}
 }
 
-func (e *executorProber) close() {
+func (e *heartbeatClient) close() {
 	e.Lock()
 	e.closed = true
 	e.onClose() // remove self from outside
 	e.Unlock()
+	e.cancel()
 	// Then do clean job.
-	e.probeList.Range(func(key, value interface{}) bool {
+	e.watchList.Range(func(key, value interface{}) bool {
 		id := key.(model.ID)
 		cb := value.(func(*pb.TaskStatus))
 		stats := &pb.TaskStatus{
@@ -78,37 +80,45 @@ func (e *executorProber) close() {
 	})
 }
 
-func (e *executorProber) register(tidList []model.ID, cbList []func(*pb.TaskStatus)) error {
-	e.Lock()
-	defer e.Unlock()
-	// executor is closing.
-	if e.closed {
-		return errors.New("executor has been closed")
+func newHeartbeatClient(eID model.ExecutorID, onClose func(), pbClient pb.ExecutorClient) *heartbeatClient {
+	hbClient := &heartbeatClient{
+		newWatchChannel:    make(chan model.ID, 128),
+		unWatchChannel:     make(chan model.ID, 128),
+		statsUpdateChannel: make(chan *pb.TaskStatus, 128),
+		pbClient:           pbClient,
+		executorID:         eID, // target id
+		onClose:            onClose,
 	}
-	for i := range tidList {
-		e.probeList.Store(tidList[i], cbList[i])
-	}
-	e.newProbeChannel <- tidList
-	return nil
-}
-func (e *executorProber) unRegister(tidList []model.ID) error {
-	e.Lock()
-	defer e.Unlock()
-	// executor is closing.
-	if e.closed {
-		return errors.New("executor has been closed")
-	}
-	for i := range tidList {
-		e.probeList.Delete(tidList[i])
-	}
-	e.newProbeChannel <- tidList
-	return nil
+	hbClient.ctx, hbClient.cancel = context.WithCancel(context.Background())
+	go hbClient.processTaskStatus()
+	go hbClient.run()
+	return hbClient
 }
 
-func (e *executorProber) run() {
+func (e *heartbeatClient) register(tid model.ID, cb func(*pb.TaskStatus)) {
+	e.Lock()
+	defer e.Unlock()
+	// executor is closing.
+	if e.closed {
+		cb(&pb.TaskStatus{Status: pb.TaskStatusType_NotFound})
+		return
+	}
+	e.watchList.Store(tid, cb)
+	e.newWatchChannel <- tid
+}
+
+func (e *heartbeatClient) unRegister(tid model.ID) {
+	e.Lock()
+	defer e.Unlock()
+	e.watchList.Delete(tid)
+	e.unWatchChannel <- tid
+}
+
+func (e *heartbeatClient) run() {
 	ticker := time.NewTicker(heartbeatInterval)
 	newTasks := make(map[model.ID]struct{})
 	unRegisterTasks := make(map[model.ID]struct{})
+	e.lastRespondTime = time.Now()
 	for {
 		if e.lastRespondTime.Add(heartbeatTimeout).Before(time.Now()) {
 			e.close()
@@ -118,16 +128,12 @@ func (e *executorProber) run() {
 		case <-e.ctx.Done():
 			e.close()
 			return
-		case newTaskList := <-e.newProbeChannel:
-			for _, id := range newTaskList {
-				newTasks[id] = struct{}{}
-				delete(unRegisterTasks, id)
-			}
-		case removeTaskList := <-e.removeProbeChannel:
-			for _, id := range removeTaskList {
-				unRegisterTasks[id] = struct{}{}
-				delete(newTasks, id)
-			}
+		case id := <-e.newWatchChannel:
+			newTasks[id] = struct{}{}
+			delete(unRegisterTasks, id)
+		case id := <-e.unWatchChannel:
+			unRegisterTasks[id] = struct{}{}
+			delete(newTasks, id)
 		case <-ticker.C:
 		}
 		req := &pb.ExecutorHeartbeatRequest{}
@@ -141,20 +147,34 @@ func (e *executorProber) run() {
 		req.SourceExecId = string(SelfExecID)
 		resp, err := e.pbClient.Heartbeat(e.ctx, req)
 		if err != nil {
-			log.L().Logger.Info("executor heartbeat meets error")
+			log.L().Logger.Info("executor heartbeat meets error", zap.Error(err))
 			continue
 		}
-		e.statsUpdateChannel <- resp.TaskStatus
+		if resp.Err != nil {
+			log.L().Logger.Info("executor heartbeat meets error", zap.String("error", resp.Err.Message))
+			continue
+		}
 		e.lastRespondTime = time.Now()
+		go func() {
+			for _, status := range resp.TaskStatus {
+				e.statsUpdateChannel <- status
+			}
+		}()
 		newTasks = make(map[model.ID]struct{})
 		unRegisterTasks = make(map[model.ID]struct{})
 	}
 }
 
-func (e *executorClient) Watch(tidList []model.ID, cbList []func(*pb.TaskStatus)) error {
-	return e.prober.register(tidList, cbList)
+func (e *executorClient) Watch(tid model.ID, cb func(*pb.TaskStatus)) {
+	if e.hbClient == nil {
+		return
+	}
+	e.hbClient.register(tid, cb)
 }
 
-func (e *executorClient) UnWatch(tidList []model.ID) error {
-	return e.prober.unRegister(tidList)
+func (e *executorClient) UnWatch(tid model.ID) {
+	if e.hbClient == nil {
+		return
+	}
+	e.hbClient.unRegister(tid)
 }
