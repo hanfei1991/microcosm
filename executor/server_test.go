@@ -76,15 +76,30 @@ func (ms *mockMetaStoreSession) Done() <-chan struct{} {
 }
 
 type mockMessageRouter struct {
+	mu    sync.RWMutex
 	peers map[string]string
 }
 
 func (mr *mockMessageRouter) AddPeer(id p2pImpl.NodeID, addr string) {
+	mr.mu.Lock()
+	defer mr.mu.Unlock()
 	mr.peers[id] = addr
 }
 
 func (mr *mockMessageRouter) RemovePeer(id p2pImpl.NodeID) {
+	mr.mu.Lock()
+	defer mr.mu.Unlock()
 	delete(mr.peers, id)
+}
+
+func (mr *mockMessageRouter) GetPeers() map[string]string {
+	mr.mu.RLock()
+	defer mr.mu.RUnlock()
+	peers := make(map[string]string, len(mr.peers))
+	for k, v := range mr.peers {
+		peers[k] = v
+	}
+	return peers
 }
 
 func (mr *mockMessageRouter) GetClient(target p2pImpl.NodeID) *p2pImpl.MessageClient {
@@ -138,8 +153,9 @@ func TestDiscoveryKeepalive(t *testing.T) {
 
 	// check snapshot can be load when discovery keepalive routine starts for the first time
 	time.Sleep(time.Millisecond * 50)
-	require.Equal(t, 1, len(router.peers))
-	require.Contains(t, router.peers, "uuid-2")
+	peers := router.GetPeers()
+	require.Equal(t, 1, len(peers))
+	require.Contains(t, peers, "uuid-2")
 	require.Equal(t, int64(1), discoveryConnectTime.Load())
 
 	// check discovery watch can work as expected
@@ -153,9 +169,10 @@ func TestDiscoveryKeepalive(t *testing.T) {
 		},
 	}
 	time.Sleep(time.Millisecond * 50)
-	require.Equal(t, 2, len(router.peers))
-	require.Contains(t, router.peers, "uuid-3")
-	require.Contains(t, router.peers, "uuid-4")
+	peers = router.GetPeers()
+	require.Equal(t, 2, len(peers))
+	require.Contains(t, peers, "uuid-3")
+	require.Contains(t, peers, "uuid-4")
 
 	// check will reconnect to discovery metastore when watch meets error
 	watchResp <- srvdiscovery.WatchResp{Err: stdErrors.New("mock discovery watch error")}
