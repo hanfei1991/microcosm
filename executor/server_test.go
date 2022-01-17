@@ -95,10 +95,6 @@ func (mr *mockMessageRouter) Close()            { panic("not implemented ") }
 func (mr *mockMessageRouter) Wait()             { panic("not implemented ") }
 func (mr *mockMessageRouter) Err() <-chan error { panic("not implemented ") }
 
-func mockDiscoveryConnector(ctx context.Context) (metaStoreSession, error) {
-	return &mockMetaStoreSession{}, nil
-}
-
 func TestDiscoveryKeepalive(t *testing.T) {
 	t.Parallel()
 

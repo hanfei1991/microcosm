@@ -147,7 +147,10 @@ func (s *Server) Stop() {
 	if s.metastore != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
-		s.metastore.Delete(ctx, s.info.EtcdKey())
+		_, err := s.metastore.Delete(ctx, s.info.EtcdKey())
+		if err != nil {
+			log.L().Warn("failed to delete executor info", zap.Error(err))
+		}
 	}
 
 	if s.mockSrv != nil {
