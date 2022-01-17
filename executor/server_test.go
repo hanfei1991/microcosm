@@ -22,11 +22,15 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+func init() {
+	err := log.InitLogger(&log.Config{Level: "warn"})
+	if err != nil {
+		panic(err)
+	}
+}
+
 func TestStartTCPSrv(t *testing.T) {
 	t.Parallel()
-
-	err := log.InitLogger(&log.Config{Level: "warn"})
-	require.Nil(t, err)
 
 	cfg := NewConfig()
 	port, err := freeport.GetFreePort()
