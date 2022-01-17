@@ -69,6 +69,7 @@ func prepareEtcd(t *testing.T, name string) (*embed.Etcd, *clientv3.Client, func
 func TestEtcdDiscoveryAPI(t *testing.T) {
 	t.Parallel()
 
+	keyAdapter := adapter.ExecutorInfoKeyAdapter
 	ctx, cancel := context.WithCancel(context.Background())
 	_, client, cleanFn := prepareEtcd(t, "test1")
 	defer cleanFn()
@@ -93,21 +94,21 @@ func TestEtcdDiscoveryAPI(t *testing.T) {
 	}
 
 	for _, srv := range initSrvs {
-		key := adapter.ServiceAddrAdapter.Encode(srv.uuid)
+		key := keyAdapter.Encode(srv.uuid)
 		value, err := json.Marshal(&ServiceResource{Addr: srv.addr})
 		require.Nil(t, err)
 		_, err = client.Put(ctx, key, string(value))
 		require.Nil(t, err)
 	}
 	tickDur := 50 * time.Millisecond
-	d := NewEtcdSrvDiscovery(client, tickDur)
+	d := NewEtcdSrvDiscovery(client, keyAdapter, tickDur)
 	snapshot, err := d.Snapshot(ctx, true /*updateCache*/)
 	require.Nil(t, err)
 	require.Equal(t, 3, len(snapshot))
 	require.Contains(t, snapshot, "uuid-1")
 
 	for _, srv := range updateSrvs {
-		key := adapter.ServiceAddrAdapter.Encode(srv.uuid)
+		key := keyAdapter.Encode(srv.uuid)
 		value, err := json.Marshal(&ServiceResource{Addr: srv.addr})
 		require.Nil(t, err)
 		if srv.del {

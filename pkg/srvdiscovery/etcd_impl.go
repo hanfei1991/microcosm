@@ -16,6 +16,7 @@ const defaultWatchChanSize = 8
 // EtcdSrvDiscovery implements Discovery interface based on etcd as backend storage
 // Note this struct is not thread-safe, and can be watched only once.
 type EtcdSrvDiscovery struct {
+	keyAdapter   adapter.KeyAdapter
 	etcdCli      *clientv3.Client
 	snapshot     map[UUID]ServiceResource
 	snapshotRev  Revision
@@ -24,8 +25,9 @@ type EtcdSrvDiscovery struct {
 }
 
 // NewEtcdSrvDiscovery creates a new EtcdSrvDiscovery
-func NewEtcdSrvDiscovery(etcdCli *clientv3.Client, watchTickDur time.Duration) *EtcdSrvDiscovery {
+func NewEtcdSrvDiscovery(etcdCli *clientv3.Client, ka adapter.KeyAdapter, watchTickDur time.Duration) *EtcdSrvDiscovery {
 	return &EtcdSrvDiscovery{
+		keyAdapter:   ka,
 		etcdCli:      etcdCli,
 		watchTickDur: watchTickDur,
 		watched:      atomic.NewBool(false),
@@ -113,13 +115,13 @@ func (d *EtcdSrvDiscovery) delta(ctx context.Context) (
 func (d *EtcdSrvDiscovery) getSnapshot(ctx context.Context) (
 	map[UUID]ServiceResource, Revision, error,
 ) {
-	resp, err := d.etcdCli.Get(ctx, adapter.ServiceAddrAdapter.Path(), clientv3.WithPrefix())
+	resp, err := d.etcdCli.Get(ctx, d.keyAdapter.Path(), clientv3.WithPrefix())
 	if err != nil {
 		return nil, 0, errors.Wrap(errors.ErrEtcdAPIError, err)
 	}
 	snapshot := make(map[UUID]ServiceResource, resp.Count)
 	for _, kv := range resp.Kvs {
-		uuid, resc, err := unmarshal(kv.Key, kv.Value)
+		uuid, resc, err := unmarshal(d.keyAdapter, kv.Key, kv.Value)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -129,8 +131,8 @@ func (d *EtcdSrvDiscovery) getSnapshot(ctx context.Context) (
 }
 
 // unmarshal wraps the unmarshal processing for key/value used in service discovery
-func unmarshal(k, v []byte) (uuid UUID, resc ServiceResource, err error) {
-	keys, err1 := adapter.ServiceAddrAdapter.Decode(string(k))
+func unmarshal(ka adapter.KeyAdapter, k, v []byte) (uuid UUID, resc ServiceResource, err error) {
+	keys, err1 := ka.Decode(string(k))
 	if err1 != nil {
 		err = errors.Wrap(errors.ErrDecodeEtcdKeyFail, err1, string(k))
 		return

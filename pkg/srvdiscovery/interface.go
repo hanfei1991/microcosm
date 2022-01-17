@@ -2,6 +2,8 @@ package srvdiscovery
 
 import (
 	"context"
+
+	"github.com/hanfei1991/microcosm/model"
 )
 
 // defines some type alias used in service discovery module
@@ -10,10 +12,8 @@ type (
 	UUID     = string
 )
 
-// ServiceResource defines the resource of service
-type ServiceResource struct {
-	Addr string `json:"addr"`
-}
+// ServiceResource alias to ExecutorInfo
+type ServiceResource = model.ExecutorInfo
 
 // WatchResp defines the change set from a Watch API of Discovery interface
 type WatchResp struct {
