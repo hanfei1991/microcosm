@@ -17,12 +17,12 @@ type ExecutorClient interface {
 	Send(context.Context, *ExecutorRequest) (*ExecutorResponse, error)
 }
 
-type closeable interface {
+type closeableConnIface interface {
 	Close() error
 }
 
 type executorClient struct {
-	conn   closeable
+	conn   closeableConnIface
 	client pb.ExecutorClient
 }
 
@@ -34,6 +34,10 @@ func (c *executorClient) Send(ctx context.Context, req *ExecutorRequest) (*Execu
 		resp.Resp, err = c.client.SubmitBatchTasks(ctx, req.SubmitBatchTasks())
 	case CmdCancelBatchTasks:
 		resp.Resp, err = c.client.CancelBatchTasks(ctx, req.CancelBatchTasks())
+	case CmdPauseBatchTasks:
+		resp.Resp, err = c.client.PauseBatchTasks(ctx, req.PauseBatchTasks())
+	case CmdDispatchTask:
+		resp.Resp, err = c.client.DispatchTask(ctx, req.DispatchTask())
 	}
 	if err != nil {
 		log.L().Logger.Error("send req meet error", zap.Error(err))
@@ -53,7 +57,7 @@ func newExecutorClientForTest(addr string) (*executorClient, error) {
 }
 
 func newExecutorClient(addr string) (*executorClient, error) {
-	if test.GlobalTestFlag {
+	if test.GetGlobalTestFlag() {
 		return newExecutorClientForTest(addr)
 	}
 	conn, err := grpc.Dial(addr, grpc.WithInsecure(), grpc.WithConnectParams(grpc.ConnectParams{Backoff: backoff.DefaultConfig}))
@@ -71,6 +75,8 @@ type CmdType uint16
 const (
 	CmdSubmitBatchTasks CmdType = 1 + iota
 	CmdCancelBatchTasks
+	CmdPauseBatchTasks
+	CmdDispatchTask
 )
 
 type ExecutorRequest struct {
@@ -84,6 +90,14 @@ func (e *ExecutorRequest) SubmitBatchTasks() *pb.SubmitBatchTasksRequest {
 
 func (e *ExecutorRequest) CancelBatchTasks() *pb.CancelBatchTasksRequest {
 	return e.Req.(*pb.CancelBatchTasksRequest)
+}
+
+func (e *ExecutorRequest) PauseBatchTasks() *pb.PauseBatchTasksRequest {
+	return e.Req.(*pb.PauseBatchTasksRequest)
+}
+
+func (e *ExecutorRequest) DispatchTask() *pb.DispatchTaskRequest {
+	return e.Req.(*pb.DispatchTaskRequest)
 }
 
 type ExecutorResponse struct {

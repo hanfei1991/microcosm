@@ -1,4 +1,4 @@
-package master
+package servermaster
 
 import (
 	"context"
@@ -8,16 +8,17 @@ import (
 	"reflect"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hanfei1991/microcosm/client"
-	"github.com/hanfei1991/microcosm/master/cluster"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/etcdutils"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
+	"github.com/hanfei1991/microcosm/servermaster/cluster"
 	"github.com/hanfei1991/microcosm/test"
 	"github.com/hanfei1991/microcosm/test/mock"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
@@ -35,14 +36,18 @@ import (
 type Server struct {
 	etcd *embed.Etcd
 
-	etcdClient   *clientv3.Client
-	session      *concurrency.Session
-	election     cluster.Election
-	leaderCtx    context.Context
-	resignFn     context.CancelFunc
-	leader       atomic.Value
-	members      []*Member //nolint:unused
+	etcdClient *clientv3.Client
+	session    *concurrency.Session
+	election   cluster.Election
+	leaderCtx  context.Context
+	resignFn   context.CancelFunc
+	leader     atomic.Value
+	members    struct {
+		sync.RWMutex
+		m []*Member
+	}
 	leaderClient *client.MasterClient
+	membership   Membership
 
 	// sched scheduler
 	executorManager *ExecutorManager
@@ -72,6 +77,9 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 		masterAddrs = append(masterAddrs, u.Host)
 	}
 	jobManager := NewJobManager(masterAddrs)
+
+	// messageServer := p2p.NewMessageServer(cfg.)
+
 	server := &Server{
 		cfg:             cfg,
 		executorManager: executorManager,
@@ -94,11 +102,25 @@ func (s *Server) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.H
 		return resp2, err2
 	}
 
-	err := s.apiPreCheck()
-	if err != nil {
-		return &pb.HeartbeatResponse{Err: err}, nil
+	checkErr := s.apiPreCheck()
+	if checkErr != nil {
+		return &pb.HeartbeatResponse{Err: checkErr}, nil
 	}
-	return s.executorManager.HandleHeartbeat(req)
+	resp, err := s.executorManager.HandleHeartbeat(req)
+	if err == nil && resp.Err == nil {
+		s.members.RLock()
+		defer s.members.RUnlock()
+		addrs := make([]string, 0, len(s.members.m))
+		for _, member := range s.members.m {
+			addrs = append(addrs, member.AdvertiseAddr)
+		}
+		resp.Addrs = addrs
+		leader, exists := s.checkLeader()
+		if exists {
+			resp.Leader = leader.AdvertiseAddr
+		}
+	}
+	return resp, err
 }
 
 // SubmitJob passes request onto "JobManager".
@@ -134,6 +156,23 @@ func (s *Server) CancelJob(ctx context.Context, req *pb.CancelJobRequest) (*pb.C
 		return &pb.CancelJobResponse{Err: err}, nil
 	}
 	return s.jobManager.CancelJob(ctx, req), nil
+}
+
+func (s *Server) PauseJob(ctx context.Context, req *pb.PauseJobRequest) (*pb.PauseJobResponse, error) {
+	var (
+		resp2 *pb.PauseJobResponse
+		err2  error
+	)
+	shouldRet := s.rpcForwardIfNeeded(ctx, req, &resp2, &err2)
+	if shouldRet {
+		return resp2, err2
+	}
+
+	err := s.apiPreCheck()
+	if err != nil {
+		return &pb.PauseJobResponse{Err: err}, nil
+	}
+	return s.jobManager.PauseJob(ctx, req), nil
 }
 
 // RegisterExecutor implements grpc interface, and passes request onto executor manager.
@@ -263,11 +302,11 @@ func (s *Server) Stop() {
 
 // Run the master-server.
 func (s *Server) Run(ctx context.Context) (err error) {
-	if test.GlobalTestFlag {
+	if test.GetGlobalTestFlag() {
 		return s.startForTest(ctx)
 	}
 
-	err = s.startGrpcSrv()
+	err = s.startGrpcSrv(ctx)
 	if err != nil {
 		return
 	}
@@ -283,10 +322,14 @@ func (s *Server) Run(ctx context.Context) (err error) {
 		return s.leaderLoop(ctx)
 	})
 
+	wg.Go(func() error {
+		return s.memberLoop(ctx)
+	})
+
 	return wg.Wait()
 }
 
-func (s *Server) startGrpcSrv() (err error) {
+func (s *Server) startGrpcSrv(ctx context.Context) (err error) {
 	etcdCfg := etcdutils.GenEmbedEtcdConfigWithLogger(s.cfg.LogLevel)
 	// prepare to join an existing etcd cluster.
 	err = etcdutils.PrepareJoinEtcd(s.cfg.Etcd, s.cfg.MasterAddr)
@@ -317,7 +360,7 @@ func (s *Server) startGrpcSrv() (err error) {
 	}
 
 	// generate grpcServer
-	s.etcd, err = startEtcd(etcdCfg, gRPCSvr, httpHandlers, etcdStartTimeout)
+	s.etcd, err = startEtcd(ctx, etcdCfg, gRPCSvr, httpHandlers, etcdStartTimeout)
 	if err != nil {
 		return
 	}
@@ -331,8 +374,8 @@ func (s *Server) startGrpcSrv() (err error) {
 // member returns member information of the server
 func (s *Server) member() string {
 	m := &Member{
-		Name:  s.name(),
-		Addrs: []string{s.cfg.AdvertiseAddr},
+		Name:          s.name(),
+		AdvertiseAddr: s.cfg.AdvertiseAddr,
 	}
 	val, err := m.String()
 	if err != nil {
@@ -348,7 +391,7 @@ func (s *Server) name() string {
 
 func (s *Server) reset(ctx context.Context) error {
 	sess, err := concurrency.NewSession(
-		s.etcdClient, concurrency.WithTTL(int(s.cfg.KeepAliveTTL.Seconds())))
+		s.etcdClient, concurrency.WithTTL(int(defaultSessionTTL.Seconds())))
 	if err != nil {
 		return errors.Wrap(errors.ErrMasterNewServer, err)
 	}
@@ -366,6 +409,11 @@ func (s *Server) reset(ctx context.Context) error {
 	})
 	if err != nil {
 		return err
+	}
+	s.membership = &EtcdMembership{etcdCli: s.etcdClient}
+	err = s.updateServerMasterMembers(ctx)
+	if err != nil {
+		log.L().Warn("failed to update server master members", zap.Error(err))
 	}
 	return nil
 }
@@ -385,10 +433,10 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	}
 
 	s.leader.Store(&Member{
-		Name:         s.name(),
-		IsServLeader: true,
-		IsEtcdLeader: true,
-		Addrs:        []string{s.cfg.AdvertiseAddr},
+		Name:          s.name(),
+		IsServLeader:  true,
+		IsEtcdLeader:  true,
+		AdvertiseAddr: s.cfg.AdvertiseAddr,
 	})
 	defer func() {
 		s.leader.Store(&Member{})
@@ -430,7 +478,7 @@ func (s *Server) isLeaderAndNeedForward(ctx context.Context) (isLeader, needForw
 		ticker := time.NewTicker(300 * time.Millisecond)
 		defer ticker.Stop()
 
-		for exist {
+		for !exist {
 			if retry == 0 {
 				log.L().Error("leader is not found, please retry later")
 				return false, false
@@ -453,7 +501,6 @@ func (s *Server) isLeaderAndNeedForward(ctx context.Context) (isLeader, needForw
 // arguments with `Pointer` suffix should be pointer to that variable its name indicated
 // return `true` means caller should return with variable that `xxPointer` modified.
 func (s *Server) rpcForwardIfNeeded(ctx context.Context, req interface{}, respPointer interface{}, errPointer *error) bool {
-	// nolint:dogsled
 	pc, _, _, _ := runtime.Caller(1)
 	fullMethodName := runtime.FuncForPC(pc).Name()
 	methodName := fullMethodName[strings.LastIndexByte(fullMethodName, '.')+1:]
@@ -476,7 +523,7 @@ func (s *Server) rpcForwardIfNeeded(ctx context.Context, req interface{}, respPo
 			zap.String("to", leader.Name), zap.String("request", methodName))
 
 		params := []reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(req)}
-		results := reflect.ValueOf(s.leaderClient.Client()).MethodByName(methodName).Call(params)
+		results := reflect.ValueOf(s.leaderClient.GetLeaderClient()).MethodByName(methodName).Call(params)
 		// result's inner types should be (*pb.XXResponse, error), which is same as s.leaderClient.XXRPCMethod
 		reflect.ValueOf(respPointer).Elem().Set(results[0])
 		errInterface := results[1].Interface()
@@ -515,4 +562,19 @@ func withHost(addr string) string {
 	}
 
 	return addr
+}
+
+func (s *Server) memberLoop(ctx context.Context) error {
+	ticker := time.NewTicker(defaultMemberLoopInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+			if err := s.updateServerMasterMembers(ctx); err != nil {
+				log.L().Warn("update server master members failed", zap.Error(err))
+			}
+		}
+	}
 }

@@ -1,16 +1,16 @@
-package master
+package servermaster
 
 import (
 	"context"
 	"sync"
 	"time"
 
-	"github.com/hanfei1991/microcosm/master/resource"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/autoid"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/ha"
+	"github.com/hanfei1991/microcosm/servermaster/resource"
 	"github.com/hanfei1991/microcosm/test"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
@@ -63,7 +63,7 @@ func (e *ExecutorManager) removeExecutorImpl(id model.ExecutorID) error {
 	//}
 	e.offExecutor <- id
 	log.L().Logger.Info("notify to offline exec")
-	if test.GlobalTestFlag {
+	if test.GetGlobalTestFlag() {
 		e.testContext.NotifyExecutorChange(&test.ExecutorChangeEvent{
 			Tp:   test.Delete,
 			Time: time.Now(),
