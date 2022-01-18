@@ -32,7 +32,7 @@ type Server struct {
 
 	tcpServer   tcpserver.TCPServer
 	grpcSrv     *grpc.Server
-	cli         *client.MasterClientImpl
+	cli         client.MasterClient
 	cliUpdateCh chan []string
 	sch         *runtime.Runtime
 	info        *model.ExecutorInfo

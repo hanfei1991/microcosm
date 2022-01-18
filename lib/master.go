@@ -249,7 +249,7 @@ func (m *BaseMaster) runWorkerCheck(ctx context.Context) error {
 func (m *BaseMaster) OnError(err error) {
 	if errors.Cause(err) == context.Canceled {
 		// TODO think about how to gracefully handle cancellation here.
-		log.L().Error("BaseMaster is being canceled", zap.Error(err))
+		log.L().Warn("BaseMaster is being canceled", zap.Error(err))
 		return
 	}
 	select {

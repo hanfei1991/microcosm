@@ -110,6 +110,17 @@ func (c *MockServerMasterClient) Close() (err error) {
 	return args.Error(0)
 }
 
+func (c *MockServerMasterClient) ReportExecutorWorkload(
+	ctx context.Context,
+	req *pb.ExecWorkloadRequest,
+) (resp *pb.ExecWorkloadResponse, err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	args := c.Mock.Called()
+	return args.Get(0).(*pb.ExecWorkloadResponse), args.Error(1)
+}
+
 func (c *MockServerMasterClient) GetLeaderClient() pb.MasterClient {
 	panic("implement me")
 }
