@@ -3,6 +3,7 @@ package fake
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/model"
@@ -13,7 +14,7 @@ var _ lib.WorkerImpl = &dummyWorkerImpl{}
 
 type dummyWorkerImpl struct {
 	init   bool
-	closed bool
+	closed int32
 	tick   int64
 }
 
@@ -30,7 +31,7 @@ func (d *dummyWorkerImpl) Tick(ctx context.Context) error {
 		return errors.New("not yet init")
 	}
 
-	if d.closed {
+	if atomic.LoadInt32(&d.closed) == 1 {
 		return nil
 	}
 	d.tick++
@@ -53,7 +54,7 @@ func (d *dummyWorkerImpl) OnMasterFailover(_ lib.MasterFailoverReason) error {
 }
 
 func (d *dummyWorkerImpl) CloseImpl() {
-	d.closed = true
+	atomic.StoreInt32(&d.closed, 1)
 }
 
 func NewDummyWorkerImpl(ctx dcontext.Context) lib.WorkerImpl {
