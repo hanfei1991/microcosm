@@ -13,13 +13,17 @@ import (
 	"github.com/hanfei1991/microcosm/lib/fake"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
+	"github.com/hanfei1991/microcosm/pkg/adapter"
+	"github.com/hanfei1991/microcosm/pkg/config"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
+	"github.com/hanfei1991/microcosm/pkg/srvdiscovery"
 	"github.com/hanfei1991/microcosm/test"
 	"github.com/hanfei1991/microcosm/test/mock"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	p2pImpl "github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/tcpserver"
 	"go.etcd.io/etcd/clientv3"
@@ -32,13 +36,19 @@ import (
 	"google.golang.org/grpc/backoff"
 )
 
+type metaStoreSession interface {
+	Done() <-chan struct{}
+}
+
+type discoveryConnectFn func(ctx context.Context) (metaStoreSession, error)
+
 type Server struct {
 	cfg     *Config
 	testCtx *test.Context
 
 	tcpServer   tcpserver.TCPServer
 	grpcSrv     *grpc.Server
-	cli         *client.MasterClient
+	cli         client.MasterClient
 	cliUpdateCh chan []string
 	sch         *runtime.Runtime
 	workerRtm   *worker.Runtime
@@ -49,7 +59,10 @@ type Server struct {
 
 	mockSrv mock.GrpcServer
 
-	metastore metadata.MetaKV
+	metastore          metadata.MetaKV
+	discovery          srvdiscovery.Discovery
+	discoveryConnector discoveryConnectFn
+	p2pMsgRouter       p2pImpl.MessageRouter
 }
 
 func NewServer(cfg *Config, ctx *test.Context) *Server {
@@ -58,6 +71,7 @@ func NewServer(cfg *Config, ctx *test.Context) *Server {
 		testCtx:     ctx,
 		cliUpdateCh: make(chan []string),
 	}
+	s.discoveryConnector = s.connectToEtcdDiscovery
 	return &s
 }
 
@@ -126,7 +140,7 @@ func (s *Server) ResumeBatchTasks(ctx context.Context, req *pb.PauseBatchTasksRe
 func (s *Server) DispatchTask(ctx context.Context, req *pb.DispatchTaskRequest) (*pb.DispatchTaskResponse, error) {
 	log.L().Info("dispatch task", zap.String("req", req.String()))
 	workerID := "dummy"
-	worker := lib.NewBaseWorker(fake.NewDummyWorkerImpl(dcontext.Context{Ctx: ctx}), s.msgServer.MakeHandlerManager(), p2p.NewMessageRouter(string(s.info.ID), s.cfg.AdvertiseAddr), s.metastore, lib.WorkerID(workerID), lib.MasterID(req.MasterId))
+	worker := lib.NewBaseWorker(fake.NewDummyWorkerImpl(dcontext.Context{Ctx: ctx}), s.msgServer.MakeHandlerManager(), p2p.NewMessageSender(p2p.NewMessageRouter(string(s.info.ID), s.cfg.AdvertiseAddr)), s.metastore, lib.WorkerID(workerID), lib.MasterID(req.MasterId))
 	s.workerRtm.AddWorker(worker)
 	return &pb.DispatchTaskResponse{
 		ErrorCode: pb.DispatchTaskErrorCode_OK,
@@ -143,6 +157,17 @@ func (s *Server) Stop() {
 		err := s.tcpServer.Close()
 		if err != nil {
 			log.L().Error("close tcp server", zap.Error(err))
+		}
+	}
+
+	if s.metastore != nil {
+		// clear executor info in metastore to accelerate service discovery. If
+		// not delete actively, the session will be timeout after TTL.
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_, err := s.metastore.Delete(ctx, s.info.EtcdKey())
+		if err != nil {
+			log.L().Warn("failed to delete executor info", zap.Error(err))
 		}
 	}
 
@@ -220,7 +245,7 @@ func (s *Server) Run(ctx context.Context) error {
 
 	// connects to metastore and maintains a etcd session
 	wg.Go(func() error {
-		return s.keepalive(ctx)
+		return s.discoveryKeepalive(ctx)
 	})
 
 	wg.Go(func() error {
@@ -264,7 +289,7 @@ func (s *Server) startTCPService(ctx context.Context, wg *errgroup.Group) error 
 	return nil
 }
 
-func (s *Server) keepalive(ctx context.Context) error {
+func (s *Server) connectToEtcdDiscovery(ctx context.Context) (metaStoreSession, error) {
 	// query service discovery metastore, which is an embed etcd underlying
 	resp, err := s.cli.QueryMetaStore(
 		ctx,
@@ -272,17 +297,18 @@ func (s *Server) keepalive(ctx context.Context) error {
 		s.cfg.RPCTimeout,
 	)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	log.L().Info("update service discovery metastore", zap.String("addr", resp.Address))
 
 	logConfig := logutil.DefaultZapLoggerConfig
 	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
 	etcdCli, err := clientv3.New(clientv3.Config{
-		Endpoints:   strings.Split(resp.GetAddress(), ","),
-		Context:     ctx,
-		LogConfig:   &logConfig,
-		DialTimeout: 5 * time.Second,
+		Endpoints:        strings.Split(resp.GetAddress(), ","),
+		Context:          ctx,
+		LogConfig:        &logConfig,
+		DialTimeout:      config.ServerMasterEtcdDialTimeout,
+		AutoSyncInterval: config.ServerMasterEtcdSyncInterval,
 		DialOptions: []grpc.DialOption{
 			grpc.WithInsecure(),
 			grpc.WithBlock(),
@@ -298,29 +324,93 @@ func (s *Server) keepalive(ctx context.Context) error {
 		},
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
+	session, err := s.createSession(ctx, etcdCli)
+	if err != nil {
+		return nil, err
+	}
+
+	// initialize a new service discovery, if old discovery exists, clones its
+	// snapshot to the new one.
+	old := s.discovery
+	s.discovery = srvdiscovery.NewEtcdSrvDiscovery(
+		etcdCli, adapter.ExecutorInfoKeyAdapter, defaultDiscoverTicker)
+	if old != nil {
+		s.discovery.CopySnapshot(old.SnapshotClone())
+	}
+
+	return session, nil
+}
+
+func (s *Server) createSession(ctx context.Context, etcdCli *clientv3.Client) (metaStoreSession, error) {
 	session, err := concurrency.NewSession(etcdCli, concurrency.WithTTL(s.cfg.SessionTTL))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	// TODO: we share system metastore with service discovery etcd, in the future
 	// we could separate them
 	s.metastore = metadata.NewMetaEtcd(etcdCli)
 	value, err := s.info.ToJSON()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	_, err = s.metastore.Put(ctx, s.info.EtcdKey(), value, clientv3.WithLease(session.Lease()))
 	if err != nil {
+		return nil, err
+	}
+	return session, nil
+}
+
+func (s *Server) discoveryKeepalive(ctx context.Context) error {
+	var (
+		session metaStoreSession
+		err     error
+	)
+	session, err = s.discoveryConnector(ctx)
+	if err != nil {
 		return err
 	}
+	executors, err := s.discovery.Snapshot(ctx)
+	if err != nil {
+		return err
+	}
+	for uuid, exec := range executors {
+		if s.p2pMsgRouter != nil {
+			s.p2pMsgRouter.AddPeer(uuid, exec.Addr)
+		}
+	}
 
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-session.Done():
-		return errors.ErrExecutorSessionDone.GenWithStackByArgs(s.info.ID)
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-session.Done():
+			log.L().Warn("metastore session is done", zap.String("executor-id", string(s.info.ID)))
+			session, err = s.discoveryConnector(ctx)
+			if err != nil {
+				return err
+			}
+		case resp := <-s.discovery.Watch(ctx):
+			if resp.Err != nil {
+				log.L().Warn("discovery watch met error", zap.Error(resp.Err))
+				session, err = s.discoveryConnector(ctx)
+				if err != nil {
+					return err
+				}
+				continue
+			}
+			for uuid, add := range resp.AddSet {
+				if s.p2pMsgRouter != nil {
+					s.p2pMsgRouter.AddPeer(uuid, add.Addr)
+				}
+			}
+			for uuid := range resp.DelSet {
+				if s.p2pMsgRouter != nil {
+					s.p2pMsgRouter.RemovePeer(uuid)
+				}
+			}
+		}
 	}
 }
 
