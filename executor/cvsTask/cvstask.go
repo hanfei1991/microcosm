@@ -40,7 +40,6 @@ func NewCvsTask(src strPair, dst strPair) lib.WorkerImpl {
 	task.counter = 0
 	task.buffer = make(chan strPair, BUFFERSIZE)
 	return task
-
 }
 
 func (task *cvsTask) InitImpl(ctx context.Context) error {
@@ -81,20 +80,19 @@ func (task *cvsTask) OnMasterFailover(reason lib.MasterFailoverReason) error {
 
 // CloseImpl tells the WorkerImpl to quitrunStatusWorker and release resources.
 func (task *cvsTask) CloseImpl() {
-	return
 }
 
-func (c *cvsTask) Receive(ctx context.Context) error {
-	conn, err := grpc.Dial(c.srcAddr.firstStr, grpc.WithInsecure())
+func (task *cvsTask) Receive(ctx context.Context) error {
+	conn, err := grpc.Dial(task.srcAddr.firstStr, grpc.WithInsecure())
 	if err != nil {
-		log.L().Info("cann't connect with the source address ", zap.Any("message", c.srcAddr.firstStr))
+		log.L().Info("cann't connect with the source address ", zap.Any("message", task.srcAddr.firstStr))
 		return err
 	}
 	client := pb.NewDataRWServiceClient(conn)
 	defer conn.Close()
-	reader, err := client.ReadLines(ctx, &pb.ReadLinesRequest{FileName: c.srcAddr.secondStr})
+	reader, err := client.ReadLines(ctx, &pb.ReadLinesRequest{FileName: task.srcAddr.secondStr})
 	if err != nil {
-		log.L().Info("read data from file failed ", zap.Any("message", c.srcAddr.secondStr))
+		log.L().Info("read data from file failed ", zap.Any("message", task.srcAddr.secondStr))
 		return err
 	}
 	for {
@@ -112,16 +110,16 @@ func (c *cvsTask) Receive(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return nil
-		case c.buffer <- strPair{firstStr: strs[0], secondStr: strs[1]}:
+		case task.buffer <- strPair{firstStr: strs[0], secondStr: strs[1]}:
 		}
 	}
 	return nil
 }
 
-func (c *cvsTask) Send(ctx context.Context) error {
-	conn, err := grpc.Dial(c.dstAddr.firstStr, grpc.WithInsecure())
+func (task *cvsTask) Send(ctx context.Context) error {
+	conn, err := grpc.Dial(task.dstAddr.firstStr, grpc.WithInsecure())
 	if err != nil {
-		log.L().Info("cann't connect with the destination address ", zap.Any("message", c.srcAddr.firstStr))
+		log.L().Info("cann't connect with the destination address ", zap.Any("message", task.srcAddr.firstStr))
 		return err
 	}
 	client := pb.NewDataRWServiceClient(conn)
@@ -136,9 +134,9 @@ func (c *cvsTask) Send(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return nil
-		case kv := <-c.buffer:
-			err := writer.Send(&pb.WriteLinesRequest{FileName: c.dstAddr.secondStr, Key: kv.firstStr, Value: kv.secondStr})
-			c.counter++
+		case kv := <-task.buffer:
+			err := writer.Send(&pb.WriteLinesRequest{FileName: task.dstAddr.secondStr, Key: kv.firstStr, Value: kv.secondStr})
+			task.counter++
 			if err != nil {
 				log.L().Info("call write data rpc failed ")
 			}
@@ -148,5 +146,4 @@ func (c *cvsTask) Send(ctx context.Context) error {
 			time.Sleep(time.Second)
 		}
 	}
-
 }

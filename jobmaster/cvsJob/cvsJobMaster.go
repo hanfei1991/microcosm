@@ -37,13 +37,11 @@ func NewCVSJobMaster(conf Config) lib.MasterImpl {
 	jm.Impl = jm
 	jm.syncInfo = conf
 	return jm
-
 }
 
 func (jm *CVSJobMaster) InitImpl(ctx context.Context) error {
-
 	if jm.syncInfo.DstHost == jm.syncInfo.SrcHost && jm.syncInfo.SrcDir == jm.syncInfo.DstDir {
-		return errorInfo{info: "bad configure file ,make sure the source address is not the same as the destination"}
+		return &errorInfo{info: "bad configure file ,make sure the source address is not the same as the destination"}
 	}
 	fileNames, err := jm.listSrcFiles(ctx)
 	if err != nil {
@@ -59,7 +57,6 @@ func (jm *CVSJobMaster) InitImpl(ctx context.Context) error {
 		conf := Config{SrcHost: jm.syncInfo.SrcHost, SrcDir: srcDir, DstHost: jm.syncInfo.DstHost, DstDir: dstDir}
 		bytes, err := json.Marshal(conf)
 		if err != nil {
-
 		}
 		// todo:createworker should return worker id
 		err = jm.CreateWorker(ctx, 2, bytes)
@@ -74,6 +71,10 @@ func (jm *CVSJobMaster) Tick(ctx context.Context) error {
 	return nil
 }
 
+func (jm *CVSJobMaster) OnMasterRecovered(ctx context.Context) error {
+	return nil
+}
+
 func (jm *CVSJobMaster) OnWorkerDispatched(worker lib.WorkerHandle, result error) error {
 	return nil
 }
@@ -83,7 +84,7 @@ func (jm *CVSJobMaster) OnWorkerOnline(worker lib.WorkerHandle) error {
 }
 
 func (jm *CVSJobMaster) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
-	//worker.ID()
+	// worker.ID()
 	return nil
 }
 
