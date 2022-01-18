@@ -2,15 +2,21 @@ package executor
 
 import (
 	"context"
+	sysruntime "runtime"
 	"strings"
 	"time"
 
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/executor/runtime"
+	"github.com/hanfei1991/microcosm/executor/worker"
+	"github.com/hanfei1991/microcosm/lib"
+	"github.com/hanfei1991/microcosm/lib/fake"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
+	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
+	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/test"
 	"github.com/hanfei1991/microcosm/test/mock"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -35,6 +41,8 @@ type Server struct {
 	cli         *client.MasterClient
 	cliUpdateCh chan []string
 	sch         *runtime.Runtime
+	workerRtm   *worker.Runtime
+	msgServer   *p2p.MessageRPCService
 	info        *model.ExecutorInfo
 
 	lastHearbeatTime time.Time
@@ -115,8 +123,15 @@ func (s *Server) ResumeBatchTasks(ctx context.Context, req *pb.PauseBatchTasksRe
 	return &pb.PauseBatchTasksResponse{}, nil
 }
 
-func (s *Server) DispatchTask(ctx context.Context, request *pb.DispatchTaskRequest) (*pb.DispatchTaskResponse, error) {
-	panic("implement me")
+func (s *Server) DispatchTask(ctx context.Context, req *pb.DispatchTaskRequest) (*pb.DispatchTaskResponse, error) {
+	log.L().Info("dispatch task", zap.String("req", req.String()))
+	workerID := "dummy"
+	worker := lib.NewBaseWorker(fake.NewDummyWorkerImpl(dcontext.Context{Ctx: ctx}), s.msgServer.MakeHandlerManager(), p2p.NewMessageRouter(string(s.info.ID), s.cfg.AdvertiseAddr), s.metastore, lib.WorkerID(workerID), lib.MasterID(req.MasterId))
+	s.workerRtm.AddWorker(worker)
+	return &pb.DispatchTaskResponse{
+		ErrorCode: pb.DispatchTaskErrorCode_OK,
+		WorkerId:  workerID,
+	}, nil
 }
 
 func (s *Server) Stop() {
@@ -157,6 +172,17 @@ func (s *Server) startForTest(ctx context.Context) (err error) {
 	return nil
 }
 
+func (s *Server) startMsgService(ctx context.Context, wg *errgroup.Group) (err error) {
+	s.msgServer, err = p2p.NewMessageRPCService(string(s.info.ID), nil)
+	if err != nil {
+		return err
+	}
+	wg.Go(func() error {
+		return s.msgServer.Serve(ctx, s.tcpServer.GrpcListener())
+	})
+	return nil
+}
+
 func (s *Server) Run(ctx context.Context) error {
 	if test.GetGlobalTestFlag() {
 		return s.startForTest(ctx)
@@ -174,6 +200,18 @@ func (s *Server) Run(ctx context.Context) error {
 		s.sch.Run(ctx, 10)
 		return nil
 	})
+
+	pollCon := s.cfg.PollConcurrency
+	if pollCon == 0 {
+		pollCon = sysruntime.NumCPU()
+	}
+	s.workerRtm = worker.NewRuntime(ctx)
+	s.workerRtm.Start(pollCon)
+
+	err = s.startMsgService(ctx, wg)
+	if err != nil {
+		return err
+	}
 
 	err = s.selfRegister(ctx)
 	if err != nil {

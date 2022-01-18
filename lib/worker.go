@@ -79,6 +79,18 @@ func NewBaseWorker(
 	}
 }
 
+func (w *BaseWorker) ID() WorkerID {
+	return w.id
+}
+
+func (w *BaseWorker) Workload() model.RescUnit {
+	wl, err := w.impl.Workload()
+	if err != nil {
+		panic(err)
+	}
+	return wl
+}
+
 func (w *BaseWorker) Init(ctx context.Context) error {
 	if err := w.initMessageHandlers(ctx); err != nil {
 		return errors.Trace(err)

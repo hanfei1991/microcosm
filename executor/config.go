@@ -81,6 +81,8 @@ type Config struct {
 	KeepAliveIntervalStr string `toml:"keepalive-interval" json:"keepalive-interval"`
 	RPCTimeoutStr        string `toml:"rpc-timeout" json:"rpc-timeout"`
 
+	PollConcurrency int `toml:"poll-concurrency" json:"poll-concurrency"`
+
 	KeepAliveTTL      time.Duration `toml:"-" json:"-"`
 	KeepAliveInterval time.Duration `toml:"-" json:"-"`
 	RPCTimeout        time.Duration `toml:"-" json:"-"`
