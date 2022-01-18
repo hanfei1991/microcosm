@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanfei1991/microcosm/client"
+	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
@@ -16,9 +18,16 @@ import (
 )
 
 const (
-	masterName     = "my-master"
-	masterNodeName = "node-1"
+	masterName            = "my-master"
+	masterNodeName        = "node-1"
+	executorNodeName      = "node-2"
+	workerTypePlaceholder = 999
+	workerID1             = "worker-1"
 )
+
+type dummyConfig struct {
+	param int
+}
 
 func prepareMeta(ctx context.Context, t *testing.T, metaclient metadata.MetaKV) {
 	masterKey := adapter.MasterInfoKey.Encode(masterName)
@@ -110,4 +119,61 @@ func TestMasterPollAndClose(t *testing.T) {
 	require.NoError(t, err)
 
 	wg.Wait()
+}
+
+func TestMasterCreateWorker(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
+	master := newMockMasterImpl("my-master")
+	prepareMeta(ctx, t, master.metaKVClient)
+
+	master.On("InitImpl", mock.Anything).Return(nil)
+	err := master.Init(ctx)
+	require.NoError(t, err)
+
+	expectedSchedulerReq := &pb.TaskSchedulerRequest{Tasks: []*pb.ScheduleTask{{
+		Task: &pb.TaskRequest{
+			Id: 0,
+		},
+		Cost: 10,
+	}}}
+	master.serverMasterClient.On(
+		"ScheduleTask",
+		mock.Anything,
+		expectedSchedulerReq,
+		mock.Anything).Return(
+		&pb.TaskSchedulerResponse{
+			Schedule: map[int64]*pb.ScheduleResult{
+				0: {
+					ExecutorId: executorNodeName,
+				},
+			},
+		}, nil)
+
+	mockExecutorClient := &client.MockExecutorClient{}
+	err = master.executorClientManager.AddExecutorClient(executorNodeName, mockExecutorClient)
+	require.NoError(t, err)
+
+	configBytes, err := json.Marshal(&dummyConfig{param: 1})
+	require.NoError(t, err)
+
+	mockExecutorClient.On("Send",
+		mock.Anything,
+		&client.ExecutorRequest{
+			Cmd: client.CmdDispatchTask,
+			Req: &pb.DispatchTaskRequest{
+				TaskTypeId: int64(workerTypePlaceholder),
+				TaskConfig: configBytes,
+			},
+		}).Return(&client.ExecutorResponse{Resp: &pb.DispatchTaskResponse{
+		ErrorCode: 1,
+		WorkerId:  workerID1,
+	}}, nil)
+
+	err = master.CreateWorker(ctx, workerTypePlaceholder, &dummyConfig{param: 1})
+	require.NoError(t, err)
+
+	master.On("OnWorkerDispatched", mock.AnythingOfType("*lib.workerHandleImpl"), nil).Return(nil)
+	<-master.dispatchedWorkers
 }

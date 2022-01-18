@@ -62,3 +62,11 @@ func (c *Manager) AddExecutor(id model.ExecutorID, addr string) error {
 	c.executors[id] = client
 	return nil
 }
+
+func (c *Manager) AddExecutorClient(id model.ExecutorID, client ExecutorClient) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.executors[id] = client
+	return nil
+}

@@ -21,16 +21,19 @@ type mockMasterImpl struct {
 
 	tickCount atomic.Int64
 
+	dispatchedWorkers chan WorkerHandle
+
 	messageHandlerManager *p2p.MockMessageHandlerManager
 	messageSender         p2p.MessageSender
 	metaKVClient          *metadata.MetaMock
-	executorClientManager client.ExecutorClientManager
+	executorClientManager *client.Manager
 	serverMasterClient    *client.MockServerMasterClient
 }
 
 func newMockMasterImpl(id MasterID) *mockMasterImpl {
 	ret := &mockMasterImpl{
 		id:                    id,
+		dispatchedWorkers:     make(chan WorkerHandle),
 		messageHandlerManager: p2p.NewMockMessageHandlerManager(),
 		messageSender:         p2p.NewMockMessageSender(),
 		metaKVClient:          metadata.NewMetaMock(),
@@ -100,6 +103,8 @@ func (m *mockMasterImpl) Tick(ctx context.Context) error {
 func (m *mockMasterImpl) OnWorkerDispatched(worker WorkerHandle, result error) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	m.dispatchedWorkers <- worker
 
 	args := m.Called(worker, result)
 	return args.Error(0)
