@@ -34,7 +34,7 @@ type Discovery interface {
 	// SnapshotClone returns the clone of cached snapshot in Discovery
 	SnapshotClone() (map[UUID]ServiceResource, Revision)
 
-	// CopySnapshot copies snapshot from given Discovery, it is usefull when we
+	// CopySnapshot copies snapshot from given Discovery, it is useful when we
 	// rebuild the Discovery, and the old snapshot is still kept in both old
 	// Discovery and p2p messaging system. With this help we don't need to query
 	// snapshot from metastore. What's more, the snapshot kept in p2p messageing
