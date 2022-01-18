@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/benbjohnson/clock"
 	"github.com/hanfei1991/microcosm/model"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
@@ -26,7 +27,10 @@ type workerManager struct {
 	masterEpoch Epoch
 	masterID    MasterID
 
-	messageRouter p2p.MessageRouter
+	// to help unit testing
+	clock clock.Clock
+
+	messageSender p2p.MessageSender
 }
 
 func newWorkerManager(id MasterID, needWait bool, curEpoch Epoch) *workerManager {
@@ -49,21 +53,24 @@ func (m *workerManager) Initialized(ctx context.Context) (bool, error) {
 	if m.initStartTime.IsZero() {
 		m.initStartTime = time.Now()
 	}
-	if time.Since(m.initStartTime) > workerTimeoutDuration+workerTimeoutGracefulDuration {
+	if m.clock.Since(m.initStartTime) > workerTimeoutDuration+workerTimeoutGracefulDuration {
 		return true, nil
 	}
 	return false, nil
 }
 
-func (m *workerManager) Tick(ctx context.Context, sender p2p.MessageSender) (timedOutWorkers []*WorkerInfo) {
+func (m *workerManager) Tick(
+	ctx context.Context,
+	sender p2p.MessageSender,
+) (offlinedWorkers []*WorkerInfo, onlinedWorkers []*WorkerInfo) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	// respond to worker heartbeats
 	for workerID, workerInfo := range m.workerInfos {
 		if !workerInfo.hasPendingHeartbeat {
-			if workerInfo.hasTimedOut() {
-				timedOutWorkers = append(timedOutWorkers, workerInfo)
+			if workerInfo.hasTimedOut(m.clock) {
+				offlinedWorkers = append(offlinedWorkers, workerInfo)
 				delete(m.workerInfos, workerID)
 				m.tombstones[workerID] = &workerInfo.status
 			}
@@ -71,7 +78,7 @@ func (m *workerManager) Tick(ctx context.Context, sender p2p.MessageSender) (tim
 		}
 		reply := &HeartbeatPongMessage{
 			SendTime:  workerInfo.lastHeartBeatSendTime,
-			ReplyTime: time.Now(),
+			ReplyTime: m.clock.Now(),
 			Epoch:     m.masterEpoch,
 		}
 		workerNodeID := workerInfo.NodeID
@@ -90,8 +97,13 @@ func (m *workerManager) Tick(ctx context.Context, sender p2p.MessageSender) (tim
 			continue
 		}
 		workerInfo.hasPendingHeartbeat = false
+
+		if workerInfo.justOnlined {
+			workerInfo.justOnlined = false
+			onlinedWorkers = append(onlinedWorkers, workerInfo)
+		}
 	}
-	return nil
+	return
 }
 
 func (m *workerManager) HandleHeartBeat(msg *HeartbeatPingMessage) {
@@ -105,7 +117,7 @@ func (m *workerManager) HandleHeartBeat(msg *HeartbeatPingMessage) {
 			zap.Any("msg", msg))
 		return
 	}
-	workerInfo.lastHeartBeatReceiveTime = time.Now()
+	workerInfo.lastHeartBeatReceiveTime = m.clock.Now()
 	workerInfo.lastHeartBeatSendTime = msg.SendTime
 	workerInfo.hasPendingHeartbeat = true
 }
@@ -177,7 +189,7 @@ func (m *workerManager) OnWorkerCreated(id WorkerID, exeuctorNodeID p2p.NodeID) 
 	ok := m.putWorkerInfo(&WorkerInfo{
 		ID:                       id,
 		NodeID:                   exeuctorNodeID,
-		lastHeartBeatReceiveTime: time.Now(),
+		lastHeartBeatReceiveTime: m.clock.Now(),
 		status: WorkerStatus{
 			Code: WorkerStatusCreated,
 		},
@@ -188,6 +200,10 @@ func (m *workerManager) OnWorkerCreated(id WorkerID, exeuctorNodeID p2p.NodeID) 
 		return derror.ErrDuplicateWorkerID.GenWithStackByArgs(id)
 	}
 	return nil
+}
+
+func (m *workerManager) MessageSender() p2p.MessageSender {
+	return m.messageSender
 }
 
 func (m *workerManager) getWorkerHandle(id WorkerID) WorkerHandle {
@@ -205,13 +221,14 @@ type WorkerInfo struct {
 	lastHeartBeatReceiveTime time.Time
 	lastHeartBeatSendTime    monotonicTime
 	hasPendingHeartbeat      bool
+	justOnlined              bool
 
 	status   WorkerStatus
 	workload model.RescUnit
 }
 
-func (w *WorkerInfo) hasTimedOut() bool {
-	return time.Since(w.lastHeartBeatReceiveTime) > workerTimeoutDuration
+func (w *WorkerInfo) hasTimedOut(clock clock.Clock) bool {
+	return clock.Since(w.lastHeartBeatReceiveTime) > workerTimeoutDuration
 }
 
 type WorkerHandle interface {
@@ -236,13 +253,10 @@ func (w *workerHandleImpl) SendMessage(ctx context.Context, topic p2p.Topic, mes
 	}
 
 	executorNodeID := info.NodeID
-	messageClient := w.manager.messageRouter.GetClient(executorNodeID)
-	if messageClient == nil {
-		return derror.ErrMessageClientNotFoundForWorker.GenWithStackByArgs(w.id)
-	}
-
+	// TODO the worker should have a way to register a handle for this topic.
+	// TODO maybe we need a TopicEncoder
 	prefixedTopic := fmt.Sprintf("worker-message/%s/%s", w.id, topic)
-	_, err := messageClient.TrySendMessage(ctx, prefixedTopic, message)
+	_, err := w.manager.MessageSender().SendToNode(ctx, executorNodeID, prefixedTopic, message)
 	if err != nil {
 		return errors.Trace(err)
 	}
