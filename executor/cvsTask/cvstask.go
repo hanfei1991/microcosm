@@ -32,9 +32,11 @@ type cvsTask struct {
 	buffer  chan strPair
 }
 
-func NewCvsTask() lib.WorkerImpl {
+func NewCvsTask(src strPair, dst strPair) lib.WorkerImpl {
 	task := &cvsTask{}
 	task.Impl = task
+	task.srcAddr = src
+	task.dstAddr = dst
 	task.counter = 0
 	task.buffer = make(chan strPair, BUFFERSIZE)
 	return task
