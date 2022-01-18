@@ -145,6 +145,8 @@ func (s *Server) Stop() {
 	}
 
 	if s.metastore != nil {
+		// clear executor info in metastore to accelerate service discovery. If
+		// not delete actively, the session will be timeout after TTL.
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 		_, err := s.metastore.Delete(ctx, s.info.EtcdKey())
@@ -334,9 +336,6 @@ func (s *Server) discoveryKeepalive(ctx context.Context) error {
 		return err
 	}
 	for uuid, exec := range executors {
-		if uuid == string(s.info.ID) {
-			continue
-		}
 		if s.p2pMsgRouter != nil {
 			s.p2pMsgRouter.AddPeer(uuid, exec.Addr)
 		}
