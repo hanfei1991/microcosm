@@ -29,13 +29,16 @@ func (e *errorInfo) Error() string {
 
 type CVSJobMaster struct {
 	*lib.BaseMaster
-	syncInfo Config
+	syncInfo      Config
+	syncFilesInfo map[string]lib.WorkerHandle
+	counter       int64
 }
 
 func NewCVSJobMaster(conf Config) lib.MasterImpl {
 	jm := &CVSJobMaster{}
 	jm.Impl = jm
 	jm.syncInfo = conf
+	jm.syncFilesInfo = make(map[string]lib.WorkerHandle)
 	return jm
 }
 
@@ -68,6 +71,19 @@ func (jm *CVSJobMaster) InitImpl(ctx context.Context) error {
 }
 
 func (jm *CVSJobMaster) Tick(ctx context.Context) error {
+	for file, worker := range jm.syncFilesInfo {
+		status := worker.Status()
+		if status.Code == lib.WorkerStatusNormal {
+			num, ok := status.Ext.(int64)
+			if ok {
+				jm.counter += num
+				// todo : store the sync progress into the meta store for each file
+			}
+		} else {
+			// todo : handle error case here
+			log.L().Info("sync file failed ", zap.Any("message", file))
+		}
+	}
 	return nil
 }
 
@@ -80,6 +96,7 @@ func (jm *CVSJobMaster) OnWorkerDispatched(worker lib.WorkerHandle, result error
 }
 
 func (jm *CVSJobMaster) OnWorkerOnline(worker lib.WorkerHandle) error {
+	// todo : add the worker information to the sync files map
 	return nil
 }
 

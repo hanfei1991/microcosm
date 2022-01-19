@@ -2,7 +2,6 @@ package cvstask
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"strings"
 	"time"
@@ -29,6 +28,7 @@ type cvsTask struct {
 	srcAddr strPair
 	dstAddr strPair
 	counter int64
+	status  lib.WorkerStatusCode
 	buffer  chan strPair
 }
 
@@ -46,13 +46,15 @@ func (task *cvsTask) InitImpl(ctx context.Context) error {
 	go func() {
 		err := task.Receive(ctx)
 		if err != nil {
-			fmt.Printf("error happened when receive data from upstream %v", err)
+			log.L().Info("error happened when reading data from the upstream ", zap.Any("message", err.Error()))
+			task.status = lib.WorkerStatusError
 		}
 	}()
 	go func() {
 		err := task.Send(ctx)
 		if err != nil {
-			fmt.Printf("error happened when send  data to downstream  %v", err)
+			log.L().Info("error happened when writing data to the downstream ", zap.Any("message", err.Error()))
+			task.status = lib.WorkerStatusError
 		}
 	}()
 	return nil
