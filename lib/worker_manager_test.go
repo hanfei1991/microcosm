@@ -12,6 +12,8 @@ import (
 )
 
 func TestHeartBeatPingPongAfterCreateWorker(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithTimeout(context.TODO(), 10*time.Second)
 	defer cancel()
 
@@ -49,6 +51,8 @@ func TestHeartBeatPingPongAfterCreateWorker(t *testing.T) {
 }
 
 func TestHeartBeatPingPongAfterFailover(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithTimeout(context.TODO(), 10*time.Second)
 	defer cancel()
 
@@ -83,6 +87,8 @@ func TestHeartBeatPingPongAfterFailover(t *testing.T) {
 }
 
 func TestMultiplePendingHeartbeats(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithTimeout(context.TODO(), 10*time.Second)
 	defer cancel()
 
@@ -177,6 +183,8 @@ func TestMultiplePendingHeartbeats(t *testing.T) {
 }
 
 func TestWorkerManagerInitialization(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithTimeout(context.TODO(), 10*time.Second)
 	defer cancel()
 
@@ -211,6 +219,8 @@ func TestWorkerManagerInitialization(t *testing.T) {
 }
 
 func TestUpdateStatus(t *testing.T) {
+	t.Parallel()
+
 	manager := newWorkerManager(masterName, true, 1)
 	err := manager.AddWorker(workerID1, executorNodeID1, WorkerStatusInit)
 	require.NoError(t, err)
@@ -239,6 +249,8 @@ func TestUpdateStatus(t *testing.T) {
 }
 
 func TestWorkerTimedOut(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithTimeout(context.TODO(), 10*time.Second)
 	defer cancel()
 

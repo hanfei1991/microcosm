@@ -47,6 +47,8 @@ func prepareMeta(ctx context.Context, t *testing.T, metaclient metadata.MetaKV) 
 }
 
 func TestMasterInit(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
@@ -89,6 +91,8 @@ func TestMasterInit(t *testing.T) {
 }
 
 func TestMasterPollAndClose(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
@@ -127,6 +131,8 @@ func TestMasterPollAndClose(t *testing.T) {
 }
 
 func TestMasterCreateWorker(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
