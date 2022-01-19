@@ -113,18 +113,19 @@ func (m *BaseMaster) MetaKVClient() metadata.MetaKV {
 }
 
 func (m *BaseMaster) Init(ctx context.Context) error {
-	m.startBackgroundTasks()
-
-	if err := m.initMessageHandlers(ctx); err != nil {
-		return errors.Trace(err)
-	}
-
 	isInit, epoch, err := m.initMetadata(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	m.currentEpoch.Store(epoch)
 	m.workerManager = newWorkerManager(m.id, !isInit, epoch)
+
+	m.startBackgroundTasks()
+
+	if err := m.initMessageHandlers(ctx); err != nil {
+		return errors.Trace(err)
+	}
+
 	if isInit {
 		if err := m.Impl.InitImpl(ctx); err != nil {
 			return errors.Trace(err)
