@@ -46,8 +46,9 @@ type Server struct {
 		sync.RWMutex
 		m []*Member
 	}
-	leaderClient *client.MasterClientImpl
-	membership   Membership
+	leaderClient    *client.MasterClientImpl
+	membership      Membership
+	leaderServiceFn func(context.Context) error
 
 	// sched scheduler
 	executorManager *ExecutorManager
@@ -88,6 +89,7 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 		testCtx:         ctx,
 		leader:          atomic.Value{},
 	}
+	server.leaderServiceFn = server.runLeaderService
 	return server, nil
 }
 
