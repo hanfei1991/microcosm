@@ -16,16 +16,30 @@ import (
 )
 
 // workerManager is for private use by BaseMaster.
-type workerManager struct {
-	mu                   sync.Mutex
-	needWaitForHeartBeat bool
-	initStartTime        time.Time
-	workerInfos          map[WorkerID]*WorkerInfo
-	tombstones           map[WorkerID]*WorkerStatus
+type workerManager interface {
+	IsInitialized(ctx context.Context) (bool, error)
+	Tick(ctx context.Context, sender p2p.MessageSender) (offlinedWorkers []*WorkerInfo, onlinedWorkers []*WorkerInfo)
+	HandleHeartbeat(msg *HeartbeatPingMessage, fromNode p2p.NodeID) error
+	UpdateStatus(msg *StatusUpdateMessage)
+	GetWorkerInfo(id WorkerID) (*WorkerInfo, bool)
+	PutWorkerInfo(info *WorkerInfo) bool
+	AddWorker(id WorkerID, exeuctorNodeID p2p.NodeID, statusCode WorkerStatusCode) error
+	MessageSender() p2p.MessageSender
+	GetWorkerHandle(id WorkerID) WorkerHandle
+	GetWorkers() map[WorkerID]WorkerHandle
+}
+
+type workerManagerImpl struct {
+	mu            sync.Mutex
+	initialized   bool
+	initStartTime time.Time
+	workerInfos   map[WorkerID]*WorkerInfo
+	tombstones    map[WorkerID]*WorkerStatus
 
 	// read-only
-	masterEpoch Epoch
-	masterID    MasterID
+	masterEpoch   Epoch
+	masterID      MasterID
+	timeoutConfig TimeoutConfig
 
 	// to help unit testing
 	clock clock.Clock
@@ -33,33 +47,41 @@ type workerManager struct {
 	messageSender p2p.MessageSender
 }
 
-func newWorkerManager(id MasterID, needWait bool, curEpoch Epoch) *workerManager {
-	return &workerManager{
-		needWaitForHeartBeat: needWait,
-		workerInfos:          make(map[WorkerID]*WorkerInfo),
-		masterEpoch:          curEpoch,
-		masterID:             id,
+func newWorkerManager(id MasterID, needWait bool, curEpoch Epoch) workerManager {
+	return &workerManagerImpl{
+		initialized: !needWait,
+		workerInfos: make(map[WorkerID]*WorkerInfo),
+		tombstones:  make(map[WorkerID]*WorkerStatus),
+
+		masterEpoch:   curEpoch,
+		masterID:      id,
+		timeoutConfig: defaultTimeoutConfig,
+
+		clock: clock.New(),
 	}
 }
 
-func (m *workerManager) Initialized(ctx context.Context) (bool, error) {
+func (m *workerManagerImpl) IsInitialized(ctx context.Context) (bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if !m.needWaitForHeartBeat {
+	if m.initialized {
 		return true, nil
 	}
 
 	if m.initStartTime.IsZero() {
-		m.initStartTime = time.Now()
+		m.initStartTime = m.clock.Now()
 	}
-	if m.clock.Since(m.initStartTime) > workerTimeoutDuration+workerTimeoutGracefulDuration {
+
+	thresholdDuration := m.timeoutConfig.workerTimeoutDuration + m.timeoutConfig.workerTimeoutGracefulDuration
+	if m.clock.Since(m.initStartTime) > thresholdDuration {
+		m.initialized = true
 		return true, nil
 	}
 	return false, nil
 }
 
-func (m *workerManager) Tick(
+func (m *workerManagerImpl) Tick(
 	ctx context.Context,
 	sender p2p.MessageSender,
 ) (offlinedWorkers []*WorkerInfo, onlinedWorkers []*WorkerInfo) {
@@ -69,17 +91,21 @@ func (m *workerManager) Tick(
 	// respond to worker heartbeats
 	for workerID, workerInfo := range m.workerInfos {
 		if !workerInfo.hasPendingHeartbeat {
-			if workerInfo.hasTimedOut(m.clock) {
+			if workerInfo.hasTimedOut(m.clock, &m.timeoutConfig) {
 				offlinedWorkers = append(offlinedWorkers, workerInfo)
 				delete(m.workerInfos, workerID)
-				m.tombstones[workerID] = &workerInfo.status
+
+				statusCloned := workerInfo.status
+				statusCloned.Code = WorkerStatusError
+				m.tombstones[workerID] = &statusCloned
 			}
 			continue
 		}
 		reply := &HeartbeatPongMessage{
-			SendTime:  workerInfo.lastHeartBeatSendTime,
-			ReplyTime: m.clock.Now(),
-			Epoch:     m.masterEpoch,
+			SendTime:   workerInfo.lastHeartbeatSendTime,
+			ReplyTime:  m.clock.Now(),
+			ToWorkerID: workerID,
+			Epoch:      m.masterEpoch,
 		}
 		workerNodeID := workerInfo.NodeID
 		log.L().Debug("Sending heartbeat response to worker",
@@ -106,40 +132,39 @@ func (m *workerManager) Tick(
 	return
 }
 
-func (m *workerManager) HandleHeartBeat(msg *HeartbeatPingMessage) {
+func (m *workerManagerImpl) HandleHeartbeat(msg *HeartbeatPingMessage, fromNode p2p.NodeID) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	log.L().Debug("received heartbeat", zap.Any("msg", msg))
 	workerInfo, ok := m.workerInfos[msg.FromWorkerID]
 	if !ok {
-		log.L().Info("discarding heartbeat for non-existing worker",
-			zap.Any("msg", msg))
-		return
+		if m.initialized {
+			log.L().Info("discarding heartbeat from non-existing worker, probably zombie?",
+				zap.Any("msg", msg),
+				zap.String("node-id", fromNode))
+			return nil
+		}
+		// We are still waiting to take over workers created in previous epochs, so
+		// it is possible to encounter a worker that is not created by us. In this case,
+		// we need to add the worker.
+		if err := m.addWorker(msg.FromWorkerID, fromNode, WorkerStatusInit); err != nil {
+			return errors.Trace(err)
+		}
+		workerInfo, ok = m.getWorkerInfo(msg.FromWorkerID)
+		if !ok {
+			log.L().Panic("unreachable",
+				zap.Any("msg", msg),
+				zap.String("node-id", fromNode))
+		}
 	}
-	workerInfo.lastHeartBeatReceiveTime = m.clock.Now()
-	workerInfo.lastHeartBeatSendTime = msg.SendTime
+	workerInfo.lastHeartbeatReceiveTime = m.clock.Now()
+	workerInfo.lastHeartbeatSendTime = msg.SendTime
 	workerInfo.hasPendingHeartbeat = true
+	return nil
 }
 
-func (m *workerManager) UpdateWorkload(msg *WorkloadReportMessage) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	info, ok := m.getWorkerInfo(msg.WorkerID)
-	if !ok {
-		log.L().Info("received workload update for non-existing worker",
-			zap.String("master-id", string(m.masterID)),
-			zap.Any("msg", msg))
-		return
-	}
-	info.workload = msg.Workload
-	log.L().Debug("workload updated",
-		zap.String("master-id", string(m.masterID)),
-		zap.Any("msg", msg))
-}
-
-func (m *workerManager) UpdateStatus(msg *StatusUpdateMessage) {
+func (m *workerManagerImpl) UpdateStatus(msg *StatusUpdateMessage) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -156,10 +181,14 @@ func (m *workerManager) UpdateStatus(msg *StatusUpdateMessage) {
 		zap.Any("msg", msg))
 }
 
-func (m *workerManager) GetWorkerInfo(id WorkerID) (*WorkerInfo, bool) {
+func (m *workerManagerImpl) GetWorkerInfo(id WorkerID) (*WorkerInfo, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	return m.getWorkerInfo(id)
+}
+
+func (m *workerManagerImpl) getWorkerInfo(id WorkerID) (*WorkerInfo, bool) {
 	value, ok := m.workerInfos[id]
 	if !ok {
 		return nil, false
@@ -167,50 +196,84 @@ func (m *workerManager) GetWorkerInfo(id WorkerID) (*WorkerInfo, bool) {
 	return value, true
 }
 
-func (m *workerManager) getWorkerInfo(id WorkerID) (*WorkerInfo, bool) {
-	value, ok := m.workerInfos[id]
-	if !ok {
-		return nil, false
-	}
-	return value, true
+func (m *workerManagerImpl) PutWorkerInfo(info *WorkerInfo) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return m.putWorkerInfo(info)
 }
 
-func (m *workerManager) putWorkerInfo(info *WorkerInfo) bool {
+func (m *workerManagerImpl) putWorkerInfo(info *WorkerInfo) bool {
 	id := info.ID
 	_, exists := m.workerInfos[id]
 	m.workerInfos[id] = info
 	return !exists
 }
 
-func (m *workerManager) OnWorkerCreated(id WorkerID, exeuctorNodeID p2p.NodeID) error {
+func (m *workerManagerImpl) AddWorker(id WorkerID, exeuctorNodeID p2p.NodeID, statusCode WorkerStatusCode) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	return m.addWorker(id, exeuctorNodeID, statusCode)
+}
+
+func (m *workerManagerImpl) addWorker(id WorkerID, exeuctorNodeID p2p.NodeID, statusCode WorkerStatusCode) error {
 	ok := m.putWorkerInfo(&WorkerInfo{
 		ID:                       id,
 		NodeID:                   exeuctorNodeID,
-		lastHeartBeatReceiveTime: m.clock.Now(),
+		lastHeartbeatReceiveTime: m.clock.Now(),
 		status: WorkerStatus{
-			Code: WorkerStatusCreated,
+			Code: statusCode,
 		},
 		// TODO fix workload
-		workload: 10, // 10 is the initial workload for now.
+		workload:    10, // 10 is the initial workload for now.
+		justOnlined: true,
 	})
 	if !ok {
-		return derror.ErrDuplicateWorkerID.GenWithStackByArgs(id)
+		// The worker with the ID already exists, so we just update the statusCode.
+		info, ok := m.getWorkerInfo(id)
+		if !ok {
+			log.L().Panic("unreachable", zap.String("worker-id", string(id)))
+		}
+		if info.NodeID != exeuctorNodeID {
+			// We expect the worker ID to be globally unique, and the worker ID should
+			// change if a worker is recreated. So two workers with the same name on
+			// different executors are NOT POSSIBLE.
+			log.L().Panic("unreachable", zap.String("worker-id", string(id)))
+		}
+		info.status.Code = statusCode
 	}
 	return nil
 }
 
-func (m *workerManager) MessageSender() p2p.MessageSender {
+func (m *workerManagerImpl) MessageSender() p2p.MessageSender {
 	return m.messageSender
 }
 
-func (m *workerManager) getWorkerHandle(id WorkerID) WorkerHandle {
+func (m *workerManagerImpl) GetWorkerHandle(id WorkerID) WorkerHandle {
 	return &workerHandleImpl{
 		manager: m,
 		id:      id,
 	}
+}
+
+// GetWorkers returns a map from WorkerID to WorkerHandle for all known workers.
+// NOTE this is a preliminary implementation and is likely to have performance problem
+// if called too frequently.
+// TODO cache the returned map, or rethink how to manage the list.
+func (m *workerManagerImpl) GetWorkers() map[WorkerID]WorkerHandle {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	ret := make(map[WorkerID]WorkerHandle)
+	for workerID := range m.workerInfos {
+		ret[workerID] = m.GetWorkerHandle(workerID)
+	}
+
+	for workerID, status := range m.tombstones {
+		ret[workerID] = NewTombstoneWorkerHandle(workerID, *status)
+	}
+	return ret
 }
 
 type WorkerInfo struct {
@@ -218,8 +281,8 @@ type WorkerInfo struct {
 	NodeID p2p.NodeID
 
 	// fields for internal use by the Master.
-	lastHeartBeatReceiveTime time.Time
-	lastHeartBeatSendTime    monotonicTime
+	lastHeartbeatReceiveTime time.Time
+	lastHeartbeatSendTime    monotonicTime
 	hasPendingHeartbeat      bool
 	justOnlined              bool
 
@@ -227,20 +290,19 @@ type WorkerInfo struct {
 	workload model.RescUnit
 }
 
-func (w *WorkerInfo) hasTimedOut(clock clock.Clock) bool {
-	return clock.Since(w.lastHeartBeatReceiveTime) > workerTimeoutDuration
+func (w *WorkerInfo) hasTimedOut(clock clock.Clock, config *TimeoutConfig) bool {
+	return clock.Since(w.lastHeartbeatReceiveTime) > config.workerTimeoutDuration
 }
 
 type WorkerHandle interface {
 	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) error
 	Status() *WorkerStatus
-	Workload() model.RescUnit
 	ID() WorkerID
 	IsTombStone() bool
 }
 
 type workerHandleImpl struct {
-	manager *workerManager
+	manager *workerManagerImpl
 
 	// TODO think about how to handle the situation where the workerID has been removed from `manager`.
 	id WorkerID
@@ -271,15 +333,6 @@ func (w *workerHandleImpl) Status() *WorkerStatus {
 	return &info.status
 }
 
-func (w *workerHandleImpl) Workload() model.RescUnit {
-	info, ok := w.manager.GetWorkerInfo(w.id)
-	if !ok {
-		return 0
-	}
-
-	return info.workload
-}
-
 func (w *workerHandleImpl) ID() WorkerID {
 	return w.id
 }
@@ -291,6 +344,13 @@ func (w *workerHandleImpl) IsTombStone() bool {
 type tombstoneWorkerHandleImpl struct {
 	id     WorkerID
 	status WorkerStatus
+}
+
+func NewTombstoneWorkerHandle(id WorkerID, status WorkerStatus) WorkerHandle {
+	return &tombstoneWorkerHandleImpl{
+		id:     id,
+		status: status,
+	}
 }
 
 func (h *tombstoneWorkerHandleImpl) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) error {
