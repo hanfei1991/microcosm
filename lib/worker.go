@@ -86,7 +86,7 @@ func (w *BaseWorker) ID() WorkerID {
 func (w *BaseWorker) Workload() model.RescUnit {
 	wl, err := w.impl.Workload()
 	if err != nil {
-		panic(err)
+		log.L().Panic("workload meet error: " + err.Error())
 	}
 	return wl
 }

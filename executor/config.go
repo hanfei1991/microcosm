@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"runtime"
 	"strings"
 	"time"
 
@@ -172,6 +173,9 @@ func (c *Config) Parse(arguments []string) error {
 	c.RPCTimeout, err = time.ParseDuration(c.RPCTimeoutStr)
 	if err != nil {
 		return err
+	}
+	if c.PollConcurrency == 0 {
+		c.PollConcurrency = runtime.NumCPU()
 	}
 	return nil
 }
