@@ -17,6 +17,7 @@ type Config struct {
 	SrcDir  string `json:"srcDir"`
 	DstHost string `json:"dstHost"`
 	DstDir  string `json:"dstDir"`
+	Index   int64  `json:"index"`
 }
 
 type errorInfo struct {
@@ -57,7 +58,7 @@ func (jm *CVSJobMaster) InitImpl(ctx context.Context) error {
 	for _, file := range fileNames {
 		dstDir := jm.syncInfo.DstDir + "/" + file
 		srcDir := jm.syncInfo.SrcDir + "/" + file
-		conf := Config{SrcHost: jm.syncInfo.SrcHost, SrcDir: srcDir, DstHost: jm.syncInfo.DstHost, DstDir: dstDir}
+		conf := Config{SrcHost: jm.syncInfo.SrcHost, SrcDir: srcDir, DstHost: jm.syncInfo.DstHost, DstDir: dstDir, Index: 0}
 		bytes, err := json.Marshal(conf)
 		if err != nil {
 		}
@@ -66,6 +67,7 @@ func (jm *CVSJobMaster) InitImpl(ctx context.Context) error {
 		if err != nil {
 			// todo : handle the error case
 		}
+		jm.syncFilesInfo[file] = nil
 	}
 	return nil
 }
