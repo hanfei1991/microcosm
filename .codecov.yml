@@ -37,3 +37,4 @@ ignore:
   - "*.toml"
   - "*.md"
   - "test/.*"
+  - "testing.go"
