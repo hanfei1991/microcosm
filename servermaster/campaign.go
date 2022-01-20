@@ -127,16 +127,20 @@ func (s *Server) createLeaderClient(ctx context.Context, addrs []string) {
 		log.L().Error("create server master client failed", zap.Strings("addrs", addrs), zap.Error(err))
 		return
 	}
-	s.leaderClient = cli
+	s.leaderClient.Lock()
+	s.leaderClient.cli = cli
+	s.leaderClient.Unlock()
 }
 
 func (s *Server) closeLeaderClient() {
-	if s.leaderClient != nil {
-		err := s.leaderClient.Close()
+	s.leaderClient.Lock()
+	defer s.leaderClient.Unlock()
+	if s.leaderClient.cli != nil {
+		err := s.leaderClient.cli.Close()
 		if err != nil {
 			log.L().Warn("close leader client met error", zap.Error(err))
 		}
-		s.leaderClient = nil
+		s.leaderClient.cli = nil
 	}
 }
 

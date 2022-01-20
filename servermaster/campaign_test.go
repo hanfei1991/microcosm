@@ -165,7 +165,10 @@ func TestLeaderLoopWatchLeader(t *testing.T) {
 
 	err = s.reset(ctx)
 	require.Nil(t, err)
-	require.Nil(t, s.leaderClient)
+	s.leaderClient.RLock()
+	leaderCli := s.leaderClient.cli
+	s.leaderClient.RUnlock()
+	require.Nil(t, leaderCli)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -184,7 +187,10 @@ func TestLeaderLoopWatchLeader(t *testing.T) {
 		if member.Name != s2.name() {
 			return false
 		}
-		if s.leaderClient == nil {
+		s.leaderClient.RLock()
+		leaderCli := s.leaderClient.cli
+		s.leaderClient.RUnlock()
+		if leaderCli == nil {
 			return false
 		}
 		return true
