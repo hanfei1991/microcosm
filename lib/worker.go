@@ -19,8 +19,8 @@ import (
 type Worker interface {
 	Init(ctx context.Context) error
 	Poll(ctx context.Context) error
-	ID() WorkerID
-	Workload() model.RescUnit
+	WorkerID() WorkerID
+	Workload() (model.RescUnit, error)
 	Close()
 }
 
@@ -67,7 +67,7 @@ func NewBaseWorker(
 	workerID WorkerID,
 	masterID MasterID,
 ) *BaseWorker {
-	masterManager := newMasterManager(masterID, workerID, messageSender)
+	masterManager := newMasterManager(masterID, workerID, messageSender, metaKVClient)
 	return &BaseWorker{
 		impl:                  impl,
 		messageHandlerManager: messageHandlerManager,
@@ -125,6 +125,10 @@ func (w *BaseWorker) Close() {
 		log.L().Warn("cleaning message handlers failed",
 			zap.Error(err))
 	}
+}
+
+func (w *BaseWorker) WorkerID() WorkerID {
+	return w.id
 }
 
 func (w *BaseWorker) MetaKVClient() metadata.MetaKV {
@@ -256,11 +260,12 @@ type masterClient struct {
 	lastMasterAckedPingTime monotonicTime
 }
 
-func newMasterManager(masterID MasterID, workerID WorkerID, messageRouter p2p.MessageSender) *masterClient {
+func newMasterManager(masterID MasterID, workerID WorkerID, messageRouter p2p.MessageSender, metaKV metadata.MetaKV) *masterClient {
 	return &masterClient{
 		masterID:      masterID,
 		workerID:      workerID,
 		messageSender: messageRouter,
+		metaKVClient:  metaKV,
 	}
 }
 

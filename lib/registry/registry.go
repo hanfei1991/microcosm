@@ -4,21 +4,17 @@ import (
 	"sync"
 
 	"github.com/hanfei1991/microcosm/lib"
-	"github.com/hanfei1991/microcosm/pkg/context"
+	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 )
 
-type WorkerFactory interface {
-	NewWorker(ctx context.Context) (lib.Worker, error)
-}
-
 type Registry interface {
 	MustRegisterWorkerType(tp lib.WorkerType, factory WorkerFactory)
 	RegisterWorkerType(tp lib.WorkerType, factory WorkerFactory) (ok bool)
-	CreateWorker(ctx context.Context, tp lib.WorkerType) (lib.Worker, error)
+	CreateWorker(ctx *dcontext.Context, tp lib.WorkerType, workerID lib.WorkerID, masterID lib.MasterID) (lib.Worker, error)
 }
 
 type registryImpl struct {
@@ -49,13 +45,18 @@ func (r *registryImpl) RegisterWorkerType(tp lib.WorkerType, factory WorkerFacto
 	return true
 }
 
-func (r *registryImpl) CreateWorker(ctx context.Context, tp lib.WorkerType) (lib.Worker, error) {
+func (r *registryImpl) CreateWorker(
+	ctx *dcontext.Context,
+	tp lib.WorkerType,
+	workerID lib.WorkerID,
+	masterID lib.MasterID,
+) (lib.Worker, error) {
 	factory, ok := r.getWorkerFactory(tp)
 	if !ok {
 		return nil, derror.ErrWorkerTypeNotFound.GenWithStackByArgs(tp)
 	}
 
-	worker, err := factory.NewWorker(ctx)
+	worker, err := factory.NewWorker(ctx, workerID, masterID)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
