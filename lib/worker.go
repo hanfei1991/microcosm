@@ -45,7 +45,7 @@ type WorkerImpl interface {
 }
 
 type BaseWorker struct {
-	impl WorkerImpl
+	Impl WorkerImpl
 
 	messageHandlerManager p2p.MessageHandlerManager
 	messageRouter         p2p.MessageSender
@@ -53,7 +53,8 @@ type BaseWorker struct {
 
 	masterClient *masterClient
 
-	id WorkerID
+	id            WorkerID
+	timeoutConfig TimeoutConfig
 
 	wg    sync.WaitGroup
 	errCh chan error
@@ -69,14 +70,29 @@ func NewBaseWorker(
 ) *BaseWorker {
 	masterManager := newMasterManager(masterID, workerID, messageSender, metaKVClient)
 	return &BaseWorker{
-		impl:                  impl,
+		Impl:                  impl,
 		messageHandlerManager: messageHandlerManager,
 		messageRouter:         messageSender,
 		metaKVClient:          metaKVClient,
 		masterClient:          masterManager,
-		id:                    workerID,
-		errCh:                 make(chan error, 1),
+
+		id:            workerID,
+		timeoutConfig: defaultTimeoutConfig,
+
+		errCh: make(chan error, 1),
 	}
+}
+
+func (w *BaseWorker) ID() WorkerID {
+	return w.id
+}
+
+func (w *BaseWorker) Workload() model.RescUnit {
+	wl, err := w.Impl.Workload()
+	if err != nil {
+		log.L().Panic("workload meet error: " + err.Error())
+	}
+	return wl
 }
 
 func (w *BaseWorker) Init(ctx context.Context) error {
@@ -88,7 +104,7 @@ func (w *BaseWorker) Init(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	if err := w.impl.InitImpl(ctx); err != nil {
+	if err := w.Impl.InitImpl(ctx); err != nil {
 		return errors.Trace(err)
 	}
 
@@ -109,14 +125,14 @@ func (w *BaseWorker) Poll(ctx context.Context) error {
 	default:
 	}
 
-	if err := w.impl.Tick(ctx); err != nil {
+	if err := w.Impl.Tick(ctx); err != nil {
 		return errors.Trace(err)
 	}
 	return nil
 }
 
 func (w *BaseWorker) Close() {
-	w.impl.CloseImpl()
+	w.Impl.CloseImpl()
 
 	closeCtx, cancel := context.WithTimeout(context.Background(), time.Second*3)
 	defer cancel()
@@ -162,11 +178,14 @@ func (w *BaseWorker) startBackgroundTasks(ctx context.Context) {
 }
 
 func (w *BaseWorker) runHeartbeatWorker(ctx context.Context) error {
-	ticker := time.NewTicker(workerHeartbeatInterval)
+	ticker := time.NewTicker(w.timeoutConfig.workerHeartbeatInterval)
 	for {
 		select {
 		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
+			return errors.Trace(ctx.Err())<<<<<<< implement-worker-registry
+287
+ 
+
 		case <-ticker.C:
 			if err := w.masterClient.SendHeartBeat(ctx); err != nil {
 				return errors.Trace(err)
@@ -176,7 +195,7 @@ func (w *BaseWorker) runHeartbeatWorker(ctx context.Context) error {
 }
 
 func (w *BaseWorker) runStatusWorker(ctx context.Context) error {
-	ticker := time.NewTicker(workerReportStatusInterval)
+	ticker := time.NewTicker(w.timeoutConfig.workerReportStatusInterval)
 	for {
 		select {
 		case <-ctx.Done():
@@ -184,11 +203,11 @@ func (w *BaseWorker) runStatusWorker(ctx context.Context) error {
 		case <-ticker.C:
 		}
 
-		status, err := w.impl.Status()
+		status, err := w.Impl.Status()
 		if err != nil {
 			return errors.Trace(err)
 		}
-		workload, err := w.impl.Workload()
+		workload, err := w.Impl.Workload()
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -199,7 +218,7 @@ func (w *BaseWorker) runStatusWorker(ctx context.Context) error {
 }
 
 func (w *BaseWorker) runWatchDog(ctx context.Context) error {
-	ticker := time.NewTicker(workerTimeoutGracefulDuration / 2)
+	ticker := time.NewTicker(w.timeoutConfig.workerTimeoutGracefulDuration / 2)
 	for {
 		select {
 		case <-ctx.Done():
@@ -258,6 +277,8 @@ type masterClient struct {
 	messageSender           p2p.MessageSender
 	metaKVClient            metadata.MetaKV
 	lastMasterAckedPingTime monotonicTime
+
+	timeoutConfig TimeoutConfig
 }
 
 func newMasterManager(masterID MasterID, workerID WorkerID, messageRouter p2p.MessageSender, metaKV metadata.MetaKV) *masterClient {
@@ -266,6 +287,8 @@ func newMasterManager(masterID MasterID, workerID WorkerID, messageRouter p2p.Me
 		workerID:      workerID,
 		messageSender: messageRouter,
 		metaKVClient:  metaKV,
+    
+		timeoutConfig: defaultTimeoutConfig,
 	}
 }
 
@@ -312,11 +335,13 @@ func (m *masterClient) CheckMasterTimeout(ctx context.Context) (ok bool, err err
 	lastMasterAckedPingTime := m.lastMasterAckedPingTime
 	m.mu.RUnlock()
 
-	if lastMasterAckedPingTime <= 2*workerHeartbeatInterval {
+	if lastMasterAckedPingTime <= 2*m.timeoutConfig.workerHeartbeatInterval {
 		return true, nil
 	}
 
-	if lastMasterAckedPingTime > 2*workerHeartbeatInterval && lastMasterAckedPingTime < workerTimeoutDuration {
+	if lastMasterAckedPingTime > 2*m.timeoutConfig.workerHeartbeatInterval &&
+		lastMasterAckedPingTime < m.timeoutConfig.workerTimeoutDuration {
+
 		if err := m.refreshMasterInfo(ctx); err != nil {
 			return false, errors.Trace(err)
 		}
