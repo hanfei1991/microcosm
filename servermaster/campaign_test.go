@@ -190,10 +190,7 @@ func TestLeaderLoopWatchLeader(t *testing.T) {
 		s.leaderClient.RLock()
 		leaderCli := s.leaderClient.cli
 		s.leaderClient.RUnlock()
-		if leaderCli == nil {
-			return false
-		}
-		return true
+		return leaderCli != nil
 	}, time.Second*2, time.Millisecond*20)
 
 	cancel()
