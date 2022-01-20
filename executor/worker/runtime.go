@@ -5,12 +5,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	"go.uber.org/zap"
-
 	"github.com/edwingeng/deque"
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/model"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/zap"
 )
 
 type Scheduler struct {
