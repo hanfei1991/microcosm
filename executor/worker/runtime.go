@@ -8,8 +8,6 @@ import (
 	"github.com/edwingeng/deque"
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/model"
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	"go.uber.org/zap"
 )
 
 type Scheduler struct {
@@ -119,11 +117,7 @@ func (r *Runtime) Workload() model.RescUnit {
 	ret := model.RescUnit(0)
 	r.workerList.Range(func(_, value interface{}) bool {
 		worker := value.(lib.Worker)
-		workload, err := worker.Workload()
-		if err != nil {
-			log.L().Warn("worker failed to report workload",
-				zap.Error(err))
-		}
+		workload := worker.Workload()
 		ret += workload
 		return true
 	})

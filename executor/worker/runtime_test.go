@@ -46,8 +46,8 @@ func (d *dummyWorker) WorkerID() lib.WorkerID {
 	return d.id
 }
 
-func (d *dummyWorker) Workload() (model.RescUnit, error) {
-	return model.RescUnit(1), nil
+func (d *dummyWorker) Workload() model.RescUnit {
+	return model.RescUnit(1)
 }
 
 func (d *dummyWorker) Close() {

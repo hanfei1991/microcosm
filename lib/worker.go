@@ -20,7 +20,7 @@ type Worker interface {
 	Init(ctx context.Context) error
 	Poll(ctx context.Context) error
 	WorkerID() WorkerID
-	Workload() (model.RescUnit, error)
+	Workload() model.RescUnit
 	Close()
 }
 
@@ -35,7 +35,7 @@ type WorkerImpl interface {
 	Status() (WorkerStatus, error)
 
 	// Workload returns the current workload of the worker.
-	Workload() (model.RescUnit, error)
+	Workload() model.RescUnit
 
 	// OnMasterFailover is called when the master is failed over.
 	OnMasterFailover(reason MasterFailoverReason) error
@@ -88,11 +88,7 @@ func (w *BaseWorker) ID() WorkerID {
 }
 
 func (w *BaseWorker) Workload() model.RescUnit {
-	wl, err := w.Impl.Workload()
-	if err != nil {
-		log.L().Panic("workload meet error: " + err.Error())
-	}
-	return wl
+	return w.Impl.Workload()
 }
 
 func (w *BaseWorker) Init(ctx context.Context) error {
@@ -182,10 +178,7 @@ func (w *BaseWorker) runHeartbeatWorker(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return errors.Trace(ctx.Err())<<<<<<< implement-worker-registry
-287
- 
-
+			return errors.Trace(ctx.Err())
 		case <-ticker.C:
 			if err := w.masterClient.SendHeartBeat(ctx); err != nil {
 				return errors.Trace(err)
@@ -207,7 +200,7 @@ func (w *BaseWorker) runStatusWorker(ctx context.Context) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
-		workload, err := w.Impl.Workload()
+		workload := w.Impl.Workload()
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -287,7 +280,7 @@ func newMasterManager(masterID MasterID, workerID WorkerID, messageRouter p2p.Me
 		workerID:      workerID,
 		messageSender: messageRouter,
 		metaKVClient:  metaKV,
-    
+
 		timeoutConfig: defaultTimeoutConfig,
 	}
 }

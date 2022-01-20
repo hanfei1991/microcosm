@@ -50,8 +50,8 @@ func (d *dummyWorker) Status() (lib.WorkerStatus, error) {
 	return lib.WorkerStatus{Code: lib.WorkerStatusCreated}, nil
 }
 
-func (d *dummyWorker) Workload() (model.RescUnit, error) {
-	return model.RescUnit(10), nil
+func (d *dummyWorker) Workload() model.RescUnit {
+	return model.RescUnit(10)
 }
 
 func (d *dummyWorker) OnMasterFailover(_ lib.MasterFailoverReason) error {
