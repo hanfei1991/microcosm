@@ -5,14 +5,21 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanfei1991/microcosm/lib/registry"
+
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/executor/runtime"
+	"github.com/hanfei1991/microcosm/executor/worker"
+	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
+	"github.com/hanfei1991/microcosm/pkg/autoid"
 	"github.com/hanfei1991/microcosm/pkg/config"
+	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
+	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/pkg/srvdiscovery"
 	"github.com/hanfei1991/microcosm/test"
 	"github.com/hanfei1991/microcosm/test/mock"
@@ -45,7 +52,10 @@ type Server struct {
 	cli         client.MasterClient
 	cliUpdateCh chan []string
 	sch         *runtime.Runtime
+	workerRtm   *worker.Runtime
+	msgServer   *p2p.MessageRPCService
 	info        *model.ExecutorInfo
+	idAllocator *autoid.UUIDAllocator
 
 	lastHearbeatTime time.Time
 
@@ -62,6 +72,7 @@ func NewServer(cfg *Config, ctx *test.Context) *Server {
 		cfg:         cfg,
 		testCtx:     ctx,
 		cliUpdateCh: make(chan []string),
+		idAllocator: autoid.NewUUIDAllocator(),
 	}
 	s.discoveryConnector = s.connectToEtcdDiscovery
 	return &s
@@ -129,8 +140,36 @@ func (s *Server) ResumeBatchTasks(ctx context.Context, req *pb.PauseBatchTasksRe
 	return &pb.PauseBatchTasksResponse{}, nil
 }
 
-func (s *Server) DispatchTask(ctx context.Context, request *pb.DispatchTaskRequest) (*pb.DispatchTaskResponse, error) {
-	panic("implement me")
+func (s *Server) DispatchTask(ctx context.Context, req *pb.DispatchTaskRequest) (*pb.DispatchTaskResponse, error) {
+	log.L().Info("dispatch task", zap.String("req", req.String()))
+	workerID := s.idAllocator.AllocID()
+
+	// TODO better dependency management
+	dctx := dcontext.Background()
+	dctx.Dependencies = dcontext.RuntimeDependencies{
+		MessageHandlerManager: s.msgServer.MakeHandlerManager(),
+		MessageRouter:         p2p.NewMessageSender(p2p.NewMessageRouter(string(s.info.ID), s.cfg.AdvertiseAddr)),
+		MetaKVClient:          s.metastore,
+		ExecutorClientManager: client.NewClientManager(),
+		ServerMasterClient:    s.cli,
+	}
+
+	newWorker, err := registry.GlobalWorkerRegistry().CreateWorker(
+		dctx,
+		lib.WorkerType(req.GetTaskTypeId()),
+		lib.WorkerID(workerID),
+		lib.MasterID(req.GetMasterId()),
+		req.GetTaskConfig())
+	if err != nil {
+		// TODO better error handling
+		return nil, err
+	}
+
+	s.workerRtm.AddWorker(newWorker)
+	return &pb.DispatchTaskResponse{
+		ErrorCode: pb.DispatchTaskErrorCode_OK,
+		WorkerId:  workerID,
+	}, nil
 }
 
 func (s *Server) Stop() {
@@ -182,6 +221,17 @@ func (s *Server) startForTest(ctx context.Context) (err error) {
 	return nil
 }
 
+func (s *Server) startMsgService(ctx context.Context, wg *errgroup.Group) (err error) {
+	s.msgServer, err = p2p.NewMessageRPCService(string(s.info.ID), nil)
+	if err != nil {
+		return err
+	}
+	wg.Go(func() error {
+		return s.msgServer.Serve(ctx, s.tcpServer.GrpcListener())
+	})
+	return nil
+}
+
 func (s *Server) Run(ctx context.Context) error {
 	if test.GetGlobalTestFlag() {
 		return s.startForTest(ctx)
@@ -200,7 +250,16 @@ func (s *Server) Run(ctx context.Context) error {
 		return nil
 	})
 
+	pollCon := s.cfg.PollConcurrency
+	s.workerRtm = worker.NewRuntime(ctx)
+	s.workerRtm.Start(pollCon)
+
 	err = s.selfRegister(ctx)
+	if err != nil {
+		return err
+	}
+
+	err = s.startMsgService(ctx, wg)
 	if err != nil {
 		return err
 	}
