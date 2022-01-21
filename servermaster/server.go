@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/hanfei1991/microcosm/client"
-	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	"github.com/hanfei1991/microcosm/pkg/errors"
@@ -46,12 +45,16 @@ type Server struct {
 		sync.RWMutex
 		m []*Member
 	}
-	leaderClient *client.MasterClientImpl
-	membership   Membership
+	leaderClient struct {
+		sync.RWMutex
+		cli *client.MasterClientImpl
+	}
+	membership      Membership
+	leaderServiceFn func(context.Context) error
 
 	// sched scheduler
-	executorManager *ExecutorManager
-	jobManager      *JobManager
+	executorManager ExecutorManager
+	jobManager      JobManager
 	//
 	cfg *Config
 
@@ -65,8 +68,7 @@ type Server struct {
 
 // NewServer creates a new master-server.
 func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
-	executorNotifier := make(chan model.ExecutorID, 100)
-	executorManager := NewExecutorManager(executorNotifier, cfg.KeepAliveTTL, cfg.KeepAliveInterval, ctx)
+	executorManager := NewExecutorManagerImpl(cfg.KeepAliveTTL, cfg.KeepAliveInterval, ctx)
 
 	urls, err := parseURLs(cfg.MasterAddr)
 	if err != nil {
@@ -76,7 +78,7 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 	for _, u := range urls {
 		masterAddrs = append(masterAddrs, u.Host)
 	}
-	jobManager := NewJobManager(masterAddrs)
+	jobManager := NewJobManagerImpl(masterAddrs)
 
 	// messageServer := p2p.NewMessageServer(cfg.)
 
@@ -88,6 +90,7 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 		testCtx:         ctx,
 		leader:          atomic.Value{},
 	}
+	server.leaderServiceFn = server.runLeaderService
 	return server, nil
 }
 
@@ -292,9 +295,11 @@ func (s *Server) Stop() {
 	if s.etcdClient != nil {
 		s.etcdClient.Close()
 	}
-	if s.leaderClient != nil {
-		s.leaderClient.Close()
+	s.leaderClient.Lock()
+	if s.leaderClient.cli != nil {
+		s.leaderClient.cli.Close()
 	}
+	s.leaderClient.Unlock()
 	if s.etcd != nil {
 		s.etcd.Close()
 	}
@@ -493,7 +498,9 @@ func (s *Server) isLeaderAndNeedForward(ctx context.Context) (isLeader, needForw
 		}
 	}
 	isLeader = leader.Name == s.name()
-	needForward = s.leaderClient != nil
+	s.leaderClient.RLock()
+	needForward = s.leaderClient.cli != nil
+	s.leaderClient.RUnlock()
 	return
 }
 
@@ -523,7 +530,11 @@ func (s *Server) rpcForwardIfNeeded(ctx context.Context, req interface{}, respPo
 			zap.String("to", leader.Name), zap.String("request", methodName))
 
 		params := []reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(req)}
-		results := reflect.ValueOf(s.leaderClient.GetLeaderClient()).MethodByName(methodName).Call(params)
+		s.leaderClient.RLock()
+		defer s.leaderClient.RUnlock()
+		results := reflect.ValueOf(s.leaderClient.cli.GetLeaderClient()).
+			MethodByName(methodName).
+			Call(params)
 		// result's inner types should be (*pb.XXResponse, error), which is same as s.leaderClient.XXRPCMethod
 		reflect.ValueOf(respPointer).Elem().Set(results[0])
 		errInterface := results[1].Interface()
