@@ -4,11 +4,10 @@ import (
 	"context"
 	"sync"
 
-	"go.uber.org/atomic"
-
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/stretchr/testify/mock"
+	"go.uber.org/atomic"
 )
 
 type mockWorkerImpl struct {

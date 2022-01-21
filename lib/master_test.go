@@ -7,11 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanfei1991/microcosm/pkg/clock"
-
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
+	"github.com/hanfei1991/microcosm/pkg/clock"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/stretchr/testify/mock"
