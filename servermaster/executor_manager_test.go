@@ -67,7 +67,7 @@ func TestExecutorManager(t *testing.T) {
 	mgr.Start(ctx)
 
 	// sleep to wait executor heartbeat timeout
-	time.Sleep(time.Millisecond * 30)
+	time.Sleep(time.Millisecond * 50)
 	mgr.mu.Lock()
 	require.Equal(t, 0, len(mgr.executors))
 	mgr.mu.Unlock()
