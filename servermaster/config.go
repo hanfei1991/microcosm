@@ -19,7 +19,9 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -207,6 +209,16 @@ func (c *Config) adjust() (err error) {
 
 // configFromFile loads config from file.
 func (c *Config) configFromFile(path string) error {
+	fp, err := os.Open(path)
+	if err != nil {
+		return errors.Wrap(errors.ErrMasterDecodeConfigFile, err)
+	}
+	b, err := ioutil.ReadAll(fp)
+	if err != nil {
+		return errors.Wrap(errors.ErrMasterDecodeConfigFile, err)
+	}
+	fmt.Print(b)
+
 	metaData, err := toml.DecodeFile(path, c)
 	if err != nil {
 		return errors.Wrap(errors.ErrMasterDecodeConfigFile, err)

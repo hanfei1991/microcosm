@@ -1,0 +1,28 @@
+version: "2.3"
+services:
+        server-master:
+                image: dataflow:test
+                volumes:
+                        - ./config/master.toml:/config.toml
+                        - /tmp/df:/tmp/df
+                command:
+                        - "./bin/master"
+                        - "--config"
+                        - "/config.toml"
+                ports:
+                        - "10240:10240"
+        server-executor:
+                image: dataflow:test
+                volumes:
+                        - ./config/executor.toml:/config.toml
+                        - /tmp/dataflow:/tmp/dataflow
+                command:
+                        - "./bin/executor"
+                        - "--config"
+                        - "/config.toml"
+                ports:
+                        - "10241:10241"
+                depends_on:
+                        - "server-master"
+                restart: "on-failure"
+
