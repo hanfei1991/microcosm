@@ -36,7 +36,7 @@ type dummyConfig struct {
 }
 
 func prepareMeta(ctx context.Context, t *testing.T, metaclient metadata.MetaKV) {
-	masterKey := adapter.MasterInfoKey.Encode(masterName)
+	masterKey := adapter.MasterMetaKey.Encode(masterName)
 	masterInfo := &MasterMetaKVData{
 		ID:     masterName,
 		NodeID: masterNodeName,
@@ -63,7 +63,7 @@ func TestMasterInit(t *testing.T) {
 	master.messageHandlerManager.AssertHasHandler(t, HeartbeatPingTopic(masterName), &HeartbeatPingMessage{})
 	master.messageHandlerManager.AssertHasHandler(t, StatusUpdateTopic(masterName), &StatusUpdateMessage{})
 
-	rawResp, err := master.metaKVClient.Get(ctx, adapter.MasterInfoKey.Encode(masterName))
+	rawResp, err := master.metaKVClient.Get(ctx, adapter.MasterMetaKey.Encode(masterName))
 	require.NoError(t, err)
 	resp := rawResp.(*clientv3.GetResponse)
 	require.Len(t, resp.Kvs, 1)

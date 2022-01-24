@@ -11,6 +11,7 @@ import (
 
 type ExecutorClientManager interface {
 	ExecutorClient(id model.ExecutorID) ExecutorClient
+	AddExecutor(id model.ExecutorID, addr string) error
 }
 
 func NewClientManager() *Manager {
