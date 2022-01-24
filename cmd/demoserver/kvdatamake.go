@@ -28,28 +28,30 @@ const (
 )
 
 func main() {
-	args := os.Args
-	if len(args) < 2 {
-		fmt.Println("Please run the command in format : demoserver folder [recordernum]")
-		return
-	}
-
 	ctx, cancel := context.WithCancel(context.Background())
 	var err error
 
 	fmt.Println("Listening the client call ..")
 
 	go DataService(ctx)
-
+	fmt.Printf("type q if expected to quit .\n")
+	fmt.Printf("create the files in the format : d dir [100000]\n")
 	for {
 		var cmd string
-		fmt.Scan(&cmd)
+		reader := bufio.NewReader(os.Stdin)
+		cmd, err = reader.ReadString('\n')
+		if err != nil {
+			return
+		}
+		cmd = strings.TrimSpace(cmd)
+		fmt.Printf("strs %v", cmd)
 		strs := strings.Fields(cmd)
 		switch strs[0] {
 		case "q":
 			cancel()
 			return
 		case "d":
+
 			if len(strs) >= 2 {
 				folder := strs[1]
 				recorderNum := RECORDERNUM
@@ -64,8 +66,7 @@ func main() {
 				fmt.Printf("the format is : d dir [100000]\n")
 			}
 		default:
-			fmt.Printf("type q if expected to quit \n")
-			fmt.Printf("create the files in the format : d dir [100000]\n")
+
 		}
 
 	}
@@ -141,6 +142,7 @@ func generateData(folderName string, recorders int) int {
 	for _, writer := range fileWriterMap {
 		writer.Flush()
 	}
+	fmt.Printf("%v files have been created /n", fileNum)
 	return fileNum
 }
 

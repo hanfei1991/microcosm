@@ -37,15 +37,19 @@ func (e *errorInfo) Error() string {
 type CVSJobMaster struct {
 	*lib.BaseMaster
 	syncInfo      Config
-	syncFilesInfo map[string]*workerInfo
+	syncFilesInfo map[lib.WorkerID]*workerInfo
 	counter       int64
+}
+
+func init() {
+	// registry.NewRegistry().MustRegisterWorkerType()
 }
 
 func NewCVSJobMaster(conf Config) lib.MasterImpl {
 	jm := &CVSJobMaster{}
 	jm.Impl = jm
 	jm.syncInfo = conf
-	jm.syncFilesInfo = make(map[string]*workerInfo)
+	jm.syncFilesInfo = make(map[lib.WorkerID]*workerInfo)
 	return jm
 }
 
@@ -70,11 +74,10 @@ func (jm *CVSJobMaster) InitImpl(ctx context.Context) error {
 		if err != nil {
 		}
 		// todo:createworker should return worker id
-		_, err = jm.CreateWorker(2, bytes, 10 /* TODO add cost */)
+		workerID, err := jm.CreateWorker(2, bytes, 10 /* TODO add cost */)
 		if err != nil {
 			// todo : handle the error case
 		}
-		var workerID string
 		jm.syncFilesInfo[workerID] = &workerInfo{file: file, curLoc: 0, handle: nil}
 	}
 	return nil
@@ -111,7 +114,7 @@ func (jm *CVSJobMaster) OnWorkerDispatched(worker lib.WorkerHandle, result error
 
 func (jm *CVSJobMaster) OnWorkerOnline(worker lib.WorkerHandle) error {
 	// todo : add the worker information to the sync files map
-	syncInfo, exist := jm.syncFilesInfo[string(worker.ID())]
+	syncInfo, exist := jm.syncFilesInfo[worker.ID()]
 	if !exist {
 		log.L().Info("bad worker found", zap.Any("message", worker.ID()))
 		panic(errorInfo{info: "bad worker "})
@@ -121,28 +124,26 @@ func (jm *CVSJobMaster) OnWorkerOnline(worker lib.WorkerHandle) error {
 }
 
 func (jm *CVSJobMaster) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
-	syncInfo, exist := jm.syncFilesInfo[string(worker.ID())]
+	syncInfo, exist := jm.syncFilesInfo[worker.ID()]
 	if !exist {
 		log.L().Info("bad worker found", zap.Any("message", worker.ID()))
 	}
+	var err error
 	dstDir := jm.syncInfo.DstDir + "/" + syncInfo.file
 	srcDir := jm.syncInfo.SrcDir + "/" + syncInfo.file
 	conf := Config{SrcHost: jm.syncInfo.SrcHost, SrcDir: srcDir, DstHost: jm.syncInfo.DstHost, DstDir: dstDir, Index: syncInfo.curLoc}
 	bytes, err := json.Marshal(conf)
 	if err != nil {
+		log.L().Info("error happened when getting json from the configure", zap.Any("configure:", conf))
 	}
-	// todo : should remove the ctx from createworker method
-	ctx := context.Background()
-	err = jm.CreateWorker(ctx, 2, bytes)
+	workerID, err := jm.CreateWorker(2, bytes, 10)
 	if err != nil {
-		// todo : handle the error case
+		log.L().Info("create worker failed ", zap.String(" information :", err.Error()))
 	}
-	delete(jm.syncFilesInfo, string(worker.ID()))
-	// todo : create worker should return worker id
-	var workerID string
+	delete(jm.syncFilesInfo, worker.ID())
+	// todo : if the worker id is empty ,the sync file will be lost.
 	jm.syncFilesInfo[workerID] = &workerInfo{file: syncInfo.file, curLoc: syncInfo.curLoc, handle: nil}
-
-	return nil
+	return err
 }
 
 func (jm *CVSJobMaster) OnWorkerMessage(worker lib.WorkerHandle, topic p2p.Topic, message interface{}) error {
