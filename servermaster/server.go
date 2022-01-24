@@ -82,16 +82,13 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 	for _, u := range urls {
 		masterAddrs = append(masterAddrs, u.Host)
 	}
-	// jobManager := NewJobManagerImpl(masterAddrs)
-	// jobManager := NewJobManagerImplV2(lib.MasterID(cfg.Etcd.Name), masterAddrs, nil)
 
 	server := &Server{
 		cfg:             cfg,
 		executorManager: executorManager,
-		// jobManager:      jobManager,
-		initialized: *atomic.NewBool(false),
-		testCtx:     ctx,
-		leader:      atomic.Value{},
+		initialized:     *atomic.NewBool(false),
+		testCtx:         ctx,
+		leader:          atomic.Value{},
 	}
 	server.leaderServiceFn = server.runLeaderService
 	return server, nil
@@ -280,6 +277,7 @@ func (s *Server) startForTest(ctx context.Context) (err error) {
 	}
 
 	s.executorManager.Start(ctx)
+	s.jobManager = NewJobManagerImpl([]string{s.cfg.MasterAddr})
 	err = s.jobManager.Start(ctx, s.testCtx.GetMetaKV())
 	if err != nil {
 		return
@@ -441,8 +439,13 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	// start background managers
 	s.executorManager.Start(ctx)
 
-	s.jobManager, err = NewJobManagerImplV2(ctx, lib.MasterID(s.name()),
-		s.msgService, s.etcdClient, []string{s.cfg.MasterAddr})
+	clients := client.NewClientManager()
+	err = clients.AddMasterClient(ctx, []string{s.cfg.MasterAddr})
+	if err != nil {
+		return
+	}
+	s.jobManager, err = NewJobManagerImplV2(
+		ctx, lib.MasterID(s.name()), s.msgService, clients, s.etcdClient)
 	if err != nil {
 		return
 	}

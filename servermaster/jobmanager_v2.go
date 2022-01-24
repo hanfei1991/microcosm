@@ -27,7 +27,6 @@ type JobManagerImplV2 struct {
 	mu          sync.Mutex
 	jobMasters  map[model.ID]*model.Task
 	idAllocator autoid.JobIDAllocator
-	masterAddrs []string
 
 	messageHandlerManager p2p.MessageHandlerManager
 	messageSender         p2p.MessageSender
@@ -101,19 +100,12 @@ func NewJobManagerImplV2(
 	ctx context.Context,
 	id lib.MasterID,
 	msgService *p2p.MessageRPCService,
+	clients *client.Manager,
 	etcdClient *clientv3.Client,
-	masterAddrs []string,
 ) (*JobManagerImplV2, error) {
-	clients := client.NewClientManager()
-	err := clients.AddMasterClient(ctx, masterAddrs)
-	if err != nil {
-		return nil, err
-	}
-
 	impl := &JobManagerImplV2{
 		jobMasters:            make(map[model.ID]*model.Task),
 		idAllocator:           autoid.NewJobIDAllocator(),
-		masterAddrs:           masterAddrs,
 		messageHandlerManager: msgService.MakeHandlerManager(),
 		executorClientManager: clients,
 		serverMasterClient:    clients.MasterClient(),
@@ -128,11 +120,10 @@ func NewJobManagerImplV2(
 		impl.executorClientManager,
 		impl.serverMasterClient,
 	)
-	err = impl.BaseMaster.Init(ctx)
+	err := impl.BaseMaster.Init(ctx)
 	if err != nil {
 		return nil, err
 	}
-
 	return impl, nil
 }
 
