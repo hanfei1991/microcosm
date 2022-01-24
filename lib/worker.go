@@ -21,7 +21,7 @@ type Worker interface {
 	Poll(ctx context.Context) error
 	WorkerID() WorkerID
 	Workload() model.RescUnit
-	Close()
+	Close(ctx context.Context) error
 }
 
 type WorkerImpl interface {
@@ -146,7 +146,9 @@ func (w *BaseWorker) Poll(ctx context.Context) error {
 	return nil
 }
 
-func (w *BaseWorker) Close() {
+func (w *BaseWorker) Close(_ctx context.Context) error {
+	// Close now accepts a `context.Context` so that it is compatible with Master.
+	// TODO think about what is the best design of the Close method.
 	w.Impl.CloseImpl()
 
 	w.cancelMu.Lock()
@@ -162,6 +164,7 @@ func (w *BaseWorker) Close() {
 	}
 
 	w.wg.Wait()
+	return nil
 }
 
 func (w *BaseWorker) WorkerID() WorkerID {

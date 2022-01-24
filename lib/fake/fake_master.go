@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/hanfei1991/microcosm/lib"
+	"github.com/hanfei1991/microcosm/model"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -14,6 +15,21 @@ var _ lib.Master = (*Master)(nil)
 
 type Master struct {
 	*lib.BaseMaster
+
+	// workerID stores the ID of the Master AS A WORKER.
+	workerID lib.WorkerID
+}
+
+func (m *Master) WorkerID() lib.WorkerID {
+	return m.workerID
+}
+
+func (m *Master) Workload() model.RescUnit {
+	return 0
+}
+
+func (m *Master) Close(ctx context.Context) error {
+	return m.Impl.CloseImpl(ctx)
 }
 
 func (m *Master) InitImpl(ctx context.Context) error {
@@ -59,11 +75,11 @@ func (m *Master) OnWorkerMessage(worker lib.WorkerHandle, topic p2p.Topic, messa
 }
 
 func (m *Master) CloseImpl(ctx context.Context) error {
-	log.L().Info("FakeMaster: Close")
+	log.L().Info("FakeMaster: Close", zap.Stack("stack"))
 	return nil
 }
 
-func NewFakeMaster(ctx *dcontext.Context, masterID lib.MasterID) lib.Master {
+func NewFakeMaster(ctx *dcontext.Context, _workerID lib.WorkerID, masterID lib.MasterID, _config lib.WorkerConfig) *Master {
 	ret := &Master{}
 	deps := ctx.Dependencies
 	base := lib.NewBaseMaster(

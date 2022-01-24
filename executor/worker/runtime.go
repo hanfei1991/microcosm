@@ -2,6 +2,8 @@ package worker
 
 import (
 	"context"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/zap"
 	"sync"
 	"time"
 
@@ -82,12 +84,16 @@ type Runtime struct {
 }
 
 func (r *Runtime) onWorkerFinish(worker lib.Worker, err error) {
+	log.L().Warn("Worker has finished",
+		zap.Any("worker-id", worker.WorkerID()),
+		zap.Error(err))
 	r.closingWorker <- worker
 }
 
 func (r *Runtime) closeWorker() {
 	for worker := range r.closingWorker {
-		worker.Close()
+		// TODO context and error handling
+		_ = worker.Close(context.Background())
 		r.workerList.Delete(worker.WorkerID())
 	}
 }

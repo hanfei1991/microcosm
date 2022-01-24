@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"github.com/hanfei1991/microcosm/lib/registry"
 	"os"
 	"os/signal"
 	"strings"
@@ -56,6 +57,8 @@ func main() {
 			cancel()
 		}
 	}()
+
+	registry.LoadFake(registry.GlobalWorkerRegistry())
 
 	// 4. run executor server
 	server := executor.NewServer(cfg, nil)
