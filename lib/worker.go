@@ -266,7 +266,7 @@ func (w *BaseWorker) initMessageHandlers(ctx context.Context) error {
 			msg := value.(*HeartbeatPongMessage)
 			log.L().Debug("heartbeat pong received",
 				zap.Any("msg", msg))
-			w.masterClient.HandleHeartbeat(msg)
+			w.masterClient.HandleHeartbeat(sender, msg)
 			return nil
 		})
 	if err != nil {
@@ -300,7 +300,7 @@ type masterClient struct {
 
 	timeoutConfig TimeoutConfig
 
-	onFailOver func() error
+	onMasterFailOver func() error
 }
 
 func newMasterClient(
@@ -309,7 +309,7 @@ func newMasterClient(
 	messageRouter p2p.MessageSender,
 	metaKV metadata.MetaKV,
 	initTime clock.MonotonicTime,
-	onFailOver func() error,
+	onMasterFailOver func() error,
 ) *masterClient {
 	return &masterClient{
 		masterID:                masterID,
@@ -318,7 +318,7 @@ func newMasterClient(
 		metaKVClient:            metaKV,
 		lastMasterAckedPingTime: initTime,
 		timeoutConfig:           defaultTimeoutConfig,
-		onFailOver:              onFailOver,
+		onMasterFailOver:        onMasterFailOver,
 	}
 }
 
@@ -349,7 +349,7 @@ func (m *masterClient) refreshMasterInfo(ctx context.Context) error {
 	if m.masterEpoch < masterMeta.Epoch {
 		m.masterEpoch = masterMeta.Epoch
 		m.mu.Unlock()
-		if err := m.onFailOver(); err != nil {
+		if err := m.onMasterFailOver(); err != nil {
 			return errors.Trace(err)
 		}
 	} else {
@@ -364,7 +364,7 @@ func (m *masterClient) MasterID() MasterID {
 	return m.masterID
 }
 
-func (m *masterClient) HandleHeartbeat(msg *HeartbeatPongMessage) {
+func (m *masterClient) HandleHeartbeat(sender p2p.NodeID, msg *HeartbeatPongMessage) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -376,7 +376,11 @@ func (m *masterClient) HandleHeartbeat(msg *HeartbeatPongMessage) {
 	}
 
 	if msg.Epoch > m.masterEpoch {
+		// We received a heartbeat from a restarted master, we need to record
+		// its information.
+		// TODO refine the logic of this part
 		m.masterEpoch = msg.Epoch
+		m.masterNode = sender
 	}
 	m.lastMasterAckedPingTime = msg.SendTime
 }

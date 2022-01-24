@@ -16,14 +16,7 @@ type (
 var unixEpoch = time.Unix(0, 0)
 
 type Clock interface {
-	After(d time.Duration) <-chan time.Time
-	AfterFunc(d time.Duration, f func()) *Timer
-	Now() time.Time
-	Since(t time.Time) time.Duration
-	Sleep(d time.Duration)
-	Tick(d time.Duration) <-chan time.Time
-	Ticker(d time.Duration) *Ticker
-	Timer(d time.Duration) *Timer
+	bclock.Clock
 	Mono() MonotonicTime
 }
 
