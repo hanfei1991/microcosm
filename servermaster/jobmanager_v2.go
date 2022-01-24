@@ -18,7 +18,7 @@ import (
 	"go.uber.org/zap"
 )
 
-const defaultJobMasterCost = 1
+const defaultJobMasterCost = 1 // TODO: use correct job master cost
 
 // JobManagerImplV2 is a special job master that manages all the job masters, and notify the offline executor to them.
 type JobManagerImplV2 struct {

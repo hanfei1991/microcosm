@@ -67,7 +67,6 @@ func (m *CapRescMgr) Update(id model.ExecutorID, use model.RescUnit, status mode
 func (m *CapRescMgr) getAvailableResource() []*ExecutorResource {
 	res := make([]*ExecutorResource, 0)
 	for _, exec := range m.executors {
-		log.L().Info("check executor status", zap.Any("exec", exec))
 		if exec.Status == model.Running &&
 			exec.Capacity > exec.Reserved && exec.Capacity > exec.Used {
 			res = append(res, exec)
