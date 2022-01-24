@@ -44,7 +44,9 @@ func main() {
 			return
 		}
 		cmd = strings.TrimSpace(cmd)
-		fmt.Printf("strs %v", cmd)
+		if cmd == "" {
+			continue
+		}
 		strs := strings.Fields(cmd)
 		switch strs[0] {
 		case "q":
@@ -142,7 +144,7 @@ func generateData(folderName string, recorders int) int {
 	for _, writer := range fileWriterMap {
 		writer.Flush()
 	}
-	fmt.Printf("%v files have been created /n", fileNum)
+	fmt.Printf("%v files have been created \n", fileNum)
 	return fileNum
 }
 
@@ -162,13 +164,16 @@ func DataService(ctx context.Context) {
 }
 
 type DataRWServer struct {
-	ctx context.Context
+	ctx           context.Context
+	fileWriterMap map[string]*bufio.Writer
 }
 
 func NewDataRWServer(ctx context.Context) *DataRWServer {
 	s := &DataRWServer{
-		ctx: ctx,
+		ctx:           ctx,
+		fileWriterMap: make(map[string]*bufio.Writer),
 	}
+
 	return s
 }
 
@@ -230,61 +235,72 @@ func (s *DataRWServer) ReadLines(req *pb.ReadLinesRequest, stream pb.DataRWServi
 }
 
 func (s *DataRWServer) WriteLines(stream pb.DataRWService_WriteLinesServer) error {
+	count := 0
 	for {
 		select {
 		case <-s.ctx.Done():
 			return nil
 		default:
-			count := 0
 			res, err := stream.Recv()
 			if err == nil {
 				fileName := res.FileName
 				if strings.TrimSpace(fileName) == "" {
 					continue
 				}
-				var file *os.File
-				_, err = os.Stat(fileName)
-				if err == nil {
-					file, err = os.OpenFile(fileName, os.O_APPEND|os.O_WRONLY, 0o666)
-				} else {
-					index := strings.LastIndex(fileName, "/")
-					if index <= 1 {
-						log.L().Info("bad file name ",
-							zap.Int("index ", index))
-						return &ErrorInfo{info: " bad file name :" + fileName}
-					}
-					folder := fileName[0 : index-1]
-					_, err = ioutil.ReadDir(folder)
-					// create the dir if not exist
-					if err != nil {
-						if strings.Index(folder, "/") > 0 {
-							err = os.MkdirAll(folder, os.ModePerm)
-						} else {
-							err = os.Mkdir(folder, os.ModePerm)
+				writer, ok := s.fileWriterMap[fileName]
+				if !ok {
+					var file *os.File
+					_, err = os.Stat(fileName)
+					if err == nil {
+						file, err = os.OpenFile(fileName, os.O_APPEND|os.O_WRONLY, 0o666)
+					} else {
+						index := strings.LastIndex(fileName, "/")
+						if index <= 1 {
+							log.L().Info("bad file name ",
+								zap.Int("index ", index))
+							return &ErrorInfo{info: " bad file name :" + fileName}
 						}
+						folder := fileName[0:index]
+						_, err = ioutil.ReadDir(folder)
+						// create the dir if not exist
 						if err != nil {
-							return &ErrorInfo{info: "create the folder " + folder + " failed"}
+							if strings.Index(folder, "/") > 0 {
+								err = os.MkdirAll(folder, os.ModePerm)
+							} else {
+								err = os.Mkdir(folder, os.ModePerm)
+							}
+							if err != nil {
+								return &ErrorInfo{info: "create the folder " + folder + " failed"}
+							}
+							fmt.Println(" append .")
+							log.L().Info("create the folder ",
+								zap.String("folder  ", folder))
 						}
-						log.L().Info("create the folder ",
-							zap.String("folder  ", folder))
+						// create the file
+						file, err = os.OpenFile(fileName, os.O_CREATE|os.O_WRONLY, 0o666)
 					}
-					// create the file
-					file, err = os.OpenFile(fileName, os.O_CREATE|os.O_WRONLY, 0o666)
+					defer file.Close()
+					if err != nil {
+						return &ErrorInfo{info: "create file " + fileName + " failed"}
+					}
+					writer = bufio.NewWriter(file)
+					defer writer.Flush()
+					s.fileWriterMap[fileName] = writer
 				}
-				defer file.Close()
-				if err != nil {
-					return &ErrorInfo{info: "create file " + fileName + " failed"}
-				}
-				writer := bufio.NewWriter(file)
 				_, err = writer.WriteString(res.Key + "," + strings.TrimSpace(res.Value) + "\n")
 				count++
+
 				if (count % FLUSHLEN) == 0 {
 					err = writer.Flush()
 				}
+				return err
 			} else if err == io.EOF {
+				for _, w := range s.fileWriterMap {
+					w.Flush()
+				}
 				return stream.SendAndClose(&pb.WriteLinesResponse{})
 			}
-			return err
+
 		}
 	}
 }
