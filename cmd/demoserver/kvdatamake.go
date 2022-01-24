@@ -15,7 +15,6 @@ import (
 
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
