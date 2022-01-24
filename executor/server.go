@@ -142,7 +142,6 @@ func (s *Server) ResumeBatchTasks(ctx context.Context, req *pb.PauseBatchTasksRe
 
 func (s *Server) DispatchTask(ctx context.Context, req *pb.DispatchTaskRequest) (*pb.DispatchTaskResponse, error) {
 	log.L().Info("dispatch task", zap.String("req", req.String()))
-	workerID := s.idAllocator.AllocID()
 
 	// TODO better dependency management
 	dctx := dcontext.Background()
@@ -157,10 +156,11 @@ func (s *Server) DispatchTask(ctx context.Context, req *pb.DispatchTaskRequest) 
 	newWorker, err := registry.GlobalWorkerRegistry().CreateWorker(
 		dctx,
 		lib.WorkerType(req.GetTaskTypeId()),
-		lib.WorkerID(workerID),
+		lib.WorkerID(req.GetWorkerId()),
 		lib.MasterID(req.GetMasterId()),
 		req.GetTaskConfig())
 	if err != nil {
+		log.L().Error("Failed to create worker", zap.Error(err))
 		// TODO better error handling
 		return nil, err
 	}
@@ -168,7 +168,7 @@ func (s *Server) DispatchTask(ctx context.Context, req *pb.DispatchTaskRequest) 
 	s.workerRtm.AddWorker(newWorker)
 	return &pb.DispatchTaskResponse{
 		ErrorCode: pb.DispatchTaskErrorCode_OK,
-		WorkerId:  workerID,
+		WorkerId:  req.GetWorkerId(),
 	}, nil
 }
 
