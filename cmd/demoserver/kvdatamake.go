@@ -14,13 +14,15 @@ import (
 	"time"
 
 	"github.com/hanfei1991/microcosm/pb"
-	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
 
 const (
-	FILENUM     = 5
-	RECORDERNUM = 100
+	FILENUM     = 50
+	RECORDERNUM = 10000
 	FLUSHLEN    = 10
 	PORT        = "127.0.0.1:1234"
 )
@@ -147,11 +149,13 @@ func DataService(ctx context.Context) {
 	pb.RegisterDataRWServiceServer(grpcServer, NewDataRWServer(ctx))
 	lis, err := net.Listen("tcp", PORT)
 	if err != nil {
-		fmt.Println("error happened ")
+		log.L().Panic("listen the port failed",
+			zap.String("error:", err.Error()))
 	}
 	err = grpcServer.Serve(lis)
 	if err != nil {
-		fmt.Printf("error is %f", err)
+		log.L().Panic("init the server failed",
+			zap.String("error:", err.Error()))
 	}
 }
 
@@ -170,7 +174,8 @@ func (*DataRWServer) ListFiles(ctx context.Context, folder *pb.ListFilesReq) (*p
 	// fmt.Printf("receive the list file call %s", folder.String())
 	fd := folder.FolderName
 	_dir, err := ioutil.ReadDir(fd)
-	fmt.Printf("receive the list file call %v \n", fd)
+	log.L().Info("receive the list file call ",
+		zap.String("folder name ", fd))
 	if err != nil {
 		return &pb.ListFilesResponse{}, err
 	}
@@ -189,7 +194,8 @@ func (s *DataRWServer) ReadLines(req *pb.ReadLinesRequest, stream pb.DataRWServi
 	log.L().Info("receive the request for reading file ")
 	file, err := os.OpenFile(fileName, os.O_RDONLY, 0o666)
 	if err != nil {
-		fmt.Printf("make sure the file % s exist, the error is %v \n", fileName, err)
+		log.L().Info("make sure the file exist ",
+			zap.String("fileName ", fileName))
 		return err
 	}
 	defer file.Close()
@@ -241,7 +247,8 @@ func (s *DataRWServer) WriteLines(stream pb.DataRWService_WriteLinesServer) erro
 				} else {
 					index := strings.LastIndex(fileName, "/")
 					if index <= 1 {
-						fmt.Printf("bad file name ,index  %v\n", index)
+						log.L().Info("bad file name ",
+							zap.Int("index ", index))
 						return &ErrorInfo{info: " bad file name :" + fileName}
 					}
 					folder := fileName[0 : index-1]
@@ -256,7 +263,8 @@ func (s *DataRWServer) WriteLines(stream pb.DataRWService_WriteLinesServer) erro
 						if err != nil {
 							return &ErrorInfo{info: "create the folder " + folder + " failed"}
 						}
-						fmt.Printf("create the folder  %v\n", folder)
+						log.L().Info("create the folder ",
+							zap.String("folder  ", folder))
 					}
 					// create the file
 					file, err = os.OpenFile(fileName, os.O_CREATE|os.O_WRONLY, 0o666)

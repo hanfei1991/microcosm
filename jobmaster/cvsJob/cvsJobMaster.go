@@ -20,6 +20,12 @@ type Config struct {
 	Index   int64  `json:"index"`
 }
 
+type workerInfo struct {
+	file   string
+	curLoc int64
+	handle lib.WorkerHandle
+}
+
 type errorInfo struct {
 	info string
 }
@@ -31,7 +37,7 @@ func (e *errorInfo) Error() string {
 type CVSJobMaster struct {
 	*lib.BaseMaster
 	syncInfo      Config
-	syncFilesInfo map[string]lib.WorkerHandle
+	syncFilesInfo map[string]*workerInfo
 	counter       int64
 }
 
@@ -39,7 +45,7 @@ func NewCVSJobMaster(conf Config) lib.MasterImpl {
 	jm := &CVSJobMaster{}
 	jm.Impl = jm
 	jm.syncInfo = conf
-	jm.syncFilesInfo = make(map[string]lib.WorkerHandle)
+	jm.syncFilesInfo = make(map[string]*workerInfo)
 	return jm
 }
 
@@ -55,6 +61,7 @@ func (jm *CVSJobMaster) InitImpl(ctx context.Context) error {
 	if filesNum == 0 {
 		log.L().Info("no file found under the folder ", zap.Any("message", jm.syncInfo.DstDir))
 	}
+	// todo: store the jobmaster information into the metastore
 	for _, file := range fileNames {
 		dstDir := jm.syncInfo.DstDir + "/" + file
 		srcDir := jm.syncInfo.SrcDir + "/" + file
@@ -67,23 +74,28 @@ func (jm *CVSJobMaster) InitImpl(ctx context.Context) error {
 		if err != nil {
 			// todo : handle the error case
 		}
-		jm.syncFilesInfo[file] = nil
+		var workerID string
+		jm.syncFilesInfo[workerID] = &workerInfo{file: file, curLoc: 0, handle: nil}
 	}
 	return nil
 }
 
 func (jm *CVSJobMaster) Tick(ctx context.Context) error {
-	for file, worker := range jm.syncFilesInfo {
-		status := worker.Status()
+	for _, worker := range jm.syncFilesInfo {
+		if worker.handle == nil {
+			continue
+		}
+		status := worker.handle.Status()
 		if status.Code == lib.WorkerStatusNormal {
 			num, ok := status.Ext.(int64)
 			if ok {
+				worker.curLoc = num
 				jm.counter += num
 				// todo : store the sync progress into the meta store for each file
 			}
 		} else {
 			// todo : handle error case here
-			log.L().Info("sync file failed ", zap.Any("message", file))
+			log.L().Info("sync file failed ", zap.Any("message", worker.file))
 		}
 	}
 	return nil
@@ -99,11 +111,37 @@ func (jm *CVSJobMaster) OnWorkerDispatched(worker lib.WorkerHandle, result error
 
 func (jm *CVSJobMaster) OnWorkerOnline(worker lib.WorkerHandle) error {
 	// todo : add the worker information to the sync files map
+	syncInfo, exist := jm.syncFilesInfo[string(worker.ID())]
+	if !exist {
+		log.L().Info("bad worker found", zap.Any("message", worker.ID()))
+		panic(errorInfo{info: "bad worker "})
+	}
+	syncInfo.handle = worker
 	return nil
 }
 
 func (jm *CVSJobMaster) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
-	// worker.ID()
+	syncInfo, exist := jm.syncFilesInfo[string(worker.ID())]
+	if !exist {
+		log.L().Info("bad worker found", zap.Any("message", worker.ID()))
+	}
+	dstDir := jm.syncInfo.DstDir + "/" + syncInfo.file
+	srcDir := jm.syncInfo.SrcDir + "/" + syncInfo.file
+	conf := Config{SrcHost: jm.syncInfo.SrcHost, SrcDir: srcDir, DstHost: jm.syncInfo.DstHost, DstDir: dstDir, Index: syncInfo.curLoc}
+	bytes, err := json.Marshal(conf)
+	if err != nil {
+	}
+	// todo : should remove the ctx from createworker method
+	ctx := context.Background()
+	err = jm.CreateWorker(ctx, 2, bytes)
+	if err != nil {
+		// todo : handle the error case
+	}
+	delete(jm.syncFilesInfo, string(worker.ID()))
+	// todo : create worker should return worker id
+	var workerID string
+	jm.syncFilesInfo[workerID] = &workerInfo{file: syncInfo.file, curLoc: syncInfo.curLoc, handle: nil}
+
 	return nil
 }
 
