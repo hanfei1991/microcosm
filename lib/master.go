@@ -9,6 +9,7 @@ import (
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
+	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
@@ -91,6 +92,7 @@ type BaseMaster struct {
 }
 
 func NewBaseMaster(
+	ctx *dcontext.Context,
 	impl MasterImpl,
 	id MasterID,
 	messageHandlerManager p2p.MessageHandlerManager,
@@ -99,6 +101,14 @@ func NewBaseMaster(
 	executorClientManager client.ExecutorClientManager,
 	serverMasterClient client.MasterClient,
 ) *BaseMaster {
+	var (
+		nodeID        p2p.NodeID
+		advertiseAddr string
+	)
+	if ctx != nil {
+		nodeID = ctx.Environ.NodeID
+		advertiseAddr = ctx.Environ.Addr
+	}
 	return &BaseMaster{
 		Impl:                  impl,
 		messageHandlerManager: messageHandlerManager,
@@ -115,6 +125,9 @@ func NewBaseMaster(
 		closeCh: make(chan struct{}),
 
 		uuidGen: uuid.NewGenerator(),
+
+		nodeID:        nodeID,
+		advertiseAddr: advertiseAddr,
 	}
 }
 

@@ -2,10 +2,11 @@ package worker
 
 import (
 	"context"
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	"go.uber.org/zap"
 	"sync"
 	"time"
+
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/zap"
 
 	"github.com/edwingeng/deque"
 	"github.com/hanfei1991/microcosm/lib"
@@ -35,11 +36,12 @@ func (s *Scheduler) Run(conn int) {
 }
 
 func (s *Scheduler) runImpl() {
+	ticker := time.NewTicker(time.Millisecond * 200)
 	for {
 		select {
 		case <-s.ctx.Done():
 			return
-		default:
+		case <-ticker.C:
 		}
 		s.Lock()
 		if s.queue.Empty() {
