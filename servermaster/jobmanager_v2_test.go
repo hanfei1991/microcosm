@@ -7,7 +7,6 @@ import (
 
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/pb"
-	"github.com/hanfei1991/microcosm/pkg/autoid"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -26,8 +25,7 @@ func TestJobManagerSubmitJob(t *testing.T) {
 		&pb.TaskSchedulerResponse{}, errors.ErrClusterResourceNotEnough.FastGenByArgs(),
 	)
 	mgr := &JobManagerImplV2{
-		BaseMaster:  mockMaster.BaseMaster,
-		idAllocator: autoid.NewJobIDAllocator(),
+		BaseMaster: mockMaster.BaseMaster,
 	}
 	// set master impl to JobManagerImplV2
 	mockMaster.Impl = mgr

@@ -8,7 +8,6 @@ import (
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
-	"github.com/hanfei1991/microcosm/pkg/autoid"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
@@ -21,8 +20,6 @@ const defaultJobMasterCost = 1
 // JobManagerImplV2 is a special job master that manages all the job masters, and notify the offline executor to them.
 type JobManagerImplV2 struct {
 	*lib.BaseMaster
-
-	idAllocator autoid.JobIDAllocator
 
 	messageHandlerManager p2p.MessageHandlerManager
 	messageSender         p2p.MessageSender
@@ -53,9 +50,7 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 	var masterConfig *model.JobMaster
 	switch req.Tp {
 	case pb.JobType_Benchmark:
-		id := jm.idAllocator.AllocJobID()
 		masterConfig = &model.JobMaster{
-			ID:     model.ID(id),
 			Tp:     model.Benchmark,
 			Config: req.Config,
 		}
@@ -66,12 +61,13 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 	}
 	// CreateWorker here is to create job master actually
 	// TODO: use correct worker type and worker cost
-	_, err := jm.BaseMaster.CreateWorker(lib.WorkerType(99), masterConfig, defaultJobMasterCost)
+	id, err := jm.BaseMaster.CreateWorker(lib.WorkerType(99), masterConfig, defaultJobMasterCost)
 	if err != nil {
 		log.L().Error("create job master met error", zap.Error(err))
 		resp.Err = errors.ToPBError(err)
 		return resp
 	}
+	resp.JobIdStr = string(id)
 
 	return resp
 }
@@ -85,7 +81,6 @@ func NewJobManagerImplV2(
 	metaKVClient metadata.MetaKV,
 ) (*JobManagerImplV2, error) {
 	impl := &JobManagerImplV2{
-		idAllocator:           autoid.NewJobIDAllocator(),
 		messageHandlerManager: messageHandlerManager,
 		executorClientManager: clients,
 		serverMasterClient:    clients.MasterClient(),
