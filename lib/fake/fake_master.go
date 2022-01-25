@@ -2,22 +2,38 @@ package fake
 
 import (
 	"context"
+	"sync"
 
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/model"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 )
 
+const (
+	WorkerTypeFakeWorker = 10001
+)
+
+type Config struct{}
+
 var _ lib.Master = (*Master)(nil)
+
+const (
+	fakeWorkerCount = 10
+)
 
 type Master struct {
 	*lib.BaseMaster
 
 	// workerID stores the ID of the Master AS A WORKER.
 	workerID lib.WorkerID
+
+	workerListMu     sync.Mutex
+	workerList       [fakeWorkerCount]lib.WorkerHandle
+	pendingWorkerSet map[lib.WorkerID]int
 }
 
 func (m *Master) WorkerID() lib.WorkerID {
@@ -39,6 +55,28 @@ func (m *Master) InitImpl(ctx context.Context) error {
 
 func (m *Master) Tick(ctx context.Context) error {
 	log.L().Info("FakeMaster: Tick")
+
+	m.workerListMu.Lock()
+	defer m.workerListMu.Unlock()
+
+	for i, handle := range m.workerList {
+		if handle == nil {
+			for _, idx := range m.pendingWorkerSet {
+				if idx == i {
+					continue
+				}
+			}
+
+			workerID, err := m.CreateWorker(WorkerTypeFakeWorker, &Config{}, 10)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			log.L().Info("CreateWorker called",
+				zap.Int("index", i),
+				zap.String("worker-id", string(workerID)))
+		}
+	}
+
 	return nil
 }
 
@@ -51,12 +89,25 @@ func (m *Master) OnWorkerDispatched(worker lib.WorkerHandle, result error) error
 	log.L().Info("FakeMaster: OnWorkerDispatched",
 		zap.String("worker-id", string(worker.ID())),
 		zap.Error(result))
+
+	m.workerListMu.Lock()
+	defer m.workerListMu.Unlock()
+
+	idx, ok := m.pendingWorkerSet[worker.ID()]
+	if !ok {
+		log.L().Panic("OnWorkerDispatched is called with an unknown workerID",
+			zap.String("worker-id", string(worker.ID())))
+	}
+	delete(m.pendingWorkerSet, worker.ID())
+	m.workerList[idx] = worker
+
 	return nil
 }
 
 func (m *Master) OnWorkerOnline(worker lib.WorkerHandle) error {
 	log.L().Info("FakeMaster: OnWorkerOnline",
 		zap.String("worker-id", string(worker.ID())))
+
 	return nil
 }
 
@@ -64,6 +115,8 @@ func (m *Master) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
 	log.L().Info("FakeMaster: OnWorkerOffline",
 		zap.String("worker-id", string(worker.ID())),
 		zap.Error(reason))
+
+	// TODO handle offlined workers
 	return nil
 }
 
@@ -80,7 +133,9 @@ func (m *Master) CloseImpl(ctx context.Context) error {
 }
 
 func NewFakeMaster(ctx *dcontext.Context, _workerID lib.WorkerID, masterID lib.MasterID, _config lib.WorkerConfig) *Master {
-	ret := &Master{}
+	ret := &Master{
+		pendingWorkerSet: make(map[lib.WorkerID]int),
+	}
 	deps := ctx.Dependencies
 	base := lib.NewBaseMaster(
 		ctx,

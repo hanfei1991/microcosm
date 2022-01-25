@@ -152,6 +152,8 @@ func (s *Server) DispatchTask(ctx context.Context, req *pb.DispatchTaskRequest) 
 		ExecutorClientManager: client.NewClientManager(),
 		ServerMasterClient:    s.cli,
 	}
+	dctx.Environ.NodeID = p2p.NodeID(s.info.ID)
+	dctx.Environ.Addr = s.info.Addr
 
 	newWorker, err := registry.GlobalWorkerRegistry().CreateWorker(
 		dctx,

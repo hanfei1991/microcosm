@@ -53,6 +53,7 @@ func (em *EtcdMembership) GetConfigs(ctx context.Context) (map[string]*Config, e
 		if err != nil {
 			return nil, errors.Wrap(errors.ErrDecodeEtcdKeyFail, err)
 		}
+		log.L().Info("Load config", zap.Any("cfg", cfg), zap.ByteString("value", kv.Value))
 		cfgs[cfg.Etcd.Name] = cfg
 	}
 	return cfgs, nil
