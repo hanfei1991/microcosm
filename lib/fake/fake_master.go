@@ -22,7 +22,7 @@ type Config struct{}
 var _ lib.Master = (*Master)(nil)
 
 const (
-	fakeWorkerCount = 10
+	fakeWorkerCount = 1
 )
 
 type Master struct {
@@ -86,6 +86,11 @@ func (m *Master) OnMasterRecovered(ctx context.Context) error {
 }
 
 func (m *Master) OnWorkerDispatched(worker lib.WorkerHandle, result error) error {
+	if result != nil {
+		log.L().Error("FakeMaster: OnWorkerDispatched", zap.Error(result))
+		return errors.Trace(result)
+	}
+
 	log.L().Info("FakeMaster: OnWorkerDispatched",
 		zap.String("worker-id", string(worker.ID())),
 		zap.Error(result))
