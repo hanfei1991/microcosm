@@ -2,8 +2,6 @@ package servermaster
 
 import (
 	"context"
-	"fmt"
-	"sync"
 
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/lib"
@@ -24,8 +22,6 @@ const defaultJobMasterCost = 1
 type JobManagerImplV2 struct {
 	*lib.BaseMaster
 
-	mu          sync.Mutex
-	jobMasters  map[model.ID]*model.Task
 	idAllocator autoid.JobIDAllocator
 
 	messageHandlerManager p2p.MessageHandlerManager
@@ -86,7 +82,6 @@ func NewJobManagerImplV2(
 	etcdClient *clientv3.Client,
 ) (*JobManagerImplV2, error) {
 	impl := &JobManagerImplV2{
-		jobMasters:            make(map[model.ID]*model.Task),
 		idAllocator:           autoid.NewJobIDAllocator(),
 		messageHandlerManager: msgService.MakeHandlerManager(),
 		executorClientManager: clients,
@@ -127,7 +122,6 @@ func (jm *JobManagerImplV2) OnMasterRecovered(ctx context.Context) error {
 
 // OnWorkerDispatched implements lib.MasterImpl.OnWorkerDispatched
 func (jm *JobManagerImplV2) OnWorkerDispatched(worker lib.WorkerHandle, result error) error {
-	fmt.Printf("on worker dispatched!!! error: %+v\n", result)
 	if result != nil {
 		log.L().Warn("dispatch worker met error", zap.Error(result))
 		return nil
