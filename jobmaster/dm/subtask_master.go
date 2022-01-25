@@ -28,6 +28,7 @@ type SubTaskMaster struct {
 	id        lib.MasterID
 	cfg       *config.SubTaskConfig
 	workerSeq []lib.WorkerType
+	workerID  lib.WorkerID
 }
 
 // TODO: does InitImpl has a run time limit?
@@ -84,7 +85,8 @@ func (s SubTaskMaster) InitImpl(ctx context.Context) error {
 		return nil
 	}
 	log.L().Debug("s.workerSeq", zap.Any("workerSeq", s.workerSeq))
-	err := s.CreateWorker(ctx, s.workerSeq[0], s.cfg)
+	var err error
+	s.workerID, err = s.CreateWorker(s.workerSeq[0], s.cfg, 0)
 	return errors.Trace(err)
 }
 
@@ -105,6 +107,23 @@ func (s SubTaskMaster) buildDMUnit(tp lib.WorkerType) unit.Unit {
 
 func (s SubTaskMaster) Tick(ctx context.Context) error {
 	log.L().Info("tick")
+	status := s.GetWorkers()[s.workerID].Status()
+	if status.Code == lib.WorkerStatusFinished {
+		log.L().Info("worker finished", zap.String("workerID", string(s.workerID)))
+		if len(s.workerSeq) > 0 {
+			s.workerSeq = s.workerSeq[1:]
+			if len(s.workerSeq) > 0 {
+				var err error
+				s.workerID, err = s.CreateWorker(s.workerSeq[0], s.cfg, 0)
+				if err != nil {
+					return errors.Trace(err)
+				}
+			} else {
+				// TODO: find a way to close itself
+				//s.Close(ctx)
+			}
+		}
+	}
 	return nil
 }
 
