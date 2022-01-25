@@ -11,7 +11,7 @@ const (
 	WorkerTypeFakeWorker = 10001
 )
 
-type FakeConfig struct {}
+type FakeConfig struct{}
 
 func LoadFake(registry Registry) {
 	fakeMasterFactory := NewSimpleWorkerFactory(func(ctx *dcontext.Context, id lib.WorkerID, masterID lib.MasterID, config WorkerConfig) lib.Worker {

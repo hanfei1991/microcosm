@@ -3,11 +3,12 @@ package main
 import (
 	"context"
 	"flag"
-	"github.com/hanfei1991/microcosm/lib/registry"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
+
+	"github.com/hanfei1991/microcosm/lib/registry"
 
 	"github.com/hanfei1991/microcosm/executor"
 	"github.com/pingcap/errors"

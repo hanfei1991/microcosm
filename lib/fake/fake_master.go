@@ -83,6 +83,7 @@ func NewFakeMaster(ctx *dcontext.Context, _workerID lib.WorkerID, masterID lib.M
 	ret := &Master{}
 	deps := ctx.Dependencies
 	base := lib.NewBaseMaster(
+		ctx,
 		ret,
 		masterID,
 		deps.MessageHandlerManager,
