@@ -2,7 +2,7 @@ package servermaster
 
 import (
 	"context"
-	"encoding/json"
+	"fmt"
 	"sync"
 
 	"github.com/hanfei1991/microcosm/client"
@@ -18,7 +18,7 @@ import (
 	"go.uber.org/zap"
 )
 
-const defaultJobMasterCost = 1 // TODO: use correct job master cost
+const defaultJobMasterCost = 1
 
 // JobManagerImplV2 is a special job master that manages all the job masters, and notify the offline executor to them.
 type JobManagerImplV2 struct {
@@ -31,7 +31,7 @@ type JobManagerImplV2 struct {
 	messageHandlerManager p2p.MessageHandlerManager
 	messageSender         p2p.MessageSender
 	metaKVClient          metadata.MetaKV
-	executorClientManager *client.Manager
+	executorClientManager client.ExecutorClientManager
 	serverMasterClient    client.MasterClient
 }
 
@@ -49,47 +49,29 @@ func (jm *JobManagerImplV2) CancelJob(ctx context.Context, req *pb.CancelJobRequ
 
 // SubmitJob processes "SubmitJobRequest".
 func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *pb.SubmitJobResponse {
-	var jobTask *model.Task
 	log.L().Logger.Info("submit job", zap.String("config", string(req.Config)))
 	resp := &pb.SubmitJobResponse{}
 	var masterConfig *model.JobMaster
 	switch req.Tp {
 	case pb.JobType_Benchmark:
 		id := jm.idAllocator.AllocJobID()
-		// TODO: supposing job master will be running independently, then the
-		// addresses of server can change because of failover, the job master
-		// should have ways to detect and adapt automatically.
 		masterConfig = &model.JobMaster{
 			ID:     model.ID(id),
 			Tp:     model.Benchmark,
 			Config: req.Config,
-		}
-		masterConfigBytes, err := json.Marshal(masterConfig)
-		if err != nil {
-			resp.Err = errors.ToPBError(err)
-			return resp
-		}
-		jobTask = &model.Task{
-			ID:   model.ID(id),
-			OpTp: model.JobMasterType,
-			Op:   masterConfigBytes,
-			Cost: 1,
 		}
 	default:
 		err := errors.ErrBuildJobFailed.GenWithStack("unknown job type", req.Tp)
 		resp.Err = errors.ToPBError(err)
 		return resp
 	}
-	jm.mu.Lock()
-	defer jm.mu.Unlock()
-	jm.jobMasters[jobTask.ID] = jobTask
-	resp.JobId = int32(jobTask.ID)
-
 	// CreateWorker here is to create job master actually
+	// TODO: use correct worker type and worker cost
 	_, err := jm.BaseMaster.CreateWorker(lib.WorkerType(99), masterConfig, defaultJobMasterCost)
 	if err != nil {
 		log.L().Error("create job master met error", zap.Error(err))
 		resp.Err = errors.ToPBError(err)
+		return resp
 	}
 
 	return resp
@@ -100,7 +82,7 @@ func NewJobManagerImplV2(
 	ctx context.Context,
 	id lib.MasterID,
 	msgService *p2p.MessageRPCService,
-	clients *client.Manager,
+	clients client.ExecutorClientManager,
 	etcdClient *clientv3.Client,
 ) (*JobManagerImplV2, error) {
 	impl := &JobManagerImplV2{
@@ -145,6 +127,12 @@ func (jm *JobManagerImplV2) OnMasterRecovered(ctx context.Context) error {
 
 // OnWorkerDispatched implements lib.MasterImpl.OnWorkerDispatched
 func (jm *JobManagerImplV2) OnWorkerDispatched(worker lib.WorkerHandle, result error) error {
+	fmt.Printf("on worker dispatched!!! error: %+v\n", result)
+	if result != nil {
+		log.L().Warn("dispatch worker met error", zap.Error(result))
+		return nil
+	}
+	// TODO: add job master info
 	return nil
 }
 

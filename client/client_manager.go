@@ -10,6 +10,7 @@ import (
 )
 
 type ExecutorClientManager interface {
+	MasterClient() MasterClient
 	ExecutorClient(id model.ExecutorID) ExecutorClient
 	AddExecutor(id model.ExecutorID, addr string) error
 }
@@ -28,7 +29,7 @@ type Manager struct {
 	executors map[model.ExecutorID]ExecutorClient
 }
 
-func (c *Manager) MasterClient() *MasterClientImpl {
+func (c *Manager) MasterClient() MasterClient {
 	return c.master
 }
 

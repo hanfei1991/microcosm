@@ -9,7 +9,8 @@ import (
 )
 
 var (
-	MasterCampaignKey      KeyAdapter = keyHexEncoderDecoder("/data-flow/master/leader")
+	MasterCampaignKey KeyAdapter = keyHexEncoderDecoder("/data-flow/master/leader")
+	// TODO: investigate whether we can merge MasterInfoKey and MasterMetaKey into one key
 	MasterInfoKey          KeyAdapter = keyHexEncoderDecoder("/data-flow/master/info")
 	MasterMetaKey          KeyAdapter = keyHexEncoderDecoder("/data-flow/master/meta")
 	ExecutorInfoKeyAdapter KeyAdapter = keyHexEncoderDecoder("/data-flow/executor/info")

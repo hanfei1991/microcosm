@@ -53,7 +53,7 @@ func TestMasterInit(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
-	master := newMockMasterImpl("my-master")
+	master := NewMockMasterImpl("my-master")
 	prepareMeta(ctx, t, master.metaKVClient)
 
 	master.On("InitImpl", mock.Anything).Return(nil)
@@ -97,7 +97,7 @@ func TestMasterPollAndClose(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
-	master := newMockMasterImpl("my-master")
+	master := NewMockMasterImpl("my-master")
 	prepareMeta(ctx, t, master.metaKVClient)
 
 	master.On("InitImpl", mock.Anything).Return(nil)
@@ -137,7 +137,7 @@ func TestMasterCreateWorker(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
-	master := newMockMasterImpl("my-master")
+	master := NewMockMasterImpl("my-master")
 	master.timeoutConfig.masterHeartbeatCheckLoopInterval = time.Millisecond * 10
 	master.uuidGen = uuid.NewMock()
 	prepareMeta(ctx, t, master.metaKVClient)
