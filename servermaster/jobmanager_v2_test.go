@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/hanfei1991/microcosm/lib"
-	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/autoid"
 	"github.com/hanfei1991/microcosm/pkg/errors"
@@ -29,7 +28,6 @@ func TestJobManagerSubmitJob(t *testing.T) {
 	mgr := &JobManagerImplV2{
 		BaseMaster:  mockMaster.BaseMaster,
 		idAllocator: autoid.NewJobIDAllocator(),
-		jobMasters:  make(map[model.ID]*model.Task),
 	}
 	err := mockMaster.Init(ctx)
 	require.Nil(t, err)
