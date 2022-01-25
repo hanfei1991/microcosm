@@ -95,9 +95,8 @@ func (s SubTaskMaster) buildDMUnit(tp lib.WorkerType) unit.Unit {
 	case WorkerLoadUnit:
 		if s.cfg.NeedUseLightning() {
 			return loader.NewLightning(s.cfg, nil, "subtask-master")
-		} else {
-			return loader.NewLoader(s.cfg, nil, "subtask-master")
 		}
+		return loader.NewLoader(s.cfg, nil, "subtask-master")
 	case WorkerSyncUnit:
 		return syncer.NewSyncer(s.cfg, nil, nil)
 	}

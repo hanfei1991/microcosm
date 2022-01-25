@@ -22,6 +22,7 @@ type (
 // Among these statuses, only WorkerStatusCreated is used by the framework
 // for now. The rest are for the business logic to use.
 // TODO think about whether to manage the transition of the statuses.
+// TODO: need a FSM graph
 const (
 	WorkerStatusNormal = WorkerStatusCode(iota + 1)
 	WorkerStatusCreated
