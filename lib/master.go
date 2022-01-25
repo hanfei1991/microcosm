@@ -12,6 +12,7 @@ import (
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
+	"github.com/hanfei1991/microcosm/pkg/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/pkg/workerpool"
@@ -52,6 +53,10 @@ type MasterImpl interface {
 	CloseImpl(ctx context.Context) error
 }
 
+const (
+	createWorkerTimeout = 10 * time.Second
+)
+
 type BaseMaster struct {
 	Impl MasterImpl
 
@@ -59,7 +64,7 @@ type BaseMaster struct {
 	messageHandlerManager p2p.MessageHandlerManager
 	messageRouter         p2p.MessageSender
 	metaKVClient          metadata.MetaKV
-	executorClientManager client.ExecutorClientManager
+	executorClientManager client.ClientsManager
 	serverMasterClient    client.MasterClient
 	pool                  workerpool.AsyncPool
 
@@ -80,6 +85,9 @@ type BaseMaster struct {
 	advertiseAddr string
 	nodeID        p2p.NodeID
 	timeoutConfig TimeoutConfig
+
+	// components for easier unit testing
+	uuidGen uuid.Generator
 }
 
 func NewBaseMaster(
@@ -88,7 +96,7 @@ func NewBaseMaster(
 	messageHandlerManager p2p.MessageHandlerManager,
 	messageRouter p2p.MessageSender,
 	metaKVClient metadata.MetaKV,
-	executorClientManager client.ExecutorClientManager,
+	executorClientManager client.ClientsManager,
 	serverMasterClient client.MasterClient,
 ) *BaseMaster {
 	return &BaseMaster{
@@ -105,6 +113,8 @@ func NewBaseMaster(
 
 		errCh:   make(chan error, 1),
 		closeCh: make(chan struct{}),
+
+		uuidGen: uuid.NewGenerator(),
 	}
 }
 
@@ -260,7 +270,15 @@ func (m *BaseMaster) initMetadata(ctx context.Context) (isInit bool, epoch Epoch
 	metaClient := NewMetadataClient(m.id, m.metaKVClient)
 	masterMeta, err := metaClient.Load(ctx)
 	if err != nil {
-		return false, 0, errors.Trace(err)
+		if !derror.ErrMasterNotFound.Equal(err) {
+			return false, 0, errors.Trace(err)
+		}
+		// master starts up for the first time, no metadata in metastore
+		masterMeta = &MasterMetaKVData{ID: m.id}
+		err = metaClient.Store(ctx, masterMeta)
+		if err != nil {
+			return false, 0, errors.Trace(err)
+		}
 	}
 
 	epoch, err = metaClient.GenerateEpoch(ctx)
@@ -345,20 +363,33 @@ func (m *BaseMaster) initMessageHandlers(ctx context.Context) error {
 	return nil
 }
 
-func (m *BaseMaster) CreateWorker(ctx context.Context, workerType WorkerType, config WorkerConfig) error {
+func (m *BaseMaster) CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error) {
+	log.L().Info("CreateWorker",
+		zap.Int64("worker-type", int64(workerType)),
+		zap.Any("worker-config", config))
+
 	configBytes, err := json.Marshal(config)
 	if err != nil {
-		return errors.Trace(err)
+		return "", errors.Trace(err)
 	}
 
-	err = m.pool.Go(ctx, func() {
+	// workerID is expected to be globally unique.
+	workerID := WorkerID(m.uuidGen.NewString())
+
+	// poolCtx is used to prevent `m.pool.Go(...)` from blocking indefinitely.
+	// TODO add an asynchronous interface to the pool, so that we do not need a context anymore.
+	poolCtx, cancel := context.WithTimeout(context.Background(), createWorkerTimeout)
+	defer cancel()
+
+	err = m.pool.Go(poolCtx, func() {
+		requestCtx, cancel := context.WithTimeout(context.Background(), createWorkerTimeout)
+		defer cancel()
 		// This following API should be refined.
-		resp, err := m.serverMasterClient.ScheduleTask(ctx, &pb.TaskSchedulerRequest{Tasks: []*pb.ScheduleTask{{
+		resp, err := m.serverMasterClient.ScheduleTask(requestCtx, &pb.TaskSchedulerRequest{Tasks: []*pb.ScheduleTask{{
 			Task: &pb.TaskRequest{
 				Id: 0,
 			},
-			// TODO (zixiong) implement the real cost.
-			Cost: 10,
+			Cost: int64(cost),
 		}}},
 			// TODO (zixiong) make the timeout configurable
 			time.Second*10)
@@ -373,15 +404,24 @@ func (m *BaseMaster) CreateWorker(ctx context.Context, workerType WorkerType, co
 		if len(schedule) != 1 {
 			panic("unreachable")
 		}
-		executorID := schedule[0].ExecutorId
+		executorID := model.ExecutorID(schedule[0].ExecutorId)
 
-		executorClient := m.executorClientManager.ExecutorClient(model.ExecutorID(executorID))
-		executorResp, err := executorClient.Send(ctx, &client.ExecutorRequest{
+		err = m.executorClientManager.AddExecutor(executorID, schedule[0].Addr)
+		if err != nil {
+			err1 := m.Impl.OnWorkerDispatched(nil, errors.Trace(err))
+			if err1 != nil {
+				m.OnError(errors.Trace(err1))
+			}
+			return
+		}
+		executorClient := m.executorClientManager.ExecutorClient(executorID)
+		executorResp, err := executorClient.Send(requestCtx, &client.ExecutorRequest{
 			Cmd: client.CmdDispatchTask,
 			Req: &pb.DispatchTaskRequest{
 				TaskTypeId: int64(workerType),
 				TaskConfig: configBytes,
 				MasterId:   string(m.id),
+				WorkerId:   string(workerID),
 			},
 		})
 		if err != nil {
@@ -402,10 +442,7 @@ func (m *BaseMaster) CreateWorker(ctx context.Context, workerType WorkerType, co
 			return
 		}
 
-		// workerID is expected to be generated by the executor, ideally a UUID.
-		// This workerID is expected to be unique globally to ease management.
-		workerID := WorkerID(dispatchTaskResp.GetWorkerId())
-		if err := m.workerManager.AddWorker(workerID, executorID, WorkerStatusCreated); err != nil {
+		if err := m.workerManager.AddWorker(workerID, p2p.NodeID(executorID), WorkerStatusCreated); err != nil {
 			m.OnError(errors.Trace(err))
 		}
 		handle := m.workerManager.GetWorkerHandle(workerID)
@@ -415,7 +452,7 @@ func (m *BaseMaster) CreateWorker(ctx context.Context, workerType WorkerType, co
 		}
 	})
 	if err != nil {
-		return errors.Trace(err)
+		return "", errors.Trace(err)
 	}
-	return nil
+	return workerID, nil
 }
