@@ -24,7 +24,7 @@ type JobManagerImplV2 struct {
 	messageHandlerManager p2p.MessageHandlerManager
 	messageSender         p2p.MessageSender
 	metaKVClient          metadata.MetaKV
-	executorClientManager client.ExecutorClientManager
+	executorClientManager client.ClientsManager
 	serverMasterClient    client.MasterClient
 
 	workerMu sync.Mutex
@@ -77,7 +77,7 @@ func NewJobManagerImplV2(
 	ctx context.Context,
 	id lib.MasterID,
 	messageHandlerManager p2p.MessageHandlerManager,
-	clients client.ExecutorClientManager,
+	clients client.ClientsManager,
 	metaKVClient metadata.MetaKV,
 ) (*JobManagerImplV2, error) {
 	impl := &JobManagerImplV2{

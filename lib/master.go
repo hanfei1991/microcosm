@@ -64,7 +64,7 @@ type BaseMaster struct {
 	messageHandlerManager p2p.MessageHandlerManager
 	messageRouter         p2p.MessageSender
 	metaKVClient          metadata.MetaKV
-	executorClientManager client.ExecutorClientManager
+	executorClientManager client.ClientsManager
 	serverMasterClient    client.MasterClient
 	pool                  workerpool.AsyncPool
 
@@ -96,7 +96,7 @@ func NewBaseMaster(
 	messageHandlerManager p2p.MessageHandlerManager,
 	messageRouter p2p.MessageSender,
 	metaKVClient metadata.MetaKV,
-	executorClientManager client.ExecutorClientManager,
+	executorClientManager client.ClientsManager,
 	serverMasterClient client.MasterClient,
 ) *BaseMaster {
 	return &BaseMaster{

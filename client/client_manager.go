@@ -9,7 +9,9 @@ import (
 	"go.uber.org/zap"
 )
 
-type ExecutorClientManager interface {
+// ClientsManager defines interface to manage all clients, including master client
+// and executor clients.
+type ClientsManager interface {
 	MasterClient() MasterClient
 	ExecutorClient(id model.ExecutorID) ExecutorClient
 	AddExecutor(id model.ExecutorID, addr string) error
