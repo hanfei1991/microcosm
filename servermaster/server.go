@@ -17,6 +17,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/etcdutils"
+	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/servermaster/cluster"
 	"github.com/hanfei1991/microcosm/test"
@@ -444,8 +445,8 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	if err != nil {
 		return
 	}
-	s.jobManager, err = NewJobManagerImplV2(
-		ctx, lib.MasterID(s.name()), s.msgService, clients, s.etcdClient)
+	s.jobManager, err = NewJobManagerImplV2(ctx, lib.MasterID(s.name()),
+		s.msgService.MakeHandlerManager(), clients, metadata.NewMetaEtcd(s.etcdClient))
 	if err != nil {
 		return
 	}

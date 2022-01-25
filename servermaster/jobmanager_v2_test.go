@@ -29,6 +29,8 @@ func TestJobManagerSubmitJob(t *testing.T) {
 		BaseMaster:  mockMaster.BaseMaster,
 		idAllocator: autoid.NewJobIDAllocator(),
 	}
+	// set master impl to JobManagerImplV2
+	mockMaster.Impl = mgr
 	err := mockMaster.Init(ctx)
 	require.Nil(t, err)
 	req := &pb.SubmitJobRequest{
@@ -38,6 +40,9 @@ func TestJobManagerSubmitJob(t *testing.T) {
 	resp := mgr.SubmitJob(ctx, req)
 	require.Nil(t, resp.Err)
 	time.Sleep(time.Millisecond * 10)
-	// TODO: use job manager v2 as master impl of mock master and check
-	// OnWorkerDispatched is called
+	require.Eventually(t, func() bool {
+		mgr.workerMu.Lock()
+		defer mgr.workerMu.Unlock()
+		return len(mgr.workers) == 0
+	}, time.Second*2, time.Millisecond*20)
 }

@@ -2,6 +2,7 @@ package servermaster
 
 import (
 	"context"
+	"sync"
 
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/lib"
@@ -12,7 +13,6 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"go.etcd.io/etcd/clientv3"
 	"go.uber.org/zap"
 )
 
@@ -29,6 +29,9 @@ type JobManagerImplV2 struct {
 	metaKVClient          metadata.MetaKV
 	executorClientManager client.ExecutorClientManager
 	serverMasterClient    client.MasterClient
+
+	workerMu sync.Mutex
+	workers  map[lib.WorkerID]lib.WorkerHandle
 }
 
 func (jm *JobManagerImplV2) Start(ctx context.Context, metaKV metadata.MetaKV) error {
@@ -77,16 +80,17 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 func NewJobManagerImplV2(
 	ctx context.Context,
 	id lib.MasterID,
-	msgService *p2p.MessageRPCService,
+	messageHandlerManager p2p.MessageHandlerManager,
 	clients client.ExecutorClientManager,
-	etcdClient *clientv3.Client,
+	metaKVClient metadata.MetaKV,
 ) (*JobManagerImplV2, error) {
 	impl := &JobManagerImplV2{
 		idAllocator:           autoid.NewJobIDAllocator(),
-		messageHandlerManager: msgService.MakeHandlerManager(),
+		messageHandlerManager: messageHandlerManager,
 		executorClientManager: clients,
 		serverMasterClient:    clients.MasterClient(),
-		metaKVClient:          metadata.NewMetaEtcd(etcdClient),
+		metaKVClient:          metaKVClient,
+		workers:               make(map[lib.WorkerID]lib.WorkerHandle),
 	}
 	impl.BaseMaster = lib.NewBaseMaster(
 		impl,
@@ -126,7 +130,9 @@ func (jm *JobManagerImplV2) OnWorkerDispatched(worker lib.WorkerHandle, result e
 		log.L().Warn("dispatch worker met error", zap.Error(result))
 		return nil
 	}
-	// TODO: add job master info
+	jm.workerMu.Lock()
+	defer jm.workerMu.Unlock()
+	jm.workers[worker.ID()] = worker
 	return nil
 }
 
