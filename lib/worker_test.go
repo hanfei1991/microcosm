@@ -74,7 +74,7 @@ func TestWorkerInitAndClose(t *testing.T) {
 		},
 	}, statusMsg)
 
-	worker.On("CloseImpl")
+	worker.On("CloseImpl").Return(nil)
 	err = worker.Close(ctx)
 	require.NoError(t, err)
 }

@@ -24,8 +24,9 @@ import (
 type Master interface {
 	Init(ctx context.Context) error
 	Poll(ctx context.Context) error
-	ID() MasterID
-	Close(ctx context.Context) error
+	MasterID() MasterID
+
+	Closer
 }
 
 type MasterImpl interface {
@@ -187,7 +188,7 @@ func (m *BaseMaster) Poll(ctx context.Context) error {
 	return nil
 }
 
-func (m *BaseMaster) ID() MasterID {
+func (m *BaseMaster) MasterID() MasterID {
 	return m.id
 }
 
