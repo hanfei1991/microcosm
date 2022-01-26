@@ -157,10 +157,12 @@ func TestDiscoveryKeepalive(t *testing.T) {
 		require.EqualError(t, err, context.Canceled.Error())
 	}()
 
+	var peers map[string]string
 	// check snapshot can be load when discovery keepalive routine starts for the first time
-	time.Sleep(time.Millisecond * 50)
-	peers := router.GetPeers()
-	require.Equal(t, 2, len(peers))
+	require.Eventually(t, func() bool {
+		peers = router.GetPeers()
+		return len(peers) == 2
+	}, time.Second, time.Millisecond*20)
 	require.Contains(t, peers, "uuid-1")
 	require.Contains(t, peers, "uuid-2")
 	require.Equal(t, int64(1), discoveryConnectTime.Load())
