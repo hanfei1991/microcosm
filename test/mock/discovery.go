@@ -48,22 +48,22 @@ func (mr *MockDiscoveryMockRecorder) Close() *gomock.Call {
 }
 
 // CopySnapshot mocks base method.
-func (m *MockDiscovery) CopySnapshot(snapshot map[srvdiscovery.UUID]srvdiscovery.ServiceResource, revision srvdiscovery.Revision) {
+func (m *MockDiscovery) CopySnapshot(snapshot srvdiscovery.Snapshot) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "CopySnapshot", snapshot, revision)
+	m.ctrl.Call(m, "CopySnapshot", snapshot)
 }
 
 // CopySnapshot indicates an expected call of CopySnapshot.
-func (mr *MockDiscoveryMockRecorder) CopySnapshot(snapshot, revision interface{}) *gomock.Call {
+func (mr *MockDiscoveryMockRecorder) CopySnapshot(snapshot interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CopySnapshot", reflect.TypeOf((*MockDiscovery)(nil).CopySnapshot), snapshot, revision)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CopySnapshot", reflect.TypeOf((*MockDiscovery)(nil).CopySnapshot), snapshot)
 }
 
 // Snapshot mocks base method.
-func (m *MockDiscovery) Snapshot(ctx context.Context) (map[srvdiscovery.UUID]srvdiscovery.ServiceResource, error) {
+func (m *MockDiscovery) Snapshot(ctx context.Context) (srvdiscovery.Snapshot, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Snapshot", ctx)
-	ret0, _ := ret[0].(map[srvdiscovery.UUID]srvdiscovery.ServiceResource)
+	ret0, _ := ret[0].(srvdiscovery.Snapshot)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -75,12 +75,11 @@ func (mr *MockDiscoveryMockRecorder) Snapshot(ctx interface{}) *gomock.Call {
 }
 
 // SnapshotClone mocks base method.
-func (m *MockDiscovery) SnapshotClone() (map[srvdiscovery.UUID]srvdiscovery.ServiceResource, srvdiscovery.Revision) {
+func (m *MockDiscovery) SnapshotClone() srvdiscovery.Snapshot {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SnapshotClone")
-	ret0, _ := ret[0].(map[srvdiscovery.UUID]srvdiscovery.ServiceResource)
-	ret1, _ := ret[1].(srvdiscovery.Revision)
-	return ret0, ret1
+	ret0, _ := ret[0].(srvdiscovery.Snapshot)
+	return ret0
 }
 
 // SnapshotClone indicates an expected call of SnapshotClone.

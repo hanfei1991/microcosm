@@ -110,21 +110,19 @@ func TestEtcdDiscoveryAPI(t *testing.T) {
 
 func TestSnapshotClone(t *testing.T) {
 	t.Parallel()
-	snapshot := map[UUID]ServiceResource{
+	snapshot := Snapshot{
 		"uuid-1": {Addr: "127.0.0.1:10001"},
 		"uuid-2": {Addr: "127.0.0.1:10002"},
 	}
 	discovery := EtcdSrvDiscovery{
-		snapshot:    snapshot,
-		snapshotRev: 100,
+		snapshot: snapshot,
 	}
-	cloned, rev := discovery.SnapshotClone()
-	require.Equal(t, int64(100), rev)
+	cloned := discovery.SnapshotClone()
 	require.Equal(t, snapshot, cloned)
 	for k := range snapshot {
 		delete(snapshot, k)
 	}
-	require.Equal(t, map[UUID]ServiceResource{
+	require.Equal(t, Snapshot{
 		"uuid-1": {Addr: "127.0.0.1:10001"},
 		"uuid-2": {Addr: "127.0.0.1:10002"},
 	}, cloned)
