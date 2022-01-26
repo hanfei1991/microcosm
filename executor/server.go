@@ -38,7 +38,6 @@ import (
 )
 
 type metaStoreSession interface {
-	Close() error
 	Done() <-chan struct{}
 }
 
