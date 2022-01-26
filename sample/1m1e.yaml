@@ -9,6 +9,14 @@ services:
                         - "./bin/master"
                         - "--config"
                         - "/config.toml"
+                        - "--master-addr"
+                        - "0.0.0.0:10240"
+                        - "--advertise-addr"
+                        - "server-master:10240"
+                        - "--peer-urls"
+                        - "http://127.0.0.1:8291"
+                        - "--advertise-peer-urls"
+                        - "http://server-master:8291"
                 ports:
                         - "10240:10240"
         server-executor:
@@ -20,6 +28,8 @@ services:
                         - "./bin/executor"
                         - "--config"
                         - "/config.toml"
+                        - "--join"
+                        - "server-master:10240"
                         - "--worker-addr"
                         - "0.0.0.0:10241"
                         - "--advertise-addr"
