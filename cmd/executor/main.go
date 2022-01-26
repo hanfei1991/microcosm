@@ -8,9 +8,8 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/hanfei1991/microcosm/lib/registry"
-
 	"github.com/hanfei1991/microcosm/executor"
+	"github.com/hanfei1991/microcosm/lib/registry"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"

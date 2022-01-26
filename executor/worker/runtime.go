@@ -5,12 +5,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	"go.uber.org/zap"
-
 	"github.com/edwingeng/deque"
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/model"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/zap"
 )
 
 type Scheduler struct {
@@ -21,7 +20,7 @@ type Scheduler struct {
 	onWorkerFinished func(lib.Worker, error)
 }
 
-const emptyRestDuration time.Duration = 50 * time.Millisecond
+const emptyRestDuration = 50 * time.Millisecond
 
 func (s *Scheduler) AddWorker(worker lib.Worker) {
 	s.Lock()
