@@ -1,0 +1,61 @@
+version: "2.3"
+services:
+        server-master:
+                image: dataflow:test
+                volumes:
+                        - ./config/master.toml:/config.toml
+                        - /tmp/df:/tmp/df
+                command:
+                        - "./bin/master"
+                        - "--config"
+                        - "/config.toml"
+                ports:
+                        - "10240:10240"
+        server-executor-0:
+                image: dataflow:test
+                volumes:
+                        - ./config/executor.toml:/config.toml
+                        - /tmp/dataflow:/tmp/dataflow
+                command:
+                        - "./bin/executor"
+                        - "--config"
+                        - "/config.toml"
+                        - "--worker-addr"
+                        - "0.0.0.0:10241"
+                        - "--advertise-addr"
+                        - "server-executor-0:10241"
+                depends_on:
+                        - "server-master"
+                restart: "on-failure"
+        server-executor-1:
+                image: dataflow:test
+                volumes:
+                        - ./config/executor.toml:/config.toml
+                        - /tmp/dataflow:/tmp/dataflow
+                command:
+                        - "./bin/executor"
+                        - "--config"
+                        - "/config.toml"
+                        - "--worker-addr"
+                        - "0.0.0.0:10241"
+                        - "--advertise-addr"
+                        - "server-executor-1:10241"
+                depends_on:
+                        - "server-master"
+                restart: "on-failure"
+        server-executor-2:
+                image: dataflow:test
+                volumes:
+                        - ./config/executor.toml:/config.toml
+                        - /tmp/dataflow:/tmp/dataflow
+                command:
+                        - "./bin/executor"
+                        - "--config"
+                        - "/config.toml"
+                        - "--worker-addr"
+                        - "0.0.0.0:10241"
+                        - "--advertise-addr"
+                        - "server-executor-2:10241"
+                depends_on:
+                        - "server-master"
+                restart: "on-failure"
