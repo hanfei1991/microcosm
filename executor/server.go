@@ -62,6 +62,7 @@ type Server struct {
 
 	metastore          metadata.MetaKV
 	discovery          srvdiscovery.Discovery
+	discoveryWatcher   <-chan srvdiscovery.WatchResp
 	discoveryConnector discoveryConnectFn
 	p2pMsgRouter       p2pImpl.MessageRouter
 }
@@ -363,6 +364,7 @@ func (s *Server) connectToEtcdDiscovery(ctx context.Context) (metaStoreSession, 
 		etcdCli, adapter.ExecutorInfoKeyAdapter, defaultDiscoverTicker)
 	if old != nil {
 		s.discovery.CopySnapshot(old.SnapshotClone())
+		old.Close()
 	}
 
 	return session, nil
@@ -387,6 +389,15 @@ func (s *Server) createSession(ctx context.Context, etcdCli *clientv3.Client) (m
 	return session, nil
 }
 
+func (s *Server) resetDiscovery(ctx context.Context) (metaStoreSession, error) {
+	session, err := s.discoveryConnector(ctx)
+	if err != nil {
+		return nil, err
+	}
+	s.discoveryWatcher = s.discovery.Watch(ctx)
+	return session, nil
+}
+
 func (s *Server) discoveryKeepalive(ctx context.Context) error {
 	var (
 		session metaStoreSession
@@ -408,23 +419,20 @@ func (s *Server) discoveryKeepalive(ctx context.Context) error {
 			s.p2pMsgRouter.AddPeer(uuid, exec.Addr)
 		}
 	}
-
-	watchCh := s.discovery.Watch(ctx)
+	s.discoveryWatcher = s.discovery.Watch(ctx)
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-session.Done():
 			log.L().Warn("metastore session is done", zap.String("executor-id", string(s.info.ID)))
-			session, err = s.discoveryConnector(ctx)
-			if err != nil {
+			if session, err = s.resetDiscovery(ctx); err != nil {
 				return err
 			}
-		case resp := <-watchCh:
+		case resp := <-s.discoveryWatcher:
 			if resp.Err != nil {
 				log.L().Warn("discovery watch met error", zap.Error(resp.Err))
-				session, err = s.discoveryConnector(ctx)
-				if err != nil {
+				if session, err = s.resetDiscovery(ctx); err != nil {
 					return err
 				}
 				continue
