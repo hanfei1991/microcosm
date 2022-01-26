@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/grpc"
+
 	"github.com/golang/mock/gomock"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pkg/srvdiscovery"
@@ -39,6 +41,7 @@ func TestStartTCPSrv(t *testing.T) {
 	cfg.WorkerAddr = addr
 	s := NewServer(cfg, nil)
 
+	s.grpcSrv = grpc.NewServer()
 	wg, ctx := errgroup.WithContext(context.Background())
 	err = s.startTCPService(ctx, wg)
 	require.Nil(t, err)
