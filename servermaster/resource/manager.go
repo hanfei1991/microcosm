@@ -17,7 +17,7 @@ type RescMgr interface {
 	Allocate(tasks []*pb.ScheduleTask) (bool, *pb.TaskSchedulerResponse)
 
 	// Update updates executor resource usage and running status
-	Update(id model.ExecutorID, use model.RescUnit, status model.ExecutorStatus) error
+	Update(id model.ExecutorID, used, reserved model.RescUnit, status model.ExecutorStatus) error
 }
 
 type ExecutorResource struct {
