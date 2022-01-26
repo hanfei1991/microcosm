@@ -26,11 +26,11 @@ type ExecutorResource struct {
 
 	// Capacity of the resource in this executor.
 	Capacity model.RescUnit
-	// Reserved resource in this node, meaning the max resource possible to use. 
+	// Reserved resource in this node, meaning the max resource possible to use.
 	// It's supposed to be the total cost of running tasks in this executor.
 	Reserved model.RescUnit
 	// Actually used resource in this node. It's supposed to be less than the reserved resource.
 	// But if the estimated reserved is not accurate, `Used` might be larger than `Reserved`.
-	Used     model.RescUnit
-	Addr     string
+	Used model.RescUnit
+	Addr string
 }
