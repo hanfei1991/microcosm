@@ -14,7 +14,7 @@ import (
 )
 
 func putMasterMeta(ctx context.Context, t *testing.T, metaclient metadata.MetaKV, metaData *MasterMetaKVData) {
-	masterKey := adapter.MasterInfoKey.Encode(masterName)
+	masterKey := adapter.MasterMetaKey.Encode(masterName)
 	masterInfoBytes, err := json.Marshal(metaData)
 	require.NoError(t, err)
 	_, err = metaclient.Put(ctx, masterKey, string(masterInfoBytes))
@@ -74,8 +74,9 @@ func TestWorkerInitAndClose(t *testing.T) {
 		},
 	}, statusMsg)
 
-	worker.On("CloseImpl")
-	worker.Close()
+	worker.On("CloseImpl").Return(nil)
+	err = worker.Close(ctx)
+	require.NoError(t, err)
 }
 
 const (

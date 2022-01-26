@@ -23,8 +23,9 @@ import (
 type Master interface {
 	Init(ctx context.Context) error
 	Poll(ctx context.Context) error
-	ID() MasterID
-	Close(ctx context.Context) error
+	MasterID() MasterID
+
+	Closer
 }
 
 type MasterImpl interface {
@@ -64,7 +65,7 @@ type BaseMaster struct {
 	messageHandlerManager p2p.MessageHandlerManager
 	messageRouter         p2p.MessageSender
 	metaKVClient          metadata.MetaKV
-	executorClientManager client.ExecutorClientManager
+	executorClientManager client.ClientsManager
 	serverMasterClient    client.MasterClient
 	pool                  workerpool.AsyncPool
 
@@ -96,7 +97,7 @@ func NewBaseMaster(
 	messageHandlerManager p2p.MessageHandlerManager,
 	messageRouter p2p.MessageSender,
 	metaKVClient metadata.MetaKV,
-	executorClientManager client.ExecutorClientManager,
+	executorClientManager client.ClientsManager,
 	serverMasterClient client.MasterClient,
 ) *BaseMaster {
 	return &BaseMaster{
@@ -174,7 +175,7 @@ func (m *BaseMaster) Poll(ctx context.Context) error {
 	return nil
 }
 
-func (m *BaseMaster) ID() MasterID {
+func (m *BaseMaster) MasterID() MasterID {
 	return m.id
 }
 
@@ -270,7 +271,15 @@ func (m *BaseMaster) initMetadata(ctx context.Context) (isInit bool, epoch Epoch
 	metaClient := NewMetadataClient(m.id, m.metaKVClient)
 	masterMeta, err := metaClient.Load(ctx)
 	if err != nil {
-		return false, 0, errors.Trace(err)
+		if !derror.ErrMasterNotFound.Equal(err) {
+			return false, 0, errors.Trace(err)
+		}
+		// master starts up for the first time, no metadata in metastore
+		masterMeta = &MasterMetaKVData{ID: m.id}
+		err = metaClient.Store(ctx, masterMeta)
+		if err != nil {
+			return false, 0, errors.Trace(err)
+		}
 	}
 
 	epoch, err = metaClient.GenerateEpoch(ctx)
@@ -370,7 +379,7 @@ func (m *BaseMaster) CreateWorker(workerType WorkerType, config WorkerConfig, co
 
 	// poolCtx is used to prevent `m.pool.Go(...)` from blocking indefinitely.
 	// TODO add an asynchronous interface to the pool, so that we do not need a context anymore.
-	poolCtx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	poolCtx, cancel := context.WithTimeout(context.Background(), createWorkerTimeout)
 	defer cancel()
 
 	err = m.pool.Go(poolCtx, func() {
@@ -396,9 +405,17 @@ func (m *BaseMaster) CreateWorker(workerType WorkerType, config WorkerConfig, co
 		if len(schedule) != 1 {
 			panic("unreachable")
 		}
-		executorID := schedule[0].ExecutorId
+		executorID := model.ExecutorID(schedule[0].ExecutorId)
 
-		executorClient := m.executorClientManager.ExecutorClient(model.ExecutorID(executorID))
+		err = m.executorClientManager.AddExecutor(executorID, schedule[0].Addr)
+		if err != nil {
+			err1 := m.Impl.OnWorkerDispatched(nil, errors.Trace(err))
+			if err1 != nil {
+				m.OnError(errors.Trace(err1))
+			}
+			return
+		}
+		executorClient := m.executorClientManager.ExecutorClient(executorID)
 		executorResp, err := executorClient.Send(requestCtx, &client.ExecutorRequest{
 			Cmd: client.CmdDispatchTask,
 			Req: &pb.DispatchTaskRequest{
@@ -426,7 +443,7 @@ func (m *BaseMaster) CreateWorker(workerType WorkerType, config WorkerConfig, co
 			return
 		}
 
-		if err := m.workerManager.AddWorker(workerID, executorID, WorkerStatusCreated); err != nil {
+		if err := m.workerManager.AddWorker(workerID, p2p.NodeID(executorID), WorkerStatusCreated); err != nil {
 			m.OnError(errors.Trace(err))
 		}
 		handle := m.workerManager.GetWorkerHandle(workerID)
