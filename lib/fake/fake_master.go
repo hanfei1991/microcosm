@@ -22,7 +22,7 @@ type Config struct{}
 var _ lib.Master = (*Master)(nil)
 
 const (
-	fakeWorkerCount = 1
+	fakeWorkerCount = 20
 )
 
 type Master struct {
@@ -58,22 +58,23 @@ func (m *Master) Tick(ctx context.Context) error {
 
 	m.workerListMu.Lock()
 	defer m.workerListMu.Unlock()
-
+OUT:
 	for i, handle := range m.workerList {
 		if handle == nil {
 			for _, idx := range m.pendingWorkerSet {
 				if idx == i {
-					continue
+					continue OUT
 				}
 			}
 
-			workerID, err := m.CreateWorker(WorkerTypeFakeWorker, &Config{}, 10)
+			workerID, err := m.CreateWorker(WorkerTypeFakeWorker, &Config{}, 1)
 			if err != nil {
 				return errors.Trace(err)
 			}
 			log.L().Info("CreateWorker called",
 				zap.Int("index", i),
 				zap.String("worker-id", string(workerID)))
+			m.pendingWorkerSet[workerID] = i
 		}
 	}
 

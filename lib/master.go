@@ -146,10 +146,6 @@ func (m *BaseMaster) Init(ctx context.Context) error {
 
 	m.startBackgroundTasks()
 
-	if err := m.initMessageHandlers(ctx); err != nil {
-		return errors.Trace(err)
-	}
-
 	if isInit {
 		if err := m.Impl.InitImpl(ctx); err != nil {
 			return errors.Trace(err)
@@ -328,8 +324,8 @@ func (m *BaseMaster) markInitializedInMetadata(ctx context.Context) error {
 	return nil
 }
 
-func (m *BaseMaster) initMessageHandlers(ctx context.Context) error {
-	topic := HeartbeatPingTopic(m.id)
+func (m *BaseMaster) registerHandlerForWorker(ctx context.Context, workerID WorkerID) error {
+	topic := HeartbeatPingTopic(m.id, workerID)
 	ok, err := m.messageHandlerManager.RegisterHandler(
 		ctx,
 		topic,
@@ -357,7 +353,7 @@ func (m *BaseMaster) initMessageHandlers(ctx context.Context) error {
 			zap.String("topic", topic))
 	}
 
-	topic = StatusUpdateTopic(m.id)
+	topic = StatusUpdateTopic(m.id, workerID)
 	ok, err = m.messageHandlerManager.RegisterHandler(
 		ctx,
 		topic,
@@ -446,6 +442,7 @@ func (m *BaseMaster) CreateWorker(workerType WorkerType, config WorkerConfig, co
 			return
 		}
 		dispatchTaskResp := executorResp.Resp.(*pb.DispatchTaskResponse)
+		log.L().Info("Worker dispatched", zap.Any("response", dispatchTaskResp))
 		errCode := dispatchTaskResp.GetErrorCode()
 		if errCode != pb.DispatchTaskErrorCode_OK {
 			err1 := m.Impl.OnWorkerDispatched(
@@ -466,6 +463,13 @@ func (m *BaseMaster) CreateWorker(workerType WorkerType, config WorkerConfig, co
 		}
 	})
 	if err != nil {
+		return "", errors.Trace(err)
+	}
+
+	registerHandlerCtx, cancelRegisterHandler := context.WithTimeout(context.TODO(), time.Second*1)
+	defer cancelRegisterHandler()
+
+	if err := m.registerHandlerForWorker(registerHandlerCtx, workerID); err != nil {
 		return "", errors.Trace(err)
 	}
 	return workerID, nil

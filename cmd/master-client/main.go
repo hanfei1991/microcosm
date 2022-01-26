@@ -52,20 +52,22 @@ func main() {
 			os.Exit(1)
 		}
 
-		resp, err := cliManager.ExecutorClient(model.ExecutorID(nodeID)).Send(context.TODO(), &client.ExecutorRequest{
-			Cmd: client.CmdDispatchTask,
-			Req: &pb.DispatchTaskRequest{
-				TaskTypeId: registry.WorkerTypeFakeMaster,
-				TaskConfig: []byte("{}"),
-				MasterId:   "",
-				WorkerId:   uuid.New().String(),
-			},
-		})
-		if err != nil {
-			log.L().Error("failed to dispatch master", zap.Error(err))
-			os.Exit(1)
+		for i := 0; i < 1; i++ {
+			resp, err := cliManager.ExecutorClient(model.ExecutorID(nodeID)).Send(context.TODO(), &client.ExecutorRequest{
+				Cmd: client.CmdDispatchTask,
+				Req: &pb.DispatchTaskRequest{
+					TaskTypeId: registry.WorkerTypeFakeMaster,
+					TaskConfig: []byte("{}"),
+					MasterId:   fmt.Sprintf("master-%d", i),
+					WorkerId:   uuid.New().String(),
+				},
+			})
+			if err != nil {
+				log.L().Error("failed to dispatch master", zap.Error(err))
+				os.Exit(1)
+			}
+			log.L().Info("resp", zap.Any("resp", resp))
 		}
-		log.L().Info("resp", zap.Any("resp", resp))
 	default:
 		fmt.Printf("submit-job --config configFile")
 		os.Exit(0)

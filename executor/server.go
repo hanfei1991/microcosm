@@ -5,6 +5,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pingcap/tiflow/pkg/security"
+
 	"github.com/hanfei1991/microcosm/lib/registry"
 
 	"github.com/hanfei1991/microcosm/client"
@@ -25,7 +27,6 @@ import (
 	"github.com/hanfei1991/microcosm/test/mock"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	p2pImpl "github.com/pingcap/tiflow/pkg/p2p"
-	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/tcpserver"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
@@ -147,7 +148,7 @@ func (s *Server) DispatchTask(ctx context.Context, req *pb.DispatchTaskRequest) 
 	dctx := dcontext.Background()
 	dctx.Dependencies = dcontext.RuntimeDependencies{
 		MessageHandlerManager: s.msgServer.MakeHandlerManager(),
-		MessageRouter:         p2p.NewMessageSender(p2p.NewMessageRouter(string(s.info.ID), s.cfg.AdvertiseAddr)),
+		MessageRouter:         p2p.NewMessageSender(s.p2pMsgRouter),
 		MetaKVClient:          s.metastore,
 		ExecutorClientManager: client.NewClientManager(),
 		ServerMasterClient:    s.cli,
@@ -224,12 +225,13 @@ func (s *Server) startForTest(ctx context.Context) (err error) {
 }
 
 func (s *Server) startMsgService(ctx context.Context, wg *errgroup.Group) (err error) {
-	s.msgServer, err = p2p.NewMessageRPCService(string(s.info.ID), nil)
+	s.msgServer, err = p2p.NewDependentMessageRPCService(string(s.info.ID), nil, s.grpcSrv)
 	if err != nil {
 		return err
 	}
 	wg.Go(func() error {
-		return s.msgServer.Serve(ctx, s.tcpServer.GrpcListener())
+		// TODO refactor this
+		return s.msgServer.Serve(ctx, nil)
 	})
 	return nil
 }
@@ -241,11 +243,6 @@ func (s *Server) Run(ctx context.Context) error {
 
 	wg, ctx := errgroup.WithContext(ctx)
 
-	err := s.startTCPService(ctx, wg)
-	if err != nil {
-		return err
-	}
-
 	s.sch = runtime.NewRuntime(nil)
 	wg.Go(func() error {
 		s.sch.Run(ctx, 10)
@@ -256,18 +253,27 @@ func (s *Server) Run(ctx context.Context) error {
 	s.workerRtm = worker.NewRuntime(ctx)
 	s.workerRtm.Start(pollCon)
 
-	err = s.selfRegister(ctx)
+	err := s.selfRegister(ctx)
 	if err != nil {
 		return err
 	}
 
+	s.p2pMsgRouter = p2p.NewMessageRouter(p2p.NodeID(s.info.ID), s.info.Addr)
+
+	s.grpcSrv = grpc.NewServer()
 	err = s.startMsgService(ctx, wg)
+	if err != nil {
+		return err
+	}
+
+	err = s.startTCPService(ctx, wg)
 	if err != nil {
 		return err
 	}
 
 	// connects to metastore and maintains a etcd session
 	wg.Go(func() error {
+		log.L().Info("discoveryKeepalive")
 		return s.discoveryKeepalive(ctx)
 	})
 
@@ -293,7 +299,6 @@ func (s *Server) startTCPService(ctx context.Context, wg *errgroup.Group) error 
 		return err
 	}
 	s.tcpServer = tcpServer
-	s.grpcSrv = grpc.NewServer()
 	pb.RegisterExecutorServer(s.grpcSrv, s)
 	log.L().Logger.Info("listen address", zap.String("addr", s.cfg.WorkerAddr))
 
@@ -308,7 +313,6 @@ func (s *Server) startTCPService(ctx context.Context, wg *errgroup.Group) error 
 	wg.Go(func() error {
 		return debugHandler(s.tcpServer.HTTP1Listener())
 	})
-
 	return nil
 }
 
@@ -400,10 +404,14 @@ func (s *Server) discoveryKeepalive(ctx context.Context) error {
 	}
 	for uuid, exec := range executors {
 		if s.p2pMsgRouter != nil {
+			log.L().Info("add peer",
+				zap.String("uuid", uuid),
+				zap.Any("exec", exec))
 			s.p2pMsgRouter.AddPeer(uuid, exec.Addr)
 		}
 	}
 
+	watchCh := s.discovery.Watch(ctx)
 	for {
 		select {
 		case <-ctx.Done():
@@ -414,7 +422,7 @@ func (s *Server) discoveryKeepalive(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
-		case resp := <-s.discovery.Watch(ctx):
+		case resp := <-watchCh:
 			if resp.Err != nil {
 				log.L().Warn("discovery watch met error", zap.Error(resp.Err))
 				session, err = s.discoveryConnector(ctx)
@@ -425,11 +433,16 @@ func (s *Server) discoveryKeepalive(ctx context.Context) error {
 			}
 			for uuid, add := range resp.AddSet {
 				if s.p2pMsgRouter != nil {
+					log.L().Info("add peer",
+						zap.String("uuid", uuid),
+						zap.Any("exec", add))
 					s.p2pMsgRouter.AddPeer(uuid, add.Addr)
 				}
 			}
 			for uuid := range resp.DelSet {
 				if s.p2pMsgRouter != nil {
+					log.L().Info("remove peer",
+						zap.String("uuid", uuid))
 					s.p2pMsgRouter.RemovePeer(uuid)
 				}
 			}

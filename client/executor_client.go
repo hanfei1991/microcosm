@@ -3,6 +3,8 @@ package client
 import (
 	"context"
 
+	grpc_zap "github.com/grpc-ecosystem/go-grpc-middleware/logging/zap"
+
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/test"
@@ -10,7 +12,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/backoff"
 )
 
 type ExecutorClient interface {
@@ -60,10 +61,16 @@ func newExecutorClient(addr string) (*executorClient, error) {
 	if test.GetGlobalTestFlag() {
 		return newExecutorClientForTest(addr)
 	}
-	conn, err := grpc.Dial(addr, grpc.WithInsecure(), grpc.WithConnectParams(grpc.ConnectParams{Backoff: backoff.DefaultConfig}))
+	conn, err := grpc.Dial(
+		addr,
+		grpc.WithInsecure(),
+		// grpc.WithConnectParams(grpc.ConnectParams{Backoff: backoff.DefaultConfig}),
+		grpc.WithBlock(),
+		grpc.WithUnaryInterceptor(grpc_zap.UnaryClientInterceptor(log.L().Logger)))
 	if err != nil {
 		return nil, errors.ErrGrpcBuildConn.GenWithStackByArgs(addr)
 	}
+
 	return &executorClient{
 		conn:   conn,
 		client: pb.NewExecutorClient(conn),
