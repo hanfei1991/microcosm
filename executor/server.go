@@ -38,6 +38,7 @@ import (
 )
 
 type metaStoreSession interface {
+	Close() error
 	Done() <-chan struct{}
 }
 
@@ -360,7 +361,7 @@ func (s *Server) connectToEtcdDiscovery(ctx context.Context) (metaStoreSession, 
 		etcdCli, adapter.ExecutorInfoKeyAdapter, defaultDiscoverTicker)
 	if old != nil {
 		s.discovery.CopySnapshot(old.SnapshotClone())
-		s.discovery.Close()
+		old.Close()
 	}
 
 	return session, nil
