@@ -33,7 +33,7 @@ func main() {
 	clt, err := client.NewMasterClient(ctx, []string{addr})
 	if err != nil {
 		fmt.Printf("err: %v", err)
-		os.Exit(0)
+		os.Exit(1)
 	}
 
 	if cmd == "submit-job" {
