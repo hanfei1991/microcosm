@@ -14,7 +14,6 @@ import (
 type DiscoveryRunner interface {
 	ResetDiscovery(ctx context.Context, resetSession bool) (Session, error)
 	GetWatcher() <-chan WatchResp
-	GetDiscovery() Discovery
 	// returns current snapshot, DiscoveryRunner maintains this as snapshot plus
 	// revision, which can be used in any failover scenarios. The drawback is to
 	// consume more memory, but since it contains node address information only,
@@ -123,10 +122,6 @@ func (dr *DiscoveryRunnerImpl) ResetDiscovery(ctx context.Context, resetSession 
 	dr.discovery.Close()
 	dr.discoveryWatcher = dr.discovery.Watch(ctx)
 	return session, nil
-}
-
-func (dr *DiscoveryRunnerImpl) GetDiscovery() Discovery {
-	return dr.discovery
 }
 
 func (dr *DiscoveryRunnerImpl) GetSnapshot() Snapshot {

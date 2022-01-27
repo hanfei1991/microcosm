@@ -47,20 +47,6 @@ func (mr *MockDiscoveryRunnerMockRecorder) ApplyWatchResult(arg0 interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyWatchResult", reflect.TypeOf((*MockDiscoveryRunner)(nil).ApplyWatchResult), arg0)
 }
 
-// GetDiscovery mocks base method.
-func (m *MockDiscoveryRunner) GetDiscovery() srvdiscovery.Discovery {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetDiscovery")
-	ret0, _ := ret[0].(srvdiscovery.Discovery)
-	return ret0
-}
-
-// GetDiscovery indicates an expected call of GetDiscovery.
-func (mr *MockDiscoveryRunnerMockRecorder) GetDiscovery() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDiscovery", reflect.TypeOf((*MockDiscoveryRunner)(nil).GetDiscovery))
-}
-
 // GetSnapshot mocks base method.
 func (m *MockDiscoveryRunner) GetSnapshot() srvdiscovery.Snapshot {
 	m.ctrl.T.Helper()

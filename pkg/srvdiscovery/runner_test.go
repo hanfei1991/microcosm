@@ -66,6 +66,7 @@ func TestDiscoveryRunner(t *testing.T) {
 		for {
 			select {
 			case resp := <-watcher:
+				runner.ApplyWatchResult(resp)
 				nodesOn += len(resp.AddSet)
 				if nodesOn == runnerN-i-1 {
 					break check
@@ -74,6 +75,37 @@ func TestDiscoveryRunner(t *testing.T) {
 				require.Fail(t,
 					"not enough peer update received, received: %d, expected: %d",
 					nodesOn, runnerN-i-1)
+			}
+		}
+	}
+
+	// Test another runnerN nodes online, but existing N runners meet failure
+	// or session is done and restart.
+	for i := 0; i < runnerN; i++ {
+		runner := newNodeOnline(i + runnerN)
+		_, err := runner.ResetDiscovery(ctx, true /*resetSession*/)
+		require.Nil(t, err)
+	}
+
+	for _, runner := range runners {
+		_, err := runner.ResetDiscovery(ctx, true /*resetSession*/)
+		require.Nil(t, err)
+		snapshot := runner.GetSnapshot()
+		require.Equal(t, runnerN, len(snapshot))
+		watcher := runner.GetWatcher()
+		nodesOn := 0
+	check2:
+		for {
+			select {
+			case resp := <-watcher:
+				nodesOn += len(resp.AddSet)
+				if nodesOn == runnerN {
+					break check2
+				}
+			case <-time.After(time.Second):
+				require.Fail(t,
+					"not enough peer update received, received: %d, expected: %d",
+					nodesOn, runnerN)
 			}
 		}
 	}
