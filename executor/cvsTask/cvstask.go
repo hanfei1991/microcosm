@@ -25,7 +25,7 @@ type strPair struct {
 	secondStr string
 }
 
-type config struct {
+type Config struct {
 	SrcHost  string `json:"SrcHost"`
 	SrcDir   string `json:"SrcDir"`
 	DstHost  string `json:"DstHost"`
@@ -50,12 +50,12 @@ func init() {
 	constructor := func(ctx *dcontext.Context, id lib.WorkerID, masterID lib.MasterID, config lib.WorkerConfig) lib.Worker {
 		return NewCvsTask(ctx, id, masterID, config)
 	}
-	factory := registry.NewSimpleWorkerFactory(constructor, &config{})
+	factory := registry.NewSimpleWorkerFactory(constructor, &Config{})
 	registry.NewRegistry().MustRegisterWorkerType(lib.CvsTask, factory)
 }
 
 func NewCvsTask(ctx *dcontext.Context, _workerID lib.WorkerID, masterID lib.MasterID, conf lib.WorkerConfig) *cvsTask {
-	cfg := conf.(*config)
+	cfg := conf.(*Config)
 	task := &cvsTask{
 		srcHost: cfg.SrcHost,
 		srcDir:  cfg.SrcDir,

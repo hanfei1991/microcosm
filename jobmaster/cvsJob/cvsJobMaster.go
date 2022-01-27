@@ -4,8 +4,12 @@ import (
 	"context"
 	"encoding/json"
 
+	cvsTask "github.com/hanfei1991/microcosm/executor/cvsTask"
 	"github.com/hanfei1991/microcosm/lib"
+	"github.com/hanfei1991/microcosm/lib/registry"
+	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
+	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
@@ -13,11 +17,10 @@ import (
 )
 
 type Config struct {
-	SrcHost string `json:"srcHost"`
-	SrcDir  string `json:"srcDir"`
-	DstHost string `json:"dstHost"`
-	DstDir  string `json:"dstDir"`
-	Index   int64  `json:"index"`
+	SrcHost string `toml:"srcHost" json:"srcHost"`
+	SrcDir  string `toml:"srcDir" json:"srcDir"`
+	DstHost string `toml:"dstHost" json:"dstHost"`
+	DstDir  string `toml:"dstHost" json:"dstDir"`
 }
 
 type workerInfo struct {
@@ -36,20 +39,35 @@ func (e *errorInfo) Error() string {
 
 type CVSJobMaster struct {
 	*lib.BaseMaster
-	syncInfo      Config
+	syncInfo      *Config
 	syncFilesInfo map[lib.WorkerID]*workerInfo
 	counter       int64
+	workerID      lib.WorkerID
 }
 
 func init() {
-	// registry.NewRegistry().MustRegisterWorkerType()
+	constructor := func(ctx *dcontext.Context, id lib.WorkerID, masterID lib.MasterID, config lib.WorkerConfig) lib.Worker {
+		return NewCVSJobMaster(ctx, id, masterID, config)
+	}
+	factory := registry.NewSimpleWorkerFactory(constructor, &Config{})
+	registry.NewRegistry().MustRegisterWorkerType(lib.CvsJobMaster, factory)
 }
 
-func NewCVSJobMaster(conf Config) lib.MasterImpl {
+func NewCVSJobMaster(ctx *dcontext.Context, _workerID lib.WorkerID, masterID lib.MasterID, conf lib.WorkerConfig) *CVSJobMaster {
 	jm := &CVSJobMaster{}
-	jm.Impl = jm
-	jm.syncInfo = conf
+	jm.workerID = _workerID
+	jm.syncInfo = conf.(*Config)
 	jm.syncFilesInfo = make(map[lib.WorkerID]*workerInfo)
+	deps := ctx.Dependencies
+	base := lib.NewBaseMaster(
+		jm,
+		masterID,
+		deps.MessageHandlerManager,
+		deps.MessageRouter,
+		deps.MetaKVClient,
+		deps.ExecutorClientManager,
+		deps.ServerMasterClient)
+	jm.BaseMaster = base
 	return jm
 }
 
@@ -69,7 +87,7 @@ func (jm *CVSJobMaster) InitImpl(ctx context.Context) error {
 	for _, file := range fileNames {
 		dstDir := jm.syncInfo.DstDir + "/" + file
 		srcDir := jm.syncInfo.SrcDir + "/" + file
-		conf := Config{SrcHost: jm.syncInfo.SrcHost, SrcDir: srcDir, DstHost: jm.syncInfo.DstHost, DstDir: dstDir, Index: 0}
+		conf := cvsTask.Config{SrcHost: jm.syncInfo.SrcHost, SrcDir: srcDir, DstHost: jm.syncInfo.DstHost, DstDir: dstDir, StartLoc: 0}
 		bytes, err := json.Marshal(conf)
 		if err != nil {
 		}
@@ -131,7 +149,7 @@ func (jm *CVSJobMaster) OnWorkerOffline(worker lib.WorkerHandle, reason error) e
 	var err error
 	dstDir := jm.syncInfo.DstDir + "/" + syncInfo.file
 	srcDir := jm.syncInfo.SrcDir + "/" + syncInfo.file
-	conf := Config{SrcHost: jm.syncInfo.SrcHost, SrcDir: srcDir, DstHost: jm.syncInfo.DstHost, DstDir: dstDir, Index: syncInfo.curLoc}
+	conf := cvsTask.Config{SrcHost: jm.syncInfo.SrcHost, SrcDir: srcDir, DstHost: jm.syncInfo.DstHost, DstDir: dstDir, StartLoc: syncInfo.curLoc}
 	bytes, err := json.Marshal(conf)
 	if err != nil {
 		log.L().Info("error happened when getting json from the configure", zap.Any("configure:", conf))
@@ -153,6 +171,14 @@ func (jm *CVSJobMaster) OnWorkerMessage(worker lib.WorkerHandle, topic p2p.Topic
 // CloseImpl is called when the master is being closed
 func (jm *CVSJobMaster) CloseImpl(ctx context.Context) error {
 	return nil
+}
+
+func (jm *CVSJobMaster) WorkerID() lib.WorkerID {
+	return jm.workerID
+}
+
+func (jm *CVSJobMaster) Workload() model.RescUnit {
+	return 2
 }
 
 func (jm *CVSJobMaster) listSrcFiles(ctx context.Context) ([]string, error) {
