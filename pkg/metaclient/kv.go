@@ -124,6 +124,7 @@ type Txn interface {
 	Do(ops ...Op) Txn
 
 	// Commit tries to commit the transaction.
+	// Any Op error will cause entire txn rollback and return error
 	Commit(ctx context.Context) (*TxnResponse, error)
 }
 

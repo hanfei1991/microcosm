@@ -9,6 +9,7 @@ import (
 )
 
 func TestConfigClone(t *testing.T) {
+	t.Parallel()
 	conf := Config{
 		Endpoints: []string{"127.0.0.1:3000", "127.0.0.1:3001"},
 		Auth: AuthConf{
