@@ -51,7 +51,7 @@ func init() {
 		return NewCvsTask(ctx, id, masterID, config)
 	}
 	factory := registry.NewSimpleWorkerFactory(constructor, &Config{})
-	registry.NewRegistry().MustRegisterWorkerType(lib.CvsTask, factory)
+	registry.GlobalWorkerRegistry().MustRegisterWorkerType(lib.CvsTask, factory)
 }
 
 func NewCvsTask(ctx *dcontext.Context, _workerID lib.WorkerID, masterID lib.MasterID, conf lib.WorkerConfig) *cvsTask {
@@ -74,6 +74,7 @@ func NewCvsTask(ctx *dcontext.Context, _workerID lib.WorkerID, masterID lib.Mast
 		masterID,
 	)
 	base.Impl = task
+	task.BaseWorker = base
 	return task
 }
 
@@ -98,6 +99,8 @@ func (task *cvsTask) InitImpl(ctx context.Context) error {
 
 // Tick is called on a fixed interval.
 func (task *cvsTask) Tick(ctx context.Context) error {
+	// log.L().Info("cvs task tick", zap.Any(" task id ", string(task.ID())+" -- "+strconv.FormatInt(task.counter, 10)))
+
 	return nil
 }
 
@@ -141,9 +144,10 @@ func (task *cvsTask) Receive(ctx context.Context) error {
 			if err == io.EOF {
 				break
 			}
-			log.L().Info("read data failed")
+			log.L().Info("read data failed", zap.Any("error:", err.Error()))
 			continue
 		}
+		log.L().Info("read data ", zap.Any(" :", linestr.Linestr))
 		strs := strings.Split(linestr.Linestr, ",")
 		if len(strs) < 2 {
 			continue
@@ -170,12 +174,14 @@ func (task *cvsTask) Send(ctx context.Context) error {
 		log.L().Info("call write data rpc failed ")
 		return err
 	}
-	timeout := time.NewTimer(time.Second * 100)
+	timeout := time.NewTimer(time.Second * 10)
+	log.L().Info("enter the send func ", zap.Any(" id :", string(task.ID())))
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		case kv := <-task.buffer:
+			// log.L().Info("write data ", zap.Any(" id :", string(task.ID())+"  --"+kv.firstStr))
 			err := writer.Send(&pb.WriteLinesRequest{FileName: task.dstDir, Key: kv.firstStr, Value: kv.secondStr})
 			task.counter++
 			if err != nil {

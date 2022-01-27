@@ -233,6 +233,8 @@ func (w *BaseWorker) runStatusWorker(ctx context.Context) error {
 		}
 
 		status := w.Impl.Status()
+		log.L().Info("status",
+			zap.Any(" --", status))
 		if err := w.masterClient.SendStatus(ctx, status); err != nil {
 			return errors.Trace(err)
 		}

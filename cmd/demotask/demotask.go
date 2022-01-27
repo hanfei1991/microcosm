@@ -100,7 +100,12 @@ func (c *democlient) Send(ctx context.Context, dest string) error {
 		case <-ctx.Done():
 			return nil
 		case kv := <-c.buffer:
-			if err := writer.Send(&pb.WriteLinesRequest{FileName: dest, Key: kv.key, Value: kv.value}); err != nil {
+			err = writer.Send(&pb.WriteLinesRequest{FileName: dest, Key: kv.key, Value: kv.value})
+			if err == nil {
+				fmt.Printf("send the key %v ", kv.key)
+			} else if err == io.EOF {
+				fmt.Print("reach the end of the file ")
+			} else {
 				log.Fatal(err)
 			}
 		default:

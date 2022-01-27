@@ -176,7 +176,7 @@ func (m *workerManagerImpl) UpdateStatus(msg *StatusUpdateMessage) {
 		return
 	}
 	info.status = msg.Status
-	log.L().Debug("worker status updated",
+	log.L().Info("worker status updated",
 		zap.String("master-id", string(m.masterID)),
 		zap.Any("msg", msg))
 }
