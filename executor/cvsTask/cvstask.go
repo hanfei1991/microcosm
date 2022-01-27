@@ -180,7 +180,6 @@ func (task *cvsTask) Send(ctx context.Context) error {
 	for {
 		select {
 		case kv := <-task.buffer:
-			//log.L().Info("write data ", zap.Any(" id :", string(task.ID())+"  --"+kv.firstStr))
 			err := writer.Send(&pb.WriteLinesRequest{FileName: task.dstDir, Key: kv.firstStr, Value: kv.secondStr})
 			task.counter++
 			if err != nil {
