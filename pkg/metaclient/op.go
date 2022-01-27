@@ -128,6 +128,8 @@ func (op Op) Limit() int64 { return op.limit }
 // WithLimit sets the limit num for `Get` response.
 func (op *Op) WithLimit(limit int64) { op.limit = limit }
 
+func (op *Op) WithSort(sort SortOption) { op.sort = sort.Clone() }
+
 // Sort returns the sort option for `Get` response, if any.
 func (op Op) Sort() *SortOption {
 	if op.sort == nil {

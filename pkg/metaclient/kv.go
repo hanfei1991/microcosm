@@ -112,7 +112,7 @@ type KeyValue struct {
 	// Value is the value held by the key, in bytes.
 	Value []byte
 	// Remaining TTL for the key
-	TTL uint64
+	TTL int64
 	// create_revision is the revision of last creation on this key.
 	CreateRevision int64
 	// mod_revision is the revision of last modification on this key.
