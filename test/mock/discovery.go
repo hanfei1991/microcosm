@@ -74,20 +74,6 @@ func (mr *MockDiscoveryMockRecorder) Snapshot(ctx interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Snapshot", reflect.TypeOf((*MockDiscovery)(nil).Snapshot), ctx)
 }
 
-// SnapshotClone mocks base method.
-func (m *MockDiscovery) SnapshotClone() srvdiscovery.Snapshot {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SnapshotClone")
-	ret0, _ := ret[0].(srvdiscovery.Snapshot)
-	return ret0
-}
-
-// SnapshotClone indicates an expected call of SnapshotClone.
-func (mr *MockDiscoveryMockRecorder) SnapshotClone() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SnapshotClone", reflect.TypeOf((*MockDiscovery)(nil).SnapshotClone))
-}
-
 // Watch mocks base method.
 func (m *MockDiscovery) Watch(ctx context.Context) <-chan srvdiscovery.WatchResp {
 	m.ctrl.T.Helper()

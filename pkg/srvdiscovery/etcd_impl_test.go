@@ -107,23 +107,3 @@ func TestEtcdDiscoveryAPI(t *testing.T) {
 	wresp = <-ch
 	require.Error(t, wresp.Err, errors.ErrDiscoveryDuplicateWatch.GetMsg())
 }
-
-func TestSnapshotClone(t *testing.T) {
-	t.Parallel()
-	snapshot := Snapshot{
-		"uuid-1": {Addr: "127.0.0.1:10001"},
-		"uuid-2": {Addr: "127.0.0.1:10002"},
-	}
-	discovery := EtcdSrvDiscovery{
-		snapshot: snapshot,
-	}
-	cloned := discovery.SnapshotClone()
-	require.Equal(t, snapshot, cloned)
-	for k := range snapshot {
-		delete(snapshot, k)
-	}
-	require.Equal(t, Snapshot{
-		"uuid-1": {Addr: "127.0.0.1:10001"},
-		"uuid-2": {Addr: "127.0.0.1:10002"},
-	}, cloned)
-}
