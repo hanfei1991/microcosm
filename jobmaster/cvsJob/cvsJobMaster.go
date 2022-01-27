@@ -95,10 +95,6 @@ func (jm *JobMaster) InitImpl(ctx context.Context) error {
 		dstDir := jm.syncInfo.DstDir + "/" + file
 		srcDir := jm.syncInfo.SrcDir + "/" + file
 		conf := cvsTask.Config{SrcHost: jm.syncInfo.SrcHost, SrcDir: srcDir, DstHost: jm.syncInfo.DstHost, DstDir: dstDir, StartLoc: 0}
-		//	bytes, err := json.Marshal(conf)
-		//		if err != nil {
-		//		}
-		// todo:createworker should return worker id
 		workerID, err := jm.CreateWorker(lib.CvsTask, conf, 10 /* TODO add cost */)
 		if err != nil {
 			// todo : handle the error case
