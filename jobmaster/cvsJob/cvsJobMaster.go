@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 
-	cvsTask "github.com/hanfei1991/microcosm/executor/cvsTask"
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/lib/registry"
 	"github.com/hanfei1991/microcosm/model"
@@ -17,10 +16,11 @@ import (
 )
 
 type Config struct {
-	SrcHost string `toml:"srcHost" json:"srcHost"`
-	SrcDir  string `toml:"srcDir" json:"srcDir"`
-	DstHost string `toml:"dstHost" json:"dstHost"`
-	DstDir  string `toml:"dstHost" json:"dstDir"`
+	SrcHost string `json:"srcHost"`
+	SrcDir  string `json:"srcDir"`
+	DstHost string `json:"dstHost"`
+	DstDir  string `json:"dstDir"`
+	Index   int64  `json:"index"`
 }
 
 type workerInfo struct {
@@ -60,6 +60,7 @@ func NewCVSJobMaster(ctx *dcontext.Context, _workerID lib.WorkerID, masterID lib
 	jm.syncFilesInfo = make(map[lib.WorkerID]*workerInfo)
 	deps := ctx.Dependencies
 	base := lib.NewBaseMaster(
+		ctx,
 		jm,
 		masterID,
 		deps.MessageHandlerManager,
@@ -87,7 +88,7 @@ func (jm *CVSJobMaster) InitImpl(ctx context.Context) error {
 	for _, file := range fileNames {
 		dstDir := jm.syncInfo.DstDir + "/" + file
 		srcDir := jm.syncInfo.SrcDir + "/" + file
-		conf := cvsTask.Config{SrcHost: jm.syncInfo.SrcHost, SrcDir: srcDir, DstHost: jm.syncInfo.DstHost, DstDir: dstDir, StartLoc: 0}
+		conf := Config{SrcHost: jm.syncInfo.SrcHost, SrcDir: srcDir, DstHost: jm.syncInfo.DstHost, DstDir: dstDir, Index: 0}
 		bytes, err := json.Marshal(conf)
 		if err != nil {
 		}
@@ -149,7 +150,7 @@ func (jm *CVSJobMaster) OnWorkerOffline(worker lib.WorkerHandle, reason error) e
 	var err error
 	dstDir := jm.syncInfo.DstDir + "/" + syncInfo.file
 	srcDir := jm.syncInfo.SrcDir + "/" + syncInfo.file
-	conf := cvsTask.Config{SrcHost: jm.syncInfo.SrcHost, SrcDir: srcDir, DstHost: jm.syncInfo.DstHost, DstDir: dstDir, StartLoc: syncInfo.curLoc}
+	conf := Config{SrcHost: jm.syncInfo.SrcHost, SrcDir: srcDir, DstHost: jm.syncInfo.DstHost, DstDir: dstDir, Index: syncInfo.curLoc}
 	bytes, err := json.Marshal(conf)
 	if err != nil {
 		log.L().Info("error happened when getting json from the configure", zap.Any("configure:", conf))

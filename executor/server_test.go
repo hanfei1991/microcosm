@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
 )
 
 func init() {
@@ -39,6 +40,7 @@ func TestStartTCPSrv(t *testing.T) {
 	cfg.WorkerAddr = addr
 	s := NewServer(cfg, nil)
 
+	s.grpcSrv = grpc.NewServer()
 	wg, ctx := errgroup.WithContext(context.Background())
 	err = s.startTCPService(ctx, wg)
 	require.Nil(t, err)
@@ -127,8 +129,10 @@ func TestDiscoveryKeepalive(t *testing.T) {
 		"uuid-2": {Addr: "127.0.0.1:10002"},
 	}
 	watchResp := make(chan srvdiscovery.WatchResp, 1)
+	watchRespReset := make(chan srvdiscovery.WatchResp, 1)
 	disc.EXPECT().Snapshot(ctx).Return(snapshot, nil)
-	disc.EXPECT().Watch(ctx).Return(watchResp).AnyTimes()
+	disc.EXPECT().Watch(ctx).Return(watchResp)
+	disc.EXPECT().Watch(ctx).Return(watchRespReset).AnyTimes()
 
 	router := &mockMessageRouter{peers: map[p2pImpl.NodeID]string{}}
 	s := &Server{
@@ -155,10 +159,12 @@ func TestDiscoveryKeepalive(t *testing.T) {
 		require.EqualError(t, err, context.Canceled.Error())
 	}()
 
+	var peers map[string]string
 	// check snapshot can be load when discovery keepalive routine starts for the first time
-	time.Sleep(time.Millisecond * 50)
-	peers := router.GetPeers()
-	require.Equal(t, 2, len(peers))
+	require.Eventually(t, func() bool {
+		peers = router.GetPeers()
+		return len(peers) == 2
+	}, time.Second, time.Millisecond*20)
 	require.Contains(t, peers, "uuid-1")
 	require.Contains(t, peers, "uuid-2")
 	require.Equal(t, int64(1), discoveryConnectTime.Load())
@@ -173,22 +179,40 @@ func TestDiscoveryKeepalive(t *testing.T) {
 			"uuid-2": {Addr: "127.0.0.1:10002"},
 		},
 	}
-	time.Sleep(time.Millisecond * 50)
-	peers = router.GetPeers()
-	require.Equal(t, 3, len(peers))
+	require.Eventually(t, func() bool {
+		peers = router.GetPeers()
+		return len(peers) == 3
+	}, time.Second, time.Millisecond*20)
 	require.Contains(t, peers, "uuid-1")
 	require.Contains(t, peers, "uuid-3")
 	require.Contains(t, peers, "uuid-4")
 
 	// check will reconnect to discovery metastore when watch meets error
 	watchResp <- srvdiscovery.WatchResp{Err: stdErrors.New("mock discovery watch error")}
-	time.Sleep(time.Millisecond * 50)
-	require.Equal(t, int64(2), discoveryConnectTime.Load())
+	require.Eventually(t, func() bool {
+		return discoveryConnectTime.Load() == int64(2)
+	}, time.Second, time.Millisecond*20)
 
 	// check will reconnect to discovery metastore when metastore session is done
 	doneCh <- struct{}{}
-	time.Sleep(time.Millisecond * 50)
-	require.Equal(t, int64(3), discoveryConnectTime.Load())
+	require.Eventually(t, func() bool {
+		return discoveryConnectTime.Load() == int64(3)
+	}, time.Second, time.Millisecond*20)
+
+	// check the watch channel can be reset after error happens
+	watchRespReset <- srvdiscovery.WatchResp{
+		AddSet: map[srvdiscovery.UUID]srvdiscovery.ServiceResource{
+			"uuid-2": {Addr: "127.0.0.1:10002"},
+		},
+	}
+	require.Eventually(t, func() bool {
+		peers = router.GetPeers()
+		return len(peers) == 4
+	}, time.Second, time.Millisecond*20)
+	require.Contains(t, peers, "uuid-1")
+	require.Contains(t, peers, "uuid-2")
+	require.Contains(t, peers, "uuid-3")
+	require.Contains(t, peers, "uuid-4")
 
 	cancel()
 	wg.Wait()
