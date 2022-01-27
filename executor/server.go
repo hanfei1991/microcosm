@@ -13,7 +13,6 @@ import (
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
-	"github.com/hanfei1991/microcosm/pkg/autoid"
 	"github.com/hanfei1991/microcosm/pkg/config"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/errors"
@@ -54,7 +53,6 @@ type Server struct {
 	workerRtm   *worker.Runtime
 	msgServer   *p2p.MessageRPCService
 	info        *model.ExecutorInfo
-	idAllocator *autoid.UUIDAllocator
 
 	lastHearbeatTime time.Time
 
@@ -72,7 +70,6 @@ func NewServer(cfg *Config, ctx *test.Context) *Server {
 		cfg:         cfg,
 		testCtx:     ctx,
 		cliUpdateCh: make(chan []string),
-		idAllocator: autoid.NewUUIDAllocator(),
 	}
 	s.discoveryConnector = s.connectToEtcdDiscovery
 	return &s
@@ -272,7 +269,6 @@ func (s *Server) Run(ctx context.Context) error {
 
 	// connects to metastore and maintains a etcd session
 	wg.Go(func() error {
-		log.L().Info("discoveryKeepalive")
 		return s.discoveryKeepalive(ctx)
 	})
 

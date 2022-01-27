@@ -66,6 +66,8 @@ func newExecutorClient(addr string) (*executorClient, error) {
 		grpc.WithInsecure(),
 		grpc.WithConnectParams(grpc.ConnectParams{Backoff: backoff.DefaultConfig}),
 		grpc.WithBlock(),
+		// We log gRPC requests here to aid debugging
+		// TODO add a switch to turn off the gRPC request log.
 		grpc.WithUnaryInterceptor(grpc_zap.UnaryClientInterceptor(log.L().Logger)))
 	if err != nil {
 		return nil, errors.ErrGrpcBuildConn.GenWithStackByArgs(addr)

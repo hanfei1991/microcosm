@@ -35,7 +35,8 @@ func (s *Scheduler) Run(conn int) {
 }
 
 func (s *Scheduler) runImpl() {
-	ticker := time.NewTicker(time.Millisecond * 200)
+	ticker := time.NewTicker(emptyRestDuration)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-s.ctx.Done():
@@ -45,7 +46,6 @@ func (s *Scheduler) runImpl() {
 		s.Lock()
 		if s.queue.Empty() {
 			s.Unlock()
-			time.Sleep(emptyRestDuration)
 			continue
 		}
 		worker := s.queue.PopFront().(lib.Worker)
