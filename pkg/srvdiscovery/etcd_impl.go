@@ -61,15 +61,6 @@ func (d *EtcdSrvDiscovery) Watch(ctx context.Context) <-chan WatchResp {
 	return ch
 }
 
-// SnapshotClone implements Discovery.SnapshotClone
-func (d *EtcdSrvDiscovery) SnapshotClone() Snapshot {
-	snapshot := make(map[UUID]ServiceResource, len(d.snapshot))
-	for k, v := range d.snapshot {
-		snapshot[k] = v
-	}
-	return snapshot
-}
-
 // CopySnapshot implements Discovery.CopySnapshot
 func (d *EtcdSrvDiscovery) CopySnapshot(snapshot Snapshot) {
 	d.snapshot = snapshot
