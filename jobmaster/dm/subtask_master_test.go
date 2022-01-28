@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/hanfei1991/microcosm/client"
@@ -20,7 +21,14 @@ func mockMaster(t *testing.T, id lib.MasterID) *SubTaskMaster {
 	ret := &SubTaskMaster{
 		id: id,
 	}
+
+	mockServerMasterClient := &client.MockServerMasterClient{}
+	mockServerMasterClient.On("ScheduleTask",
+		mock.Anything, mock.Anything, mock.Anything).
+		Return(nil)
+
 	ret.BaseMaster = lib.NewBaseMaster(
+		nil,
 		ret,
 		id,
 		p2p.NewMockMessageHandlerManager(),

@@ -86,13 +86,12 @@ func TestDumpWorker(t *testing.T) {
 	err = worker.Tick(ctx)
 	require.NoError(t, err)
 	utils.WaitSomething(10, 100*time.Millisecond, func() bool {
-		status, err := worker.Status()
-		require.NoError(t, err)
+		status := worker.Status()
 		return status.Code == lib.WorkerStatusError || status.Code == lib.WorkerStatusFinished
 	})
 	cancel()
-	status, err := worker.Status()
-	require.NoError(t, err)
+	status := worker.Status()
 	require.Equal(t, lib.WorkerStatusFinished, status.Code)
-	worker.Close()
+	err = worker.Close(context.Background())
+	require.NoError(t, err)
 }

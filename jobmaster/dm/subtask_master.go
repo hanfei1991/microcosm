@@ -22,6 +22,8 @@ const (
 	WorkerSyncUnit
 )
 
+var _ lib.MasterImpl = &SubTaskMaster{}
+
 type SubTaskMaster struct {
 	*lib.BaseMaster
 

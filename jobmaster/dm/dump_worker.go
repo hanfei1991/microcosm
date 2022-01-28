@@ -14,6 +14,8 @@ import (
 	"github.com/hanfei1991/microcosm/model"
 )
 
+var _ lib.WorkerImpl = &dumpWorker{}
+
 type dumpWorker struct {
 	*lib.BaseWorker
 
@@ -47,7 +49,7 @@ func (d *dumpWorker) Tick(ctx context.Context) error {
 	return nil
 }
 
-func (d *dumpWorker) Status() (lib.WorkerStatus, error) {
+func (d *dumpWorker) Status() lib.WorkerStatus {
 	select {
 	case result := <-d.processCh:
 		d.lastResult = &result
@@ -58,15 +60,15 @@ func (d *dumpWorker) Status() (lib.WorkerStatus, error) {
 
 	switch {
 	case d.lastResult == nil:
-		return lib.WorkerStatus{Code: lib.WorkerStatusNormal, Ext: status}, nil
+		return lib.WorkerStatus{Code: lib.WorkerStatusNormal, Ext: status}
 	case len(d.lastResult.Errors) > 0:
 		return lib.WorkerStatus{
 			Code:         lib.WorkerStatusError,
 			ErrorMessage: d.lastResult.Errors[0].String(),
 			Ext:          status,
-		}, nil
+		}
 	default:
-		return lib.WorkerStatus{Code: lib.WorkerStatusFinished, Ext: status}, nil
+		return lib.WorkerStatus{Code: lib.WorkerStatusFinished, Ext: status}
 	}
 }
 
@@ -80,6 +82,7 @@ func (d *dumpWorker) OnMasterFailover(reason lib.MasterFailoverReason) error {
 	return nil
 }
 
-func (d *dumpWorker) CloseImpl() {
+func (d *dumpWorker) CloseImpl(ctx context.Context) error {
 	d.core.Close()
+	return nil
 }
