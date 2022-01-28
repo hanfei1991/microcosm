@@ -6,6 +6,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hanfei1991/microcosm/lib/quota"
+
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
@@ -56,7 +58,8 @@ type MasterImpl interface {
 }
 
 const (
-	createWorkerTimeout = 10 * time.Second
+	createWorkerTimeout        = 10 * time.Second
+	maxCreateWorkerConcurrency = 100
 )
 
 type BaseMaster struct {
@@ -90,6 +93,9 @@ type BaseMaster struct {
 
 	// components for easier unit testing
 	uuidGen uuid.Generator
+
+	// TODO use a shared quota for all masters.
+	createWorkerQuota quota.ConcurrencyQuota
 }
 
 func NewBaseMaster(
@@ -129,6 +135,8 @@ func NewBaseMaster(
 
 		nodeID:        nodeID,
 		advertiseAddr: advertiseAddr,
+
+		createWorkerQuota: quota.NewConcurrencyQuota(maxCreateWorkerConcurrency),
 	}
 }
 
@@ -388,12 +396,13 @@ func (m *BaseMaster) CreateWorker(workerType WorkerType, config WorkerConfig, co
 	// workerID is expected to be globally unique.
 	workerID := WorkerID(m.uuidGen.NewString())
 
-	// poolCtx is used to prevent `m.pool.Go(...)` from blocking indefinitely.
-	// TODO add an asynchronous interface to the pool, so that we do not need a context anymore.
-	poolCtx, cancel := context.WithTimeout(context.Background(), createWorkerTimeout)
-	defer cancel()
+	if !m.createWorkerQuota.TryConsume() {
+		return "", derror.ErrMasterConcurrencyExceeded.GenWithStackByArgs()
+	}
 
-	err = m.pool.Go(poolCtx, func() {
+	go func() {
+		defer m.createWorkerQuota.Release()
+
 		requestCtx, cancel := context.WithTimeout(context.Background(), createWorkerTimeout)
 		defer cancel()
 		// This following API should be refined.
@@ -463,10 +472,7 @@ func (m *BaseMaster) CreateWorker(workerType WorkerType, config WorkerConfig, co
 		if err := m.Impl.OnWorkerDispatched(handle, nil); err != nil {
 			m.OnError(errors.Trace(err))
 		}
-	})
-	if err != nil {
-		return "", errors.Trace(err)
-	}
+	}()
 
 	registerHandlerCtx, cancelRegisterHandler := context.WithTimeout(context.TODO(), time.Second*1)
 	defer cancelRegisterHandler()
