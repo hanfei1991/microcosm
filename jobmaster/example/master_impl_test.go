@@ -52,11 +52,11 @@ func TestExampleMaster(t *testing.T) {
 	// master.Init will asynchronously create a worker
 	require.Eventually(t, func() bool {
 		master.worker.mu.Lock()
+		require.NoError(t, master.worker.receivedErr)
 		handle := master.worker.handle
 		master.worker.mu.Unlock()
 		return handle != nil
 	}, time.Second, 100*time.Millisecond)
-	require.NoError(t, master.receivedErr)
 
 	// GetWorkers and master.CreateWorker should be consistent
 	handle, ok := master.GetWorkers()[master.worker.id]

@@ -24,14 +24,14 @@ type exampleMaster struct {
 	worker struct {
 		mu sync.Mutex
 
-		id         lib.WorkerID
-		handle     lib.WorkerHandle
-		online     bool
-		statusCode lib.WorkerStatusCode
+		id          lib.WorkerID
+		handle      lib.WorkerHandle
+		online      bool
+		statusCode  lib.WorkerStatusCode
+		receivedErr error
 	}
 
-	tickCount   int
-	receivedErr error
+	tickCount int
 }
 
 func (e *exampleMaster) InitImpl(ctx context.Context) (err error) {
@@ -65,8 +65,8 @@ func (e *exampleMaster) OnWorkerDispatched(worker lib.WorkerHandle, result error
 	log.L().Info("OnWorkerDispatched")
 	e.worker.mu.Lock()
 	e.worker.handle = worker
+	e.worker.receivedErr = result
 	e.worker.mu.Unlock()
-	e.receivedErr = result
 	return nil
 }
 
