@@ -7,8 +7,10 @@ import (
 	"time"
 
 	"github.com/hanfei1991/microcosm/client"
+	"github.com/hanfei1991/microcosm/lib/quota"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
+	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
@@ -55,7 +57,8 @@ type MasterImpl interface {
 }
 
 const (
-	createWorkerTimeout = 10 * time.Second
+	createWorkerTimeout        = 10 * time.Second
+	maxCreateWorkerConcurrency = 100
 )
 
 type BaseMaster struct {
@@ -89,9 +92,13 @@ type BaseMaster struct {
 
 	// components for easier unit testing
 	uuidGen uuid.Generator
+
+	// TODO use a shared quota for all masters.
+	createWorkerQuota quota.ConcurrencyQuota
 }
 
 func NewBaseMaster(
+	ctx *dcontext.Context,
 	impl MasterImpl,
 	id MasterID,
 	messageHandlerManager p2p.MessageHandlerManager,
@@ -100,6 +107,14 @@ func NewBaseMaster(
 	executorClientManager client.ClientsManager,
 	serverMasterClient client.MasterClient,
 ) *BaseMaster {
+	var (
+		nodeID        p2p.NodeID
+		advertiseAddr string
+	)
+	if ctx != nil {
+		nodeID = ctx.Environ.NodeID
+		advertiseAddr = ctx.Environ.Addr
+	}
 	return &BaseMaster{
 		Impl:                  impl,
 		messageHandlerManager: messageHandlerManager,
@@ -116,6 +131,11 @@ func NewBaseMaster(
 		closeCh: make(chan struct{}),
 
 		uuidGen: uuid.NewGenerator(),
+
+		nodeID:        nodeID,
+		advertiseAddr: advertiseAddr,
+
+		createWorkerQuota: quota.NewConcurrencyQuota(maxCreateWorkerConcurrency),
 	}
 }
 
@@ -132,10 +152,6 @@ func (m *BaseMaster) Init(ctx context.Context) error {
 	m.workerManager = newWorkerManager(m.id, !isInit, epoch)
 
 	m.startBackgroundTasks()
-
-	if err := m.initMessageHandlers(ctx); err != nil {
-		return errors.Trace(err)
-	}
 
 	if isInit {
 		if err := m.Impl.InitImpl(ctx); err != nil {
@@ -232,20 +248,22 @@ func (m *BaseMaster) runWorkerCheck(ctx context.Context) error {
 		}
 
 		offlinedWorkers, onlinedWorkers := m.workerManager.Tick(ctx, m.messageRouter)
-		for _, workerInfo := range offlinedWorkers {
-			log.L().Info("worker is offline", zap.Any("worker-info", workerInfo))
-			tombstoneHandle := NewTombstoneWorkerHandle(workerInfo.ID, workerInfo.status)
-			err := m.Impl.OnWorkerOffline(tombstoneHandle, derror.ErrWorkerOffline.GenWithStackByArgs(workerInfo.ID))
-			if err != nil {
-				return errors.Trace(err)
-			}
-		}
-
+		// It is logical to call `OnWorkerOnline` first and then call `OnWorkerOffline`.
+		// In case that these two events for the same worker is detected in the same tick.
 		for _, workerInfo := range onlinedWorkers {
 			log.L().Info("worker is online", zap.Any("worker-info", workerInfo))
 
 			handle := m.workerManager.GetWorkerHandle(workerInfo.ID)
 			err := m.Impl.OnWorkerOnline(handle)
+			if err != nil {
+				return errors.Trace(err)
+			}
+		}
+
+		for _, workerInfo := range offlinedWorkers {
+			log.L().Info("worker is offline", zap.Any("worker-info", workerInfo))
+			tombstoneHandle := NewTombstoneWorkerHandle(workerInfo.ID, workerInfo.status)
+			err := m.Impl.OnWorkerOffline(tombstoneHandle, derror.ErrWorkerOffline.GenWithStackByArgs(workerInfo.ID))
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -315,8 +333,8 @@ func (m *BaseMaster) markInitializedInMetadata(ctx context.Context) error {
 	return nil
 }
 
-func (m *BaseMaster) initMessageHandlers(ctx context.Context) error {
-	topic := HeartbeatPingTopic(m.id)
+func (m *BaseMaster) registerHandlerForWorker(ctx context.Context, workerID WorkerID) error {
+	topic := HeartbeatPingTopic(m.id, workerID)
 	ok, err := m.messageHandlerManager.RegisterHandler(
 		ctx,
 		topic,
@@ -344,7 +362,7 @@ func (m *BaseMaster) initMessageHandlers(ctx context.Context) error {
 			zap.String("topic", topic))
 	}
 
-	topic = StatusUpdateTopic(m.id)
+	topic = StatusUpdateTopic(m.id, workerID)
 	ok, err = m.messageHandlerManager.RegisterHandler(
 		ctx,
 		topic,
@@ -377,12 +395,13 @@ func (m *BaseMaster) CreateWorker(workerType WorkerType, config WorkerConfig, co
 	// workerID is expected to be globally unique.
 	workerID := WorkerID(m.uuidGen.NewString())
 
-	// poolCtx is used to prevent `m.pool.Go(...)` from blocking indefinitely.
-	// TODO add an asynchronous interface to the pool, so that we do not need a context anymore.
-	poolCtx, cancel := context.WithTimeout(context.Background(), createWorkerTimeout)
-	defer cancel()
+	if !m.createWorkerQuota.TryConsume() {
+		return "", derror.ErrMasterConcurrencyExceeded.GenWithStackByArgs()
+	}
 
-	err = m.pool.Go(poolCtx, func() {
+	go func() {
+		defer m.createWorkerQuota.Release()
+
 		requestCtx, cancel := context.WithTimeout(context.Background(), createWorkerTimeout)
 		defer cancel()
 		// This following API should be refined.
@@ -433,6 +452,7 @@ func (m *BaseMaster) CreateWorker(workerType WorkerType, config WorkerConfig, co
 			return
 		}
 		dispatchTaskResp := executorResp.Resp.(*pb.DispatchTaskResponse)
+		log.L().Info("Worker dispatched", zap.Any("response", dispatchTaskResp))
 		errCode := dispatchTaskResp.GetErrorCode()
 		if errCode != pb.DispatchTaskErrorCode_OK {
 			err1 := m.Impl.OnWorkerDispatched(
@@ -451,8 +471,12 @@ func (m *BaseMaster) CreateWorker(workerType WorkerType, config WorkerConfig, co
 		if err := m.Impl.OnWorkerDispatched(handle, nil); err != nil {
 			m.OnError(errors.Trace(err))
 		}
-	})
-	if err != nil {
+	}()
+
+	registerHandlerCtx, cancelRegisterHandler := context.WithTimeout(context.TODO(), time.Second*1)
+	defer cancelRegisterHandler()
+
+	if err := m.registerHandlerForWorker(registerHandlerCtx, workerID); err != nil {
 		return "", errors.Trace(err)
 	}
 	return workerID, nil

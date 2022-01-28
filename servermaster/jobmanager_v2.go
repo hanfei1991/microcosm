@@ -6,8 +6,10 @@ import (
 
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/lib"
+	"github.com/hanfei1991/microcosm/lib/registry"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
+	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
@@ -61,7 +63,8 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 	}
 	// CreateWorker here is to create job master actually
 	// TODO: use correct worker type and worker cost
-	id, err := jm.BaseMaster.CreateWorker(lib.WorkerType(99), masterConfig, defaultJobMasterCost)
+	id, err := jm.BaseMaster.CreateWorker(
+		registry.WorkerTypeFakeMaster, masterConfig, defaultJobMasterCost)
 	if err != nil {
 		log.L().Error("create job master met error", zap.Error(err))
 		resp.Err = errors.ToPBError(err)
@@ -87,7 +90,9 @@ func NewJobManagerImplV2(
 		metaKVClient:          metaKVClient,
 		workers:               make(map[lib.WorkerID]lib.WorkerHandle),
 	}
+	dctx := dcontext.NewContext(ctx, log.L())
 	impl.BaseMaster = lib.NewBaseMaster(
+		dctx,
 		impl,
 		id,
 		impl.messageHandlerManager,
