@@ -6,9 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hanfei1991/microcosm/lib/quota"
-
 	"github.com/hanfei1991/microcosm/client"
+	"github.com/hanfei1991/microcosm/lib/quota"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
