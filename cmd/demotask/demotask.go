@@ -75,6 +75,8 @@ func (c *democlient) Receive(ctx context.Context, sources string) error {
 				fmt.Printf("reach the end of the file %v \n", linestr.Linestr)
 				break
 			}
+			fmt.Printf("reach the end of the file %v \n", err.Error())
+
 			log.Fatal(err)
 		}
 		fmt.Printf("read the string %v \n", linestr.Linestr)
@@ -84,7 +86,7 @@ func (c *democlient) Receive(ctx context.Context, sources string) error {
 		} else {
 			break
 		}
-		// time.Sleep(time.Second)
+
 	}
 	return nil
 }

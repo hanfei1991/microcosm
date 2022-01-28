@@ -99,8 +99,7 @@ func (task *cvsTask) InitImpl(ctx context.Context) error {
 
 // Tick is called on a fixed interval.
 func (task *cvsTask) Tick(ctx context.Context) error {
-
-	//log.L().Info("cvs task tick", zap.Any(" task id ", string(task.ID())+" -- "+strconv.FormatInt(task.counter, 10)))
+	// log.L().Info("cvs task tick", zap.Any(" task id ", string(task.ID())+" -- "+strconv.FormatInt(task.counter, 10)))
 
 	return nil
 }
@@ -178,6 +177,7 @@ func (task *cvsTask) Send(ctx context.Context) error {
 
 	log.L().Info("enter the send func ", zap.Any(" id :", string(task.ID())))
 	for {
+
 		select {
 		case kv := <-task.buffer:
 			err := writer.Send(&pb.WriteLinesRequest{FileName: task.dstDir, Key: kv.firstStr, Value: kv.secondStr})
@@ -190,5 +190,6 @@ func (task *cvsTask) Send(ctx context.Context) error {
 		default:
 			time.Sleep(time.Second)
 		}
+		time.Sleep(time.Microsecond * 10)
 	}
 }

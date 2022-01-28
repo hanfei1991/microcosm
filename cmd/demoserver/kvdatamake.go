@@ -276,7 +276,6 @@ func (s *DataRWServer) WriteLines(stream pb.DataRWService_WriteLinesServer) erro
 							if err != nil {
 								return &ErrorInfo{info: "create the folder " + folder + " failed"}
 							}
-							fmt.Println(" append .")
 							log.L().Info("create the folder ",
 								zap.String("folder  ", folder))
 						}
@@ -294,8 +293,9 @@ func (s *DataRWServer) WriteLines(stream pb.DataRWService_WriteLinesServer) erro
 					s.mu.Unlock()
 				}
 				_, err = writer.WriteString(res.Key + "," + strings.TrimSpace(res.Value) + "\n")
+				fmt.Printf("writer the key %v \n", res.Key)
+
 				count++
-				//	fmt.Printf("write data %v ", count)
 				if (count % FLUSHLEN) == 0 {
 					err = writer.Flush()
 				}
@@ -305,6 +305,7 @@ func (s *DataRWServer) WriteLines(stream pb.DataRWService_WriteLinesServer) erro
 				}
 
 			} else if err == io.EOF {
+				fmt.Printf("receive the eof %v \n", res.Key)
 				s.mu.Lock()
 				for _, w := range s.fileWriterMap {
 					w.Flush()

@@ -136,8 +136,9 @@ func (jm *JobMaster) OnWorkerDispatched(worker lib.WorkerHandle, result error) e
 
 func (jm *JobMaster) OnWorkerOnline(worker lib.WorkerHandle) error {
 	// todo : add the worker information to the sync files map
-	log.L().Info("worker online ", zap.Any("message", worker.ID()))
+
 	syncInfo, exist := jm.syncFilesInfo[worker.ID()]
+	log.L().Info("worker online ", zap.Any("fileName", syncInfo.file))
 	if !exist {
 		log.L().Info("bad worker found", zap.Any("message", worker.ID()))
 		panic(errorInfo{info: "bad worker "})
@@ -148,6 +149,7 @@ func (jm *JobMaster) OnWorkerOnline(worker lib.WorkerHandle) error {
 
 func (jm *JobMaster) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
 	syncInfo, exist := jm.syncFilesInfo[worker.ID()]
+	log.L().Info("on worker offline ", zap.Any(" worker :", worker.ID()))
 	if !exist {
 		log.L().Info("bad worker found", zap.Any("message", worker.ID()))
 	}
