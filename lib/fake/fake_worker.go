@@ -8,6 +8,8 @@ import (
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/model"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/zap"
 )
 
 var _ lib.Worker = (*dummyWorker)(nil)
@@ -36,6 +38,7 @@ func (d *dummyWorker) Tick(ctx context.Context) error {
 		return errors.New("not yet init")
 	}
 
+	log.L().Info("FakeWorker: Tick", zap.String("worker-id", string(d.ID())))
 	if atomic.LoadInt32(&d.closed) == 1 {
 		return nil
 	}
@@ -43,11 +46,11 @@ func (d *dummyWorker) Tick(ctx context.Context) error {
 	return nil
 }
 
-func (d *dummyWorker) Status() (lib.WorkerStatus, error) {
+func (d *dummyWorker) Status() lib.WorkerStatus {
 	if d.init {
-		return lib.WorkerStatus{Code: lib.WorkerStatusNormal, Ext: d.tick}, nil
+		return lib.WorkerStatus{Code: lib.WorkerStatusNormal, Ext: d.tick}
 	}
-	return lib.WorkerStatus{Code: lib.WorkerStatusCreated}, nil
+	return lib.WorkerStatus{Code: lib.WorkerStatusCreated}
 }
 
 func (d *dummyWorker) Workload() model.RescUnit {
@@ -58,8 +61,9 @@ func (d *dummyWorker) OnMasterFailover(_ lib.MasterFailoverReason) error {
 	return nil
 }
 
-func (d *dummyWorker) CloseImpl() {
+func (d *dummyWorker) CloseImpl(ctx context.Context) error {
 	atomic.StoreInt32(&d.closed, 1)
+	return nil
 }
 
 func NewDummyWorker(ctx *dcontext.Context, id lib.WorkerID, masterID lib.MasterID, _ lib.WorkerConfig) lib.Worker {

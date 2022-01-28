@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 
 	"github.com/hanfei1991/microcosm/pkg/adapter"
-	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/pingcap/errors"
 	"go.etcd.io/etcd/clientv3"
@@ -24,14 +23,18 @@ func NewMetadataClient(masterID MasterID, metaKVClient metadata.MetaKV) *Metadat
 }
 
 func (c *MetadataClient) Load(ctx context.Context) (*MasterMetaKVData, error) {
-	key := adapter.MasterInfoKey.Encode(string(c.masterID))
+	key := adapter.MasterMetaKey.Encode(string(c.masterID))
 	rawResp, err := c.metaKVClient.Get(ctx, key)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	resp := rawResp.(*clientv3.GetResponse)
 	if len(resp.Kvs) == 0 {
-		return nil, derror.ErrMasterNotFound.GenWithStackByArgs(c.masterID)
+		// TODO refine handling the situation where the mata key does not exist at this point
+		masterMeta := &MasterMetaKVData{
+			ID: c.masterID,
+		}
+		return masterMeta, nil
 	}
 	masterMetaBytes := resp.Kvs[0].Value
 	var masterMeta MasterMetaKVData
@@ -43,7 +46,7 @@ func (c *MetadataClient) Load(ctx context.Context) (*MasterMetaKVData, error) {
 }
 
 func (c *MetadataClient) Store(ctx context.Context, data *MasterMetaKVData) error {
-	key := adapter.MasterInfoKey.Encode(string(c.masterID))
+	key := adapter.MasterMetaKey.Encode(string(c.masterID))
 	dataBytes, err := json.Marshal(data)
 	if err != nil {
 		return errors.Trace(err)

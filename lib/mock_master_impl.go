@@ -13,7 +13,7 @@ import (
 	"go.uber.org/zap"
 )
 
-type mockMasterImpl struct {
+type MockMasterImpl struct {
 	mu sync.Mutex
 	mock.Mock
 
@@ -32,8 +32,8 @@ type mockMasterImpl struct {
 	serverMasterClient    *client.MockServerMasterClient
 }
 
-func newMockMasterImpl(id MasterID) *mockMasterImpl {
-	ret := &mockMasterImpl{
+func NewMockMasterImpl(id MasterID) *MockMasterImpl {
+	ret := &MockMasterImpl{
 		id:                    id,
 		dispatchedWorkers:     make(chan WorkerHandle),
 		messageHandlerManager: p2p.NewMockMessageHandlerManager(),
@@ -43,6 +43,9 @@ func newMockMasterImpl(id MasterID) *mockMasterImpl {
 		serverMasterClient:    &client.MockServerMasterClient{},
 	}
 	ret.BaseMaster = NewBaseMaster(
+		// ctx is nil for now
+		// TODO refine this
+		nil,
 		ret,
 		id,
 		ret.messageHandlerManager,
@@ -54,7 +57,7 @@ func newMockMasterImpl(id MasterID) *mockMasterImpl {
 	return ret
 }
 
-func (m *mockMasterImpl) Reset() {
+func (m *MockMasterImpl) Reset() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -62,6 +65,7 @@ func (m *mockMasterImpl) Reset() {
 	m.Mock.Calls = nil
 
 	m.BaseMaster = NewBaseMaster(
+		nil,
 		m,
 		m.id,
 		m.messageHandlerManager,
@@ -71,11 +75,11 @@ func (m *mockMasterImpl) Reset() {
 		m.serverMasterClient)
 }
 
-func (m *mockMasterImpl) TickCount() int64 {
+func (m *MockMasterImpl) TickCount() int64 {
 	return m.tickCount.Load()
 }
 
-func (m *mockMasterImpl) InitImpl(ctx context.Context) error {
+func (m *MockMasterImpl) InitImpl(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -83,7 +87,7 @@ func (m *mockMasterImpl) InitImpl(ctx context.Context) error {
 	return args.Error(0)
 }
 
-func (m *mockMasterImpl) OnMasterRecovered(ctx context.Context) error {
+func (m *MockMasterImpl) OnMasterRecovered(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -91,7 +95,7 @@ func (m *mockMasterImpl) OnMasterRecovered(ctx context.Context) error {
 	return args.Error(0)
 }
 
-func (m *mockMasterImpl) Tick(ctx context.Context) error {
+func (m *MockMasterImpl) Tick(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -102,7 +106,7 @@ func (m *mockMasterImpl) Tick(ctx context.Context) error {
 	return args.Error(0)
 }
 
-func (m *mockMasterImpl) OnWorkerDispatched(worker WorkerHandle, result error) error {
+func (m *MockMasterImpl) OnWorkerDispatched(worker WorkerHandle, result error) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -112,7 +116,7 @@ func (m *mockMasterImpl) OnWorkerDispatched(worker WorkerHandle, result error) e
 	return args.Error(0)
 }
 
-func (m *mockMasterImpl) OnWorkerOnline(worker WorkerHandle) error {
+func (m *MockMasterImpl) OnWorkerOnline(worker WorkerHandle) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -123,7 +127,7 @@ func (m *mockMasterImpl) OnWorkerOnline(worker WorkerHandle) error {
 	return args.Error(0)
 }
 
-func (m *mockMasterImpl) OnWorkerOffline(worker WorkerHandle, reason error) error {
+func (m *MockMasterImpl) OnWorkerOffline(worker WorkerHandle, reason error) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -133,7 +137,7 @@ func (m *mockMasterImpl) OnWorkerOffline(worker WorkerHandle, reason error) erro
 	return args.Error(0)
 }
 
-func (m *mockMasterImpl) OnWorkerMessage(worker WorkerHandle, topic p2p.Topic, message interface{}) error {
+func (m *MockMasterImpl) OnWorkerMessage(worker WorkerHandle, topic p2p.Topic, message interface{}) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -141,10 +145,14 @@ func (m *mockMasterImpl) OnWorkerMessage(worker WorkerHandle, topic p2p.Topic, m
 	return args.Error(0)
 }
 
-func (m *mockMasterImpl) CloseImpl(ctx context.Context) error {
+func (m *MockMasterImpl) CloseImpl(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	args := m.Called(ctx)
 	return args.Error(0)
+}
+
+func (m *MockMasterImpl) MasterClient() *client.MockServerMasterClient {
+	return m.serverMasterClient
 }
