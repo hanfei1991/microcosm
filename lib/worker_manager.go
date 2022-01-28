@@ -90,15 +90,21 @@ func (m *workerManagerImpl) Tick(
 
 	// respond to worker heartbeats
 	for workerID, workerInfo := range m.workerInfos {
-		if !workerInfo.hasPendingHeartbeat {
-			if workerInfo.hasTimedOut(m.clock, &m.timeoutConfig) {
-				offlinedWorkers = append(offlinedWorkers, workerInfo)
-				delete(m.workerInfos, workerID)
+		if workerInfo.justOnlined && workerInfo.hasPendingHeartbeat {
+			workerInfo.justOnlined = false
+			onlinedWorkers = append(onlinedWorkers, workerInfo)
+		}
 
-				statusCloned := workerInfo.status
-				statusCloned.Code = WorkerStatusError
-				m.tombstones[workerID] = &statusCloned
-			}
+		if workerInfo.hasTimedOut(m.clock, &m.timeoutConfig) {
+			offlinedWorkers = append(offlinedWorkers, workerInfo)
+			delete(m.workerInfos, workerID)
+
+			statusCloned := workerInfo.status
+			statusCloned.Code = WorkerStatusError
+			m.tombstones[workerID] = &statusCloned
+		}
+
+		if !workerInfo.hasPendingHeartbeat {
 			continue
 		}
 		reply := &HeartbeatPongMessage{
@@ -123,11 +129,6 @@ func (m *workerManagerImpl) Tick(
 			continue
 		}
 		workerInfo.hasPendingHeartbeat = false
-
-		if workerInfo.justOnlined {
-			workerInfo.justOnlined = false
-			onlinedWorkers = append(onlinedWorkers, workerInfo)
-		}
 	}
 	return
 }
