@@ -6,9 +6,10 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 )
 
-// NodeType is the node type, could be either server master or executor
+// NodeType is the type of a server instance, could be either server master or executor
 type NodeType int
 
+// All node types
 const (
 	NodeTypeServerMaster NodeType = iota + 1
 	NodeTypeExecutor
@@ -22,8 +23,8 @@ type DeployNodeID string
 
 type ExecutorID = DeployNodeID
 
-// NodeInfo describes deployment node information, the node could be server master.
-// or executor.
+// NodeInfo describes the information of server instance, contains node type, node
+// uuid, advertise address and capability(executor node only)
 type NodeInfo struct {
 	Type NodeType     `json:"type"`
 	ID   DeployNodeID `json:"id"`
