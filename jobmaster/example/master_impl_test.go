@@ -75,7 +75,10 @@ func TestExampleMaster(t *testing.T) {
 
 	// worker is online after one heartbeat
 	require.Eventually(t, func() bool {
-		return master.worker.online
+		master.worker.mu.Lock()
+		online := master.worker.online
+		master.worker.mu.Unlock()
+		return online
 	}, time.Second, 100*time.Millisecond)
 
 	// will be WorkerStatusInit after one heartbeat
