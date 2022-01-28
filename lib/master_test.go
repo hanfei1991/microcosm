@@ -12,7 +12,6 @@ import (
 	"go.etcd.io/etcd/clientv3"
 
 	"github.com/hanfei1991/microcosm/pkg/adapter"
-	"github.com/hanfei1991/microcosm/pkg/clock"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
@@ -139,7 +138,8 @@ func TestMasterCreateWorker(t *testing.T) {
 	err := master.Init(ctx)
 	require.NoError(t, err)
 
-	err = MockBaseMasterCreateWorker(
+	MockBaseMasterCreateWorker(
+		t,
 		master.BaseMaster,
 		workerTypePlaceholder,
 		&dummyConfig{param: 1},
@@ -147,7 +147,6 @@ func TestMasterCreateWorker(t *testing.T) {
 		masterName,
 		workerID1,
 		executorNodeID1)
-	require.NoError(t, err)
 
 	workerID, err := master.CreateWorker(workerTypePlaceholder, &dummyConfig{param: 1}, 100)
 	require.NoError(t, err)
@@ -158,12 +157,7 @@ func TestMasterCreateWorker(t *testing.T) {
 
 	master.On("OnWorkerOnline", mock.AnythingOfType("*lib.workerHandleImpl")).Return(nil)
 
-	err = master.messageHandlerManager.InvokeHandler(t, HeartbeatPingTopic(masterName, workerID1), executorNodeID1, &HeartbeatPingMessage{
-		SendTime:     clock.MonoNow(),
-		FromWorkerID: workerID,
-		Epoch:        master.BaseMaster.currentEpoch.Load(),
-	})
-	require.NoError(t, err)
+	MockBaseMasterWorkerHeartbeat(t, master.BaseMaster, masterName, workerID1, executorNodeID1)
 
 	master.On("Tick", mock.Anything).Return(nil)
 	err = master.Poll(ctx)

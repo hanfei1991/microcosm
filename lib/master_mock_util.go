@@ -5,13 +5,16 @@ package lib
 
 import (
 	"encoding/json"
+	"testing"
 	"time"
 
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
+	"github.com/hanfei1991/microcosm/pkg/clock"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
@@ -34,6 +37,7 @@ func MockBaseMaster(id MasterID, masterImpl MasterImpl) *BaseMaster {
 }
 
 func MockBaseMasterCreateWorker(
+	t *testing.T,
 	master *BaseMaster,
 	workerType WorkerType,
 	config WorkerConfig,
@@ -41,7 +45,7 @@ func MockBaseMasterCreateWorker(
 	masterID MasterID,
 	workerID WorkerID,
 	executorID model.ExecutorID,
-) error {
+) {
 	master.timeoutConfig.masterHeartbeatCheckLoopInterval = time.Millisecond * 10
 	master.uuidGen = uuid.NewMock()
 
@@ -66,13 +70,9 @@ func MockBaseMasterCreateWorker(
 
 	mockExecutorClient := &client.MockExecutorClient{}
 	err := master.executorClientManager.(*client.Manager).AddExecutorClient(executorID, mockExecutorClient)
-	if err != nil {
-		return err
-	}
+	require.NoError(t, err)
 	configBytes, err := json.Marshal(config)
-	if err != nil {
-		return err
-	}
+	require.NoError(t, err)
 
 	mockExecutorClient.On("Send",
 		mock.Anything,
@@ -89,6 +89,24 @@ func MockBaseMasterCreateWorker(
 	}}, nil)
 
 	master.uuidGen.(*uuid.MockGenerator).Push(string(workerID))
+}
 
-	return nil
+func MockBaseMasterWorkerHeartbeat(
+	t *testing.T,
+	master *BaseMaster,
+	masterID MasterID,
+	workerID WorkerID,
+	executorID p2p.NodeID,
+) {
+	err := master.messageHandlerManager.(*p2p.MockMessageHandlerManager).InvokeHandler(
+		t,
+		HeartbeatPingTopic(masterID, workerID),
+		executorID,
+		&HeartbeatPingMessage{
+			SendTime:     clock.MonoNow(),
+			FromWorkerID: workerID,
+			Epoch:        master.currentEpoch.Load(),
+		})
+
+	require.NoError(t, err)
 }

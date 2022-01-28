@@ -33,7 +33,9 @@ func TestExampleMaster(t *testing.T) {
 	})
 
 	master := newExampleMaster()
-	err := lib.MockBaseMasterCreateWorker(
+	// master.Init will call CreateWorker, so we mock it first
+	lib.MockBaseMasterCreateWorker(
+		t,
 		master.BaseMaster,
 		exampleWorkerType,
 		exampleWorkerCfg,
@@ -42,26 +44,49 @@ func TestExampleMaster(t *testing.T) {
 		workerID,
 		executorNodeID,
 	)
-	require.NoError(t, err)
 
 	ctx := context.Background()
-	err = master.Init(ctx)
+	err := master.Init(ctx)
 	require.NoError(t, err)
 
-	// master.Init will create a worker
+	// master.Init will asynchronously create a worker
 	require.Eventually(t, func() bool {
-		return master.workerHandle != nil
+		master.worker.mu.Lock()
+		handle := master.worker.handle
+		master.worker.mu.Unlock()
+		return handle != nil
 	}, time.Second, 100*time.Millisecond)
 	require.NoError(t, master.receivedErr)
 
-	// Question(lance6717): why there're two ways to get worker handle? will they become inconsistent?
-	require.Equal(t, master.workerHandle, master.GetWorkers()[master.workerID])
+	// GetWorkers and master.CreateWorker should be consistent
+	handle, ok := master.GetWorkers()[master.worker.id]
+	require.True(t, ok)
+	require.Equal(t, master.worker.handle, handle)
 
+	// before worker's first heartbeat, its status is WorkerStatusCreated
 	err = master.Tick(ctx)
 	require.NoError(t, err)
-	require.Equal(t, 1, master.tickCount)
+	master.worker.mu.Lock()
+	code := master.worker.statusCode
+	master.worker.mu.Unlock()
+	require.Equal(t, lib.WorkerStatusCreated, code)
 
-	// Question(lance6716): what else method can be used to test?
+	lib.MockBaseMasterWorkerHeartbeat(t, master.BaseMaster, masterID, workerID, executorNodeID)
+
+	// worker is online after one heartbeat
+	require.Eventually(t, func() bool {
+		return master.worker.online
+	}, time.Second, 100*time.Millisecond)
+
+	// will be WorkerStatusInit after one heartbeat
+	err = master.Tick(ctx)
+	require.NoError(t, err)
+	master.worker.mu.Lock()
+	code = master.worker.statusCode
+	master.worker.mu.Unlock()
+	require.Equal(t, lib.WorkerStatusInit, code)
+
+	require.Equal(t, 2, master.tickCount)
 
 	err = master.Close(ctx)
 	require.NoError(t, err)
