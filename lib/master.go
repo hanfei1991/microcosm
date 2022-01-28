@@ -241,6 +241,8 @@ func (m *BaseMaster) runWorkerCheck(ctx context.Context) error {
 		}
 
 		offlinedWorkers, onlinedWorkers := m.workerManager.Tick(ctx, m.messageRouter)
+		// It is logical to call `OnWorkerOnline` first and then call `OnWorkerOffline`.
+		// In case that these two events for the same worker is detected in the same tick.
 		for _, workerInfo := range onlinedWorkers {
 			log.L().Info("worker is online", zap.Any("worker-info", workerInfo))
 

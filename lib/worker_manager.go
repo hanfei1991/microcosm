@@ -90,6 +90,9 @@ func (m *workerManagerImpl) Tick(
 
 	// respond to worker heartbeats
 	for workerID, workerInfo := range m.workerInfos {
+		// `justOnlined` indicates that the online event has not been notified,
+		// and `hasPendingHeartbeat` indicates that we have received a heartbeat and
+		// has not sent the Pong yet.
 		if workerInfo.justOnlined && workerInfo.hasPendingHeartbeat {
 			workerInfo.justOnlined = false
 			onlinedWorkers = append(onlinedWorkers, workerInfo)
@@ -105,6 +108,7 @@ func (m *workerManagerImpl) Tick(
 		}
 
 		if !workerInfo.hasPendingHeartbeat {
+			// No heartbeat to respond to.
 			continue
 		}
 		reply := &HeartbeatPongMessage{
@@ -128,6 +132,7 @@ func (m *workerManagerImpl) Tick(
 				zap.Any("message", reply))
 			continue
 		}
+		// We have sent the Pong, mark it as such.
 		workerInfo.hasPendingHeartbeat = false
 	}
 	return
