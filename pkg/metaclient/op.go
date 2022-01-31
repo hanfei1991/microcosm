@@ -16,13 +16,15 @@ package metaclient
 
 import "errors"
 
+// [TODO] need check again
+
 type opType int
 
 const (
 	// A default Op has opType 0, which is invalid.
 	tGet opType = iota + 1
 	tPut
-	tDeleteRange
+	tDelete
 	tTxn
 )
 
@@ -53,12 +55,18 @@ func (s *SortOption) Clone() *SortOption {
 
 var noPrefixEnd = []byte{0}
 
+// [NOTICE]: 0 means no user-specified revision for key.
+var noRevision = int64(0)
+
 // Op represents an Operation that kv can execute.
-// Support TTL/Key Range/From Key/Key Prefix/Sort/Limit attributes
+// Support Idempotent/TTL/Key Range/From Key/Key Prefix/Sort/Limit attributes
 type Op struct {
 	t   opType
 	key []byte
 	end []byte
+
+	// for idempotent_put/idempotent_delete
+	revision int64
 
 	// for range
 	limit int64
@@ -87,7 +95,7 @@ func (op Op) IsPut() bool { return op.t == tPut }
 func (op Op) IsGet() bool { return op.t == tGet }
 
 // IsDelete returns true if the operation is a Delete.
-func (op Op) IsDelete() bool { return op.t == tDeleteRange }
+func (op Op) IsDelete() bool { return op.t == tDelete }
 
 // IsOptsWithPrefix returns true if WithPrefix option is called in the given opts.
 func (op Op) IsOptsWithPrefix() bool { return op.isOptsWithPrefix }
@@ -128,6 +136,13 @@ func (op Op) Limit() int64 { return op.limit }
 // WithLimit sets the limit num for `Get` response.
 func (op *Op) WithLimit(limit int64) { op.limit = limit }
 
+// Revision returns the revision for key, if any.
+func (op Op) Revision() int64 { return op.revision }
+
+// WithRevision sets the revision for key.
+func (op *Op) WithRevision(revision int64) { op.revision = revision }
+
+// WithSort sets the sort option for `Get` response.
 func (op *Op) WithSort(sort SortOption) { op.sort = sort.Clone() }
 
 // Sort returns the sort option for `Get` response, if any.
@@ -171,7 +186,7 @@ func OpGet(key string, opts ...OpOption) (Op, error) {
 
 // OpDelete returns "delete" operation based on given key and operation options.
 func OpDelete(key string, opts ...OpOption) (Op, error) {
-	ret := Op{t: tDeleteRange, key: []byte(key)}
+	ret := Op{t: tDelete, key: []byte(key)}
 	ret.ApplyOpts(opts)
 	switch {
 	case ret.sort != nil:
@@ -279,4 +294,11 @@ func WithFromKey() OpOption {
 		op.end = []byte("\x00")
 		op.isOptsWithFromKey = true
 	}
+}
+
+// WithRevision specified the revision for 'Put', 'Delete' requests to
+// achieve idempotent operation.
+// 'Get' requests will always fetch newest value.
+func WithRevision(revision int64) OpOption {
+	return func(op *Op) { op.revision = revision }
 }

@@ -10,12 +10,3 @@ const (
 type KVClient interface {
 	KV
 }
-
-/*
-type EtcdLikeClient interface {
-	// for basic get/set/txn
-	KV
-	// for Pub-Sub service
-	Watcher
-}
-*/

@@ -5,152 +5,38 @@ import (
 
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/metaclient"
-	"go.etcd.io/etcd/etcdserver/etcdserverpb"
+	"github.com/hanfei1991/microcosm/pkg/metaclient/namespace"
+	"go.etcd.io/etcd/clientv3"
 )
 
-func getEtcdOptions(op metaClient.Op) ([]clientv3.OpOption, error) {
-	etcdOps := make([]clientv3.OpOption, 0)
-	switch {
-	case op.TTL() != 0:
-		// [TODO] optimize the lease cost and add retry
-		resp, err := c.cli.Grant(ctx, op.TTL())
-		if nil != err {
-			return nil, err
-		}
-		etcdOps = append(etcdOps, clientv3.WithLeaseID(resp.LeaseID))
-	case op.Limit() != 0:
-		etcdOps = append(etcdOps, clientv3.WithLimit(op.Limit()))
-	case op.Sort() != nil:
-		etcdOps = append(etcdOps, clientv3.WithSort(op.Sort().Target, op.Sort().Order))
-	// [TODO] check
-	case op.IsOptsWithPrefix() == true:
-		etcdOps = append(etcdOps, clientv3.WithPrefix())
-	case op.IsOptsWithFromKey() == true:
-		etcdOps = append(etcdOps, clientv3.WithFromKey())
-	case !op.IsOptsWithPrefix() && !op.IsOptsWithFromKey() && len(op.RangeBytes()) > 0:
-		etcdOps = append(etcdOps, clientv3.WithRange(string(op.RangeBytes())))
-	}
+//[TODO] add retry logic
 
-	return etcdOps, nil
+// etcdKVClient is the implement of kv interface based on etcdClient
+// Support namespace isolation and all kv ability
+// etcdKVImpl -> kvPrefix -> etcdKVClient
+type etcdKVClient struct {
+	metaclient.KV
+	leaseID string
 }
 
-func makePutResp(etcdResp *clientv3.PutResponse) *metaclient.PutResponse {
-	resp := &metaclient.PutResponse{
-		Header: &metaclient.ResponseHeader{
-			// [TODO] ClusterID
-			Revision: etcdResp.Header.Revision,
-		},
-	}
-	return resp
-}
-
-func makeGetResp(etcdResp *clientv3.GetResponse) *metaclient.GetResponse {
-	kvs := make([]*metaclient.KeyValue, len(etcdResp.Kvs))
-	for _, kv := range etcdResp.Kvs {
-		kvs = append(kvs, &metaclient.KeyValue{
-			Key:   kv.Key,
-			Value: kv.Value,
-			// [TODO] leaseID to TTL,
-			CreateRevision: kv.CreateRevision,
-			ModRevision:    kv.ModRevision,
-		})
-	}
-
-	resp := &metaclient.GetResponse{
-		Header: &metaclient.ResponseHeader{
-			// [TODO] ClusterID
-			Revision: etcdResp.Header.Revision,
-		},
-		Kvs: kvs,
-	}
-
-	return resp
-}
-
-func makeDeleteResp(etcdResp *clientv3.DeleteResponse) *metaclient.DeleteResponse {
-	resp := &metaclient.DeleteResponse{
-		Header: &metaclient.ResponseHeader{
-			// [TODO] ClusterID
-			Revision: etcdResp.Header.Revision,
-		},
-	}
-	return resp
-}
-
-func getEtcdOp(op metaClient.Op) (clientv3.Op, error) {
-	opts, err := getEtcdOptions(op)
+func NewEtcdKVClient(config *metaclient.Config, leaseID string) (KVClient, error) {
+	impl, err := NewEtcdKVImpl(config)
 	if err != nil {
 		return nil, err
 	}
-	switch {
-	case op.IsGet():
-		return clientv3.OpGet(string(op.KeyBytes()), opts...), nil
-	case op.IsPut():
-		return clientv3.OpPut(string(op.KeyBytes()), string(op.ValueBytes()), opts...), nil
-	case op.IsDelete():
-		return clientv3.OpDelete(string(op.KeyBytes()), opts...), nil
-	case op.IsTxn():
-		ops := op.Txn()
-		etcdOps := make([]clientv3.Op, len(ops))
-		for _, sop := range ops {
-			etcdOp, err := getEtcdOp(sop)
-			if err != nil {
-				return nil, err
-			}
-			etcdOps = append(etcdOps, etcdOp)
-		}
-		return clientv3.OpTxn(nil, etcdOps, nil)
-	}
 
-	panic("unknown op type")
-	return nil, errors.New("unknown op type")
-}
-
-func makeTxnResp(etcdResp *clientv3.TxnResponse) *metaclient.TxnResponse {
-	rsps := make([]metaclient.ResponseOp, len(etcdResp.Responses))
-	for _, eRsp := range etcdRsp.Responses {
-		switch reflect.Typeof(eRsp.Response) {
-		case etcdserverpb.ResponseOp_ResponseRange:
-			rsps = append(rsps, metaclient.ResponseOp{
-				Response: ResponseOp_ResponseGet{
-					ResponseGet: makeGetResp(eRsp.GetResponseRange()),
-				},
-			})
-		case etcdserverpb.ResponseOp_ResponsePut:
-			rsps = append(rsps, metaclient.ResponseOp{
-				Response: ResponseOp_ResponsePut{
-					ResponsePut: makePutResp(eRsp.GetResponsePut()),
-				},
-			})
-		case etcdserverpb.ResponseOp_ResponseDeleteRange:
-			rsps = append(rsps, metaclient.ResponseOp{
-				Response: ResponseOp_ResponseDelete{
-					ResponseDelete: makeDeleteResp(eRsp.GetResponseDeleteRange()),
-				},
-			})
-		case etcdserverpb.ResponseOp_ResponseTxn:
-			rsps = append(rsps, metaclient.ResponseOp{
-				Response: ResponseOp_ResponseTxn{
-					ResponseTxn: makeTxnResp(eRsp.GetResponseTxn()),
-				},
-			})
-		}
-	}
-
-	return &metaclient.TxnResponse{
-		Header: &metaclient.Header{
-			//[ClusterID]
-			Revision: etcdResp.Header.Revision,
-		},
-		Responses: rsps,
+	pfKV := namespace.NewPrefixKV(impl, makeNamespacePrefix(leaseID))
+	return &etcdKVClient{
+		KV:      pfKV,
+		leaseID: leaseID,
 	}
 }
 
-type etcdKvClient struct {
+type etcdKVImpl struct {
 	cli *clientv3.Client
 }
 
-func NewEtcdKVClient(config *metaclient.Config) (*KVClient, error) {
+func NewEtcdKVImpl(config *metaclient.Config) (KV, error) {
 	conf := config.Clone()
 	cli, err := clientv3.New(clientv3.Config{
 		Endpoints:            conf.Endpoints,
@@ -168,80 +54,108 @@ func NewEtcdKVClient(config *metaclient.Config) (*KVClient, error) {
 		return nil, errors.ErrMetaNewClientFail.Wrap(err)
 	}
 
-	c := &etcdClient{
+	c := &etcdKVImpl{
 		cli: cli,
 	}
 
 	return c, nil
 }
 
-func (c *etcdKvClient) Put(ctx context.Context, key, val string, opts ...metaclient.OpOption) (*metaclient.PutResponse, error) {
+// [TODO] idempotent put
+func (c *etcdKVImpl) Put(ctx context.Context, key, val string, opts ...metaclient.OpOption) (*metaclient.PutResponse, error) {
 	op, err := OpPut(key, val, opts)
 	if err != nil {
 		return nil, errors.ErrMetaOptionInvalid.Wrap(err)
 	}
 
-	etcdOps, err := getEtcdOptions(op)
+	etcdOp, err := getEtcdOp(op)
 	if err != nil {
 		return nil, errors.ErrMetaOpFail.Wrap(err)
 	}
 
-	etcdResp, err := c.cli.Put(ctx, key, val, etcdOps...)
+	etcdResp, err := c.cli.Do(ctx, etcdOp)
 	if err != nil {
 		return nil, errors.ErrMetaOpFail.Wrap(err)
 	}
 
-	return makePutResp(etcdResp), nil
+	return makePutResp(etcdResp.Put()), nil
 }
 
-func (c *etcdKvClient) Get(ctx context.Context, key string, opts ...metaclient.OpOption) (*metaclient.GetResponse, error) {
+func (c *etcdKVImpl) Get(ctx context.Context, key string, opts ...metaclient.OpOption) (*metaclient.GetResponse, error) {
 	op, err := OpGet(key, opts)
 	if err != nil {
 		return nil, errors.ErrMetaOptionInvalid.Wrap(err)
 	}
 
-	etcdOps, err := getEtcdOptions(op)
+	etcdOp, err := getEtcdOp(op)
 	if err != nil {
 		return nil, errors.ErrMetaOpFail.Wrap(err)
 	}
 
-	etcdResp, err := c.cli.Get(ctx, key, etcdOps...)
+	etcdResp, err := c.cli.Do(ctx, etcdOp)
 	if err != nil {
 		return nil, errors.ErrMetaOpFail.Wrap(err)
 	}
 
-	return makeGetResp(etcdResp), nil
+	return makeGetResp(etcdResp.Get()), nil
 }
 
-func (c *etcdKvClient) Delete(ctx context.Context, key string, opts ...metaclient.OpOption) (*metaclient.DeleteResponse, error) {
+func (c *etcdKVImpl) Delete(ctx context.Context, key string, opts ...metaclient.OpOption) (*metaclient.DeleteResponse, error) {
 	op, err := OpDelete(key, opts)
 	if err != nil {
 		return nil, errors.ErrMetaOptionInvalid.Wrap(err)
 	}
 
-	etcdOps, err := getEtcdOptions(op)
+	etcdOp, err := getEtcdOp(op)
 	if err != nil {
 		return nil, errors.ErrMetaOpFail.Wrap(err)
 	}
 
-	etcdResp, err := c.cli.Delete(ctx, key, etcdOps...)
+	etcdResp, err := c.cli.Do(ctx, etcdOp)
 	if err != nil {
 		return nil, errors.ErrMetaOpFail.Wrap(err)
 	}
 
-	return makeDeleteResp(etcdResp), nil
+	return makeDeleteResp(etcdResp.Delete()), nil
 }
 
-func (c *etcdKvClient) Txn(ctx context.Context) metaclient.Txn {
-	return etcdTxn{
-		Txn: c.cli.Txn(ctx),
+func (c *etcdKVImpl) Do(ctx context.Context, op metaclient.Op) (metaclient.OpResponse, error) {
+	etcdOp, opErr := getEtcdOp(op)
+	if opErr != nil {
+		return metaclient.OpResponse{}, cerrors.ErrMetaOpFail.Wrap(opErr)
 	}
+
+	etcdResp, err := c.cli.Do(ctx, etcdOp)
+	if err != nil {
+		return metaclient.OpResponse{}, cerrors.ErrMetaOpFail.Wrap(opErr)
+	}
+
+	switch op.t {
+	case tGet:
+		return metaclient.OpResponse{get: makeGetResp(etcdResp.Get())}, nil
+	case tPut:
+		return metaclient.OpResponse{put: makePutResp(etcdResp.Put())}, nil
+	case tDelete:
+		return metaclient.OpResponse{del: makeDeleteResp(etcdResp.Delete())}, nil
+	case tTxn:
+		return metaclient.OpResponse{txn: makeTxnResp(etcdResp.Txn())}, nil
+	default:
+		panic("Unknown op")
+	}
+
+	return metaclient.OpResponse{}, nil
 }
 
 type etcdTxn struct {
 	Txn clientv3.Txn
 	// cache error to make chain operation work
 	Err error
+}
+
+func (c *etcdKVImpl) Txn(ctx context.Context) metaclient.Txn {
+	return &etcdTxn{
+		Txn: c.cli.Txn(ctx),
+	}
 }
 
 func (t *etcdTxn) Do(ops ...metaclient.Op) Txn {

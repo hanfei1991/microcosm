@@ -84,4 +84,5 @@ var (
 	ErrMetaNewClientFail = errors.Normalize("create meta client fail", errors.RFCCodeText("DFLOW:ErrMetaNewClientFail"))
 	ErrMetaOpFail        = errors.Normalize("meta operation fail:%s", errors.RFCCodeText("DFLOW:ErrMetaOpFail"))
 	ErrMetaOptionInvalid = errors.Normalize("meta option invalid", errors.RFCCodeText("DFLOW:ErrMetaOptionInvalid"))
+	ErrMetaEmptyKey      = errors.Normalize("meta empty key", errors.RFCCodeText("DFLOW:ErrMetaEmptyKey"))
 )

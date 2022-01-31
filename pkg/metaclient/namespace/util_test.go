@@ -15,11 +15,14 @@
 package namespace
 
 import (
-	"bytes"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestPrefixInterval(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		pfx string
 		key []byte
@@ -65,11 +68,7 @@ func TestPrefixInterval(t *testing.T) {
 	}
 	for i, tt := range tests {
 		pfxKey, pfxEnd := prefixInterval(tt.pfx, tt.key, tt.end)
-		if !bytes.Equal(pfxKey, tt.wKey) {
-			t.Errorf("#%d: expected key=%q, got key=%q", i, tt.wKey, pfxKey)
-		}
-		if !bytes.Equal(pfxEnd, tt.wEnd) {
-			t.Errorf("#%d: expected end=%q, got end=%q", i, tt.wEnd, pfxEnd)
-		}
+		require.Equal(t, pfxKey, tt.wKey)
+		require.Equal(t, pfxEnd, tt.wEnd)
 	}
 }
