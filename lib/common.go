@@ -7,11 +7,10 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/pingcap/errors"
-
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
+	"github.com/pingcap/errors"
 )
 
 type (
