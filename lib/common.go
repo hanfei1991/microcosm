@@ -89,6 +89,7 @@ func (s *WorkerStatus) fillExt(tpi interface{}) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	s.Ext = obj
 	return nil
 }
 

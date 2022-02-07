@@ -199,10 +199,6 @@ func TestWorkerMasterFailover(t *testing.T) {
 	}, time.Second*1, time.Millisecond*10)
 }
 
-type dummyStatus struct {
-	Val int
-}
-
 func TestWorkerStatus(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
