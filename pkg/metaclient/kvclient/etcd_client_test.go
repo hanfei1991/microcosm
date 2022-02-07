@@ -4,7 +4,7 @@ import (
 	"log"
 	"time"
 
-	"go.etcd.io/etcd/server/v3/embed"
+	"go.etcd.io/etcd/server/embed"
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
