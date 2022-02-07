@@ -70,7 +70,8 @@ func TestWorkerInitAndClose(t *testing.T) {
 	require.Equal(t, &StatusUpdateMessage{
 		WorkerID: workerID1,
 		Status: WorkerStatus{
-			Code: WorkerStatusNormal,
+			Code:     WorkerStatusNormal,
+			ExtBytes: []byte("null"),
 		},
 	}, statusMsg)
 

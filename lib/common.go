@@ -2,8 +2,12 @@ package lib
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"reflect"
 	"time"
+
+	"github.com/pingcap/errors"
 
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pkg/clock"
@@ -60,7 +64,42 @@ var defaultTimeoutConfig TimeoutConfig = TimeoutConfig{
 type WorkerStatus struct {
 	Code         WorkerStatusCode `json:"code"`
 	ErrorMessage string           `json:"error-message"`
-	Ext          interface{}      `json:"ext"`
+
+	// ExtBytes carries the serialized form of the Ext field.
+	// See below for more information.
+	// DO NOT access ExtBytes from business logic.
+	ExtBytes []byte `json:"ext-bytes"`
+
+	// Ext should be an object of a type specified by the
+	// business logic. But since Go does not support generics yet,
+	// we have to put `interface{}` as the type, which fails to tell
+	// the json library the actual type the data needs to be deserialized into.
+	// So we use ExtBytes to carry raw bytes of the Ext object, and deserialize
+	// the object by ourselves, rather than rely on any library.
+	Ext interface{} `json:"-"`
+}
+
+func (s *WorkerStatus) fillExt(tpi interface{}) error {
+	defer func() {
+		// ExtBytes is no longer useful after this function returns.
+		s.ExtBytes = nil
+	}()
+	obj := reflect.New(reflect.TypeOf(tpi).Elem()).Interface()
+	err := json.Unmarshal(s.ExtBytes, obj)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+func (s *WorkerStatus) marshalExt() error {
+	bytes, err := json.Marshal(s.Ext)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	s.ExtBytes = bytes
+	return nil
 }
 
 type Closer interface {
