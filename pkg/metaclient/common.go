@@ -5,8 +5,6 @@ type ResponseHeader struct {
 	// ClusterId is the ID of the cluster which sent the response.
 	// Framework will generate uuid for every newcoming metastore
 	ClusterId string
-	// Revision is the key-value store revision when the request was applied.
-	Revision int64
 }
 
 // Put Response
@@ -136,8 +134,8 @@ type KeyValue struct {
 	Value []byte
 	// Remaining TTL for the key
 	TTL int64
-	// create_revision is the revision of last creation on this key.
-	CreateRevision int64
-	// mod_revision is the revision of last modification on this key.
-	ModRevision int64
+	// Revision is the unique identifier for the key,
+	// user can always expect an increasing revision after each operation.
+	// So `delete + create` will not make revision fallback, which will avoid ABA problem.
+	Revision int64
 }

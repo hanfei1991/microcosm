@@ -15,11 +15,11 @@ import (
 // Support namespace isolation and all kv ability
 // etcdKVImpl -> kvPrefix -> etcdKVClient
 type etcdKVClient struct {
-	metaclient.KV
+	metaclient.KVClient
 	leaseID string
 }
 
-func NewEtcdKVClient(config *metaclient.Config, leaseID string) (KVClient, error) {
+func NewEtcdKVClient(config *metaclient.Config, leaseID string) (metaclient.KVClient, error) {
 	impl, err := NewEtcdKVImpl(config)
 	if err != nil {
 		return nil, err
@@ -27,16 +27,16 @@ func NewEtcdKVClient(config *metaclient.Config, leaseID string) (KVClient, error
 
 	pfKV := namespace.NewPrefixKV(impl, makeNamespacePrefix(leaseID))
 	return &etcdKVClient{
-		KV:      pfKV,
-		leaseID: leaseID,
-	}
+		metaclient.KVClient: pfKV,
+		leaseID:             leaseID,
+	}, nil
 }
 
 type etcdKVImpl struct {
 	cli *clientv3.Client
 }
 
-func NewEtcdKVImpl(config *metaclient.Config) (KV, error) {
+func NewEtcdKVImpl(config *metaclient.Config) (metaclient.KV, error) {
 	conf := config.Clone()
 	cli, err := clientv3.New(clientv3.Config{
 		Endpoints:            conf.Endpoints,

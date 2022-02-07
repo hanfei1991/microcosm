@@ -26,7 +26,7 @@ type kvPrefix struct {
 	pfx string
 }
 
-// NewKV wraps a KV instance so that all requests
+// NewPrefixKV wraps a KV instance so that all requests
 // are prefixed with a given string.
 func NewPrefixKV(kv metaclient.KV, prefix string) metaclient.KV {
 	return &kvPrefix{kv, prefix}
@@ -36,7 +36,11 @@ func (kv *kvPrefix) Put(ctx context.Context, key, val string, opts ...metaclient
 	if len(key) == 0 {
 		return nil, cerrors.ErrMetaEmptyKey
 	}
-	op := kv.prefixOp(metaclient.OpPut(key, val, opts...))
+	orgOp, err := metaclient.OpPut(key, val, opts...)
+	if err != nil {
+		return nil, err
+	}
+	op := kv.prefixOp(orgOp)
 	r, err := kv.KV.Do(ctx, op)
 	if err != nil {
 		return nil, err
@@ -48,9 +52,13 @@ func (kv *kvPrefix) Put(ctx context.Context, key, val string, opts ...metaclient
 
 func (kv *kvPrefix) Get(ctx context.Context, key string, opts ...metaclient.OpOption) (*metaclient.GetResponse, error) {
 	if len(key) == 0 && !(metaclient.IsOptsWithFromKey(opts) || metaclient.IsOptsWithPrefix(opts)) {
-		return nil, cerrors.ErrEmptyKey
+		return nil, cerrors.ErrMetaEmptyKey
 	}
-	r, err := kv.KV.Do(ctx, kv.prefixOp(metaclient.OpGet(key, opts...)))
+	orgOp, err := metaclient.OpGet(key, opts...)
+	if err != nil {
+		return nil, err
+	}
+	r, err := kv.KV.Do(ctx, kv.prefixOp(orgOp))
 	if err != nil {
 		return nil, err
 	}
@@ -61,9 +69,13 @@ func (kv *kvPrefix) Get(ctx context.Context, key string, opts ...metaclient.OpOp
 
 func (kv *kvPrefix) Delete(ctx context.Context, key string, opts ...metaclient.OpOption) (*metaclient.DeleteResponse, error) {
 	if len(key) == 0 && !(metaclient.IsOptsWithFromKey(opts) || metaclient.IsOptsWithPrefix(opts)) {
-		return nil, cerrors.ErrEmptyKey
+		return nil, cerrors.ErrMetaEmptyKey
 	}
-	r, err := kv.KV.Do(ctx, kv.prefixOp(metaclient.OpDelete(key, opts...)))
+	orgOp, err := metaclient.OpDelete(key, opts...)
+	if err != nil {
+		return nil, err
+	}
+	r, err := kv.KV.Do(ctx, kv.prefixOp(orgOp))
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +86,7 @@ func (kv *kvPrefix) Delete(ctx context.Context, key string, opts ...metaclient.O
 
 func (kv *kvPrefix) Do(ctx context.Context, op metaclient.Op) (metaclient.OpResponse, error) {
 	if len(op.KeyBytes()) == 0 && !op.IsTxn() {
-		return metaclient.OpResponse{}, cerrors.ErrEmptyKey
+		return metaclient.OpResponse{}, cerrors.ErrMetaEmptyKey
 	}
 	r, err := kv.KV.Do(ctx, kv.prefixOp(op))
 	if err != nil {
@@ -107,8 +119,8 @@ func (txn *txnPrefix) Do(ops ...metaclient.Op) metaclient.Txn {
 	return txn
 }
 
-func (txn *txnPrefix) Commit() (*metaclient.TxnResponse, error) {
-	resp, err := txn.Txn.Commit()
+func (txn *txnPrefix) Commit(ctx context.Context) (*metaclient.TxnResponse, error) {
+	resp, err := txn.Txn.Commit(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -123,8 +135,11 @@ func (kv *kvPrefix) prefixOp(op metaclient.Op) metaclient.Op {
 		op.WithRangeBytes(end)
 		return op
 	}
-	ops := op.Txn()
-	return metaclient.OpTxn(kv.prefixOps(ops))
+	op, err := metaclient.OpTxn(kv.prefixOps(op.Txn()))
+	if err != nil {
+		panic("unreachable b")
+	}
+	return op
 }
 
 func (kv *kvPrefix) unprefixGetResponse(resp *metaclient.GetResponse) {
