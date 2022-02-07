@@ -5,16 +5,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hanfei1991/microcosm/lib/registry"
-
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/executor/runtime"
 	"github.com/hanfei1991/microcosm/executor/worker"
 	"github.com/hanfei1991/microcosm/lib"
+	"github.com/hanfei1991/microcosm/lib/registry"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
-	"github.com/hanfei1991/microcosm/pkg/adapter"
-	"github.com/hanfei1991/microcosm/pkg/autoid"
 	"github.com/hanfei1991/microcosm/pkg/config"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/errors"
@@ -28,7 +25,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/tcpserver"
 	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/pkg/logutil"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -36,12 +32,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 )
-
-type metaStoreSession interface {
-	Done() <-chan struct{}
-}
-
-type discoveryConnectFn func(ctx context.Context) (metaStoreSession, error)
 
 type Server struct {
 	cfg     *Config
@@ -54,17 +44,19 @@ type Server struct {
 	sch         *runtime.Runtime
 	workerRtm   *worker.Runtime
 	msgServer   *p2p.MessageRPCService
-	info        *model.ExecutorInfo
-	idAllocator *autoid.UUIDAllocator
+	info        *model.NodeInfo
 
 	lastHearbeatTime time.Time
 
 	mockSrv mock.GrpcServer
 
-	metastore          metadata.MetaKV
-	discovery          srvdiscovery.Discovery
-	discoveryConnector discoveryConnectFn
-	p2pMsgRouter       p2pImpl.MessageRouter
+	// etcdCli connects to server master embed etcd, it should be used in service
+	// discovery only.
+	etcdCli             *clientv3.Client
+	metastore           metadata.MetaKV
+	discoveryRunner     srvdiscovery.DiscoveryRunner
+	initDiscoveryRunner func() error
+	p2pMsgRouter        p2pImpl.MessageRouter
 }
 
 func NewServer(cfg *Config, ctx *test.Context) *Server {
@@ -72,9 +64,8 @@ func NewServer(cfg *Config, ctx *test.Context) *Server {
 		cfg:         cfg,
 		testCtx:     ctx,
 		cliUpdateCh: make(chan []string),
-		idAllocator: autoid.NewUUIDAllocator(),
 	}
-	s.discoveryConnector = s.connectToEtcdDiscovery
+	s.initDiscoveryRunner = s.initDiscoveryRunnerImpl
 	return &s
 }
 
@@ -142,25 +133,27 @@ func (s *Server) ResumeBatchTasks(ctx context.Context, req *pb.PauseBatchTasksRe
 
 func (s *Server) DispatchTask(ctx context.Context, req *pb.DispatchTaskRequest) (*pb.DispatchTaskResponse, error) {
 	log.L().Info("dispatch task", zap.String("req", req.String()))
-	workerID := s.idAllocator.AllocID()
 
 	// TODO better dependency management
 	dctx := dcontext.Background()
 	dctx.Dependencies = dcontext.RuntimeDependencies{
 		MessageHandlerManager: s.msgServer.MakeHandlerManager(),
-		MessageRouter:         p2p.NewMessageSender(p2p.NewMessageRouter(string(s.info.ID), s.cfg.AdvertiseAddr)),
+		MessageRouter:         p2p.NewMessageSender(s.p2pMsgRouter),
 		MetaKVClient:          s.metastore,
 		ExecutorClientManager: client.NewClientManager(),
 		ServerMasterClient:    s.cli,
 	}
+	dctx.Environ.NodeID = p2p.NodeID(s.info.ID)
+	dctx.Environ.Addr = s.info.Addr
 
 	newWorker, err := registry.GlobalWorkerRegistry().CreateWorker(
 		dctx,
 		lib.WorkerType(req.GetTaskTypeId()),
-		lib.WorkerID(workerID),
+		lib.WorkerID(req.GetWorkerId()),
 		lib.MasterID(req.GetMasterId()),
 		req.GetTaskConfig())
 	if err != nil {
+		log.L().Error("Failed to create worker", zap.Error(err))
 		// TODO better error handling
 		return nil, err
 	}
@@ -168,7 +161,7 @@ func (s *Server) DispatchTask(ctx context.Context, req *pb.DispatchTaskRequest) 
 	s.workerRtm.AddWorker(newWorker)
 	return &pb.DispatchTaskResponse{
 		ErrorCode: pb.DispatchTaskErrorCode_OK,
-		WorkerId:  workerID,
+		WorkerId:  req.GetWorkerId(),
 	}, nil
 }
 
@@ -222,12 +215,13 @@ func (s *Server) startForTest(ctx context.Context) (err error) {
 }
 
 func (s *Server) startMsgService(ctx context.Context, wg *errgroup.Group) (err error) {
-	s.msgServer, err = p2p.NewMessageRPCService(string(s.info.ID), nil)
+	s.msgServer, err = p2p.NewDependentMessageRPCService(string(s.info.ID), nil, s.grpcSrv)
 	if err != nil {
 		return err
 	}
 	wg.Go(func() error {
-		return s.msgServer.Serve(ctx, s.tcpServer.GrpcListener())
+		// TODO refactor this
+		return s.msgServer.Serve(ctx, nil)
 	})
 	return nil
 }
@@ -239,11 +233,6 @@ func (s *Server) Run(ctx context.Context) error {
 
 	wg, ctx := errgroup.WithContext(ctx)
 
-	err := s.startTCPService(ctx, wg)
-	if err != nil {
-		return err
-	}
-
 	s.sch = runtime.NewRuntime(nil)
 	wg.Go(func() error {
 		s.sch.Run(ctx, 10)
@@ -254,12 +243,25 @@ func (s *Server) Run(ctx context.Context) error {
 	s.workerRtm = worker.NewRuntime(ctx)
 	s.workerRtm.Start(pollCon)
 
-	err = s.selfRegister(ctx)
+	err := s.selfRegister(ctx)
 	if err != nil {
 		return err
 	}
 
+	s.p2pMsgRouter = p2p.NewMessageRouter(p2p.NodeID(s.info.ID), s.info.Addr)
+
+	s.grpcSrv = grpc.NewServer()
 	err = s.startMsgService(ctx, wg)
+	if err != nil {
+		return err
+	}
+
+	err = s.startTCPService(ctx, wg)
+	if err != nil {
+		return err
+	}
+
+	err = s.connectToMetaStore(ctx)
 	if err != nil {
 		return err
 	}
@@ -291,7 +293,6 @@ func (s *Server) startTCPService(ctx context.Context, wg *errgroup.Group) error 
 		return err
 	}
 	s.tcpServer = tcpServer
-	s.grpcSrv = grpc.NewServer()
 	pb.RegisterExecutorServer(s.grpcSrv, s)
 	log.L().Logger.Info("listen address", zap.String("addr", s.cfg.WorkerAddr))
 
@@ -306,19 +307,19 @@ func (s *Server) startTCPService(ctx context.Context, wg *errgroup.Group) error 
 	wg.Go(func() error {
 		return debugHandler(s.tcpServer.HTTP1Listener())
 	})
-
 	return nil
 }
 
-func (s *Server) connectToEtcdDiscovery(ctx context.Context) (metaStoreSession, error) {
-	// query service discovery metastore, which is an embed etcd underlying
+// current the metastore is an embed etcd underlying
+func (s *Server) connectToMetaStore(ctx context.Context) error {
+	// query service discovery metastore to fetch metastore connection endpoint
 	resp, err := s.cli.QueryMetaStore(
 		ctx,
 		&pb.QueryMetaStoreRequest{Tp: pb.StoreType_ServiceDiscovery},
 		s.cfg.RPCTimeout,
 	)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	log.L().Info("update service discovery metastore", zap.String("addr", resp.Address))
 
@@ -345,77 +346,66 @@ func (s *Server) connectToEtcdDiscovery(ctx context.Context) (metaStoreSession, 
 		},
 	})
 	if err != nil {
-		return nil, err
-	}
-	session, err := s.createSession(ctx, etcdCli)
-	if err != nil {
-		return nil, err
+		return err
 	}
 
-	// initialize a new service discovery, if old discovery exists, clones its
-	// snapshot to the new one.
-	old := s.discovery
-	s.discovery = srvdiscovery.NewEtcdSrvDiscovery(
-		etcdCli, adapter.ExecutorInfoKeyAdapter, defaultDiscoverTicker)
-	if old != nil {
-		s.discovery.CopySnapshot(old.SnapshotClone())
-	}
-
-	return session, nil
+	// TODO: we share system metastore with service discovery etcd, in the future
+	// we will separate them
+	s.metastore = metadata.NewMetaEtcd(etcdCli)
+	// TODO: after metastore is separted from server master embed etcd, this etcdCli
+	// should be another one.
+	s.etcdCli = etcdCli
+	return err
 }
 
-func (s *Server) createSession(ctx context.Context, etcdCli *clientv3.Client) (metaStoreSession, error) {
-	session, err := concurrency.NewSession(etcdCli, concurrency.WithTTL(s.cfg.SessionTTL))
-	if err != nil {
-		return nil, err
-	}
-	// TODO: we share system metastore with service discovery etcd, in the future
-	// we could separate them
-	s.metastore = metadata.NewMetaEtcd(etcdCli)
+func (s *Server) initDiscoveryRunnerImpl() error {
 	value, err := s.info.ToJSON()
 	if err != nil {
-		return nil, err
+		return err
 	}
-	_, err = s.metastore.Put(ctx, s.info.EtcdKey(), value, clientv3.WithLease(session.Lease()))
-	if err != nil {
-		return nil, err
-	}
-	return session, nil
+	s.discoveryRunner = srvdiscovery.NewDiscoveryRunnerImpl(
+		s.etcdCli, s.metastore, s.cfg.SessionTTL, defaultDiscoverTicker,
+		s.info.EtcdKey(), value)
+	return nil
 }
 
 func (s *Server) discoveryKeepalive(ctx context.Context) error {
 	var (
-		session metaStoreSession
+		session srvdiscovery.Session
 		err     error
 	)
-	session, err = s.discoveryConnector(ctx)
+
+	err = s.initDiscoveryRunner()
 	if err != nil {
 		return err
 	}
-	executors, err := s.discovery.Snapshot(ctx)
+	session, err = s.discoveryRunner.ResetDiscovery(ctx, true /* resetSession*/)
 	if err != nil {
 		return err
 	}
+	executors := s.discoveryRunner.GetSnapshot()
 	for uuid, exec := range executors {
 		if s.p2pMsgRouter != nil {
+			log.L().Info("add peer",
+				zap.String("uuid", uuid),
+				zap.Any("exec", exec))
 			s.p2pMsgRouter.AddPeer(uuid, exec.Addr)
 		}
 	}
-
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-session.Done():
 			log.L().Warn("metastore session is done", zap.String("executor-id", string(s.info.ID)))
-			session, err = s.discoveryConnector(ctx)
+			session, err = s.discoveryRunner.ResetDiscovery(ctx, true /* resetSession*/)
 			if err != nil {
 				return err
 			}
-		case resp := <-s.discovery.Watch(ctx):
+		case resp := <-s.discoveryRunner.GetWatcher():
 			if resp.Err != nil {
 				log.L().Warn("discovery watch met error", zap.Error(resp.Err))
-				session, err = s.discoveryConnector(ctx)
+				_, err = s.discoveryRunner.ResetDiscovery(ctx, false /* resetSession*/)
 				if err != nil {
 					return err
 				}
@@ -423,14 +413,20 @@ func (s *Server) discoveryKeepalive(ctx context.Context) error {
 			}
 			for uuid, add := range resp.AddSet {
 				if s.p2pMsgRouter != nil {
+					log.L().Info("add peer",
+						zap.String("uuid", uuid),
+						zap.Any("exec", add))
 					s.p2pMsgRouter.AddPeer(uuid, add.Addr)
 				}
 			}
 			for uuid := range resp.DelSet {
 				if s.p2pMsgRouter != nil {
+					log.L().Info("remove peer",
+						zap.String("uuid", uuid))
 					s.p2pMsgRouter.RemovePeer(uuid)
 				}
 			}
+			s.discoveryRunner.ApplyWatchResult(resp)
 		}
 	}
 }
@@ -443,7 +439,7 @@ func (s *Server) selfRegister(ctx context.Context) (err error) {
 	}
 	log.L().Logger.Info("master client init successful")
 	registerReq := &pb.RegisterExecutorRequest{
-		Address:    s.cfg.WorkerAddr,
+		Address:    s.cfg.AdvertiseAddr,
 		Capability: 100,
 	}
 
@@ -451,7 +447,8 @@ func (s *Server) selfRegister(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
-	s.info = &model.ExecutorInfo{
+	s.info = &model.NodeInfo{
+		Type: model.NodeTypeExecutor,
 		ID:   model.ExecutorID(resp.ExecutorId),
 		Addr: s.cfg.WorkerAddr,
 	}

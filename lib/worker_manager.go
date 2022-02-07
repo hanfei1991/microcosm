@@ -6,13 +6,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/zap"
+
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
-	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	"go.uber.org/zap"
 )
 
 // workerManager is for private use by BaseMaster.
@@ -90,15 +91,26 @@ func (m *workerManagerImpl) Tick(
 
 	// respond to worker heartbeats
 	for workerID, workerInfo := range m.workerInfos {
-		if !workerInfo.hasPendingHeartbeat {
-			if workerInfo.hasTimedOut(m.clock, &m.timeoutConfig) {
-				offlinedWorkers = append(offlinedWorkers, workerInfo)
-				delete(m.workerInfos, workerID)
+		// `justOnlined` indicates that the online event has not been notified,
+		// and `hasPendingHeartbeat` indicates that we have received a heartbeat and
+		// has not sent the Pong yet.
+		if workerInfo.justOnlined && workerInfo.hasPendingHeartbeat {
+			workerInfo.justOnlined = false
+			workerInfo.status.Code = WorkerStatusInit
+			onlinedWorkers = append(onlinedWorkers, workerInfo)
+		}
 
-				statusCloned := workerInfo.status
-				statusCloned.Code = WorkerStatusError
-				m.tombstones[workerID] = &statusCloned
-			}
+		if workerInfo.hasTimedOut(m.clock, &m.timeoutConfig) {
+			offlinedWorkers = append(offlinedWorkers, workerInfo)
+			delete(m.workerInfos, workerID)
+
+			statusCloned := workerInfo.status
+			statusCloned.Code = WorkerStatusError
+			m.tombstones[workerID] = &statusCloned
+		}
+
+		if !workerInfo.hasPendingHeartbeat {
+			// No heartbeat to respond to.
 			continue
 		}
 		reply := &HeartbeatPongMessage{
@@ -113,7 +125,7 @@ func (m *workerManagerImpl) Tick(
 			zap.String("worker-node-id", workerNodeID),
 			zap.Any("message", reply))
 
-		ok, err := sender.SendToNode(ctx, workerNodeID, HeartbeatPongTopic(m.masterID), reply)
+		ok, err := sender.SendToNode(ctx, workerNodeID, HeartbeatPongTopic(m.masterID, workerID), reply)
 		if err != nil {
 			log.L().Error("Failed to send heartbeat", zap.Error(err))
 		}
@@ -122,12 +134,8 @@ func (m *workerManagerImpl) Tick(
 				zap.Any("message", reply))
 			continue
 		}
+		// We have sent the Pong, mark it as such.
 		workerInfo.hasPendingHeartbeat = false
-
-		if workerInfo.justOnlined {
-			workerInfo.justOnlined = false
-			onlinedWorkers = append(onlinedWorkers, workerInfo)
-		}
 	}
 	return
 }

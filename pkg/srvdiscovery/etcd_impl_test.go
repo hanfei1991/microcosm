@@ -24,7 +24,7 @@ func init() {
 func TestEtcdDiscoveryAPI(t *testing.T) {
 	t.Parallel()
 
-	keyAdapter := adapter.ExecutorInfoKeyAdapter
+	keyAdapter := adapter.NodeInfoKeyAdapter
 	ctx, cancel := context.WithCancel(context.Background())
 	_, _, client, cleanFn := test.PrepareEtcd(t, "discovery-test1")
 	defer cleanFn()
@@ -106,26 +106,4 @@ func TestEtcdDiscoveryAPI(t *testing.T) {
 	ch = d.Watch(ctx)
 	wresp = <-ch
 	require.Error(t, wresp.Err, errors.ErrDiscoveryDuplicateWatch.GetMsg())
-}
-
-func TestSnapshotClone(t *testing.T) {
-	t.Parallel()
-	snapshot := map[UUID]ServiceResource{
-		"uuid-1": {Addr: "127.0.0.1:10001"},
-		"uuid-2": {Addr: "127.0.0.1:10002"},
-	}
-	discovery := EtcdSrvDiscovery{
-		snapshot:    snapshot,
-		snapshotRev: 100,
-	}
-	cloned, rev := discovery.SnapshotClone()
-	require.Equal(t, int64(100), rev)
-	require.Equal(t, snapshot, cloned)
-	for k := range snapshot {
-		delete(snapshot, k)
-	}
-	require.Equal(t, map[UUID]ServiceResource{
-		"uuid-1": {Addr: "127.0.0.1:10001"},
-		"uuid-2": {Addr: "127.0.0.1:10002"},
-	}, cloned)
 }

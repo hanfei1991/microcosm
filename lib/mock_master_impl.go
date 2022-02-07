@@ -4,13 +4,14 @@ import (
 	"context"
 	"sync"
 
-	"github.com/hanfei1991/microcosm/client"
-	"github.com/hanfei1991/microcosm/pkg/metadata"
-	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/mock"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
+
+	"github.com/hanfei1991/microcosm/client"
+	"github.com/hanfei1991/microcosm/pkg/metadata"
+	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
 type MockMasterImpl struct {
@@ -43,6 +44,9 @@ func NewMockMasterImpl(id MasterID) *MockMasterImpl {
 		serverMasterClient:    &client.MockServerMasterClient{},
 	}
 	ret.BaseMaster = NewBaseMaster(
+		// ctx is nil for now
+		// TODO refine this
+		nil,
 		ret,
 		id,
 		ret.messageHandlerManager,
@@ -62,6 +66,7 @@ func (m *MockMasterImpl) Reset() {
 	m.Mock.Calls = nil
 
 	m.BaseMaster = NewBaseMaster(
+		nil,
 		m,
 		m.id,
 		m.messageHandlerManager,
