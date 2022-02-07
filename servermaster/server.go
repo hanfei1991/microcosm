@@ -15,10 +15,12 @@ import (
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
+	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/etcdutils"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
+	"github.com/hanfei1991/microcosm/pkg/srvdiscovery"
 	"github.com/hanfei1991/microcosm/servermaster/cluster"
 	"github.com/hanfei1991/microcosm/test"
 	"github.com/hanfei1991/microcosm/test/mock"
@@ -31,6 +33,7 @@ import (
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
 )
 
@@ -62,7 +65,11 @@ type Server struct {
 	cfg  *Config
 	info *model.NodeInfo
 
-	msgService *p2p.MessageRPCService
+	msgService          *p2p.MessageRPCService
+	p2pMsgRouter        p2p.MessageRouter
+	rpcLogRL            *rate.Limiter
+	discoveryRunner     srvdiscovery.DiscoveryRunner
+	initDiscoveryRunner func() error
 
 	initialized atomic.Bool
 
@@ -90,6 +97,7 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 		ID:   model.DeployNodeID(cfg.Etcd.Name),
 		Addr: cfg.AdvertiseAddr,
 	}
+	p2pMsgRouter := p2p.NewMessageRouter(p2p.NodeID(info.ID), info.Addr)
 
 	server := &Server{
 		cfg:             cfg,
@@ -98,8 +106,11 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 		initialized:     *atomic.NewBool(false),
 		testCtx:         ctx,
 		leader:          atomic.Value{},
+		p2pMsgRouter:    p2pMsgRouter,
+		rpcLogRL:        rate.NewLimiter(rate.Every(time.Second*5), 3 /*burst*/),
 	}
 	server.leaderServiceFn = server.runLeaderService
+	server.initDiscoveryRunner = server.initDiscoveryRunnerImpl
 	return server, nil
 }
 
@@ -345,6 +356,10 @@ func (s *Server) Run(ctx context.Context) (err error) {
 		return s.memberLoop(ctx)
 	})
 
+	wg.Go(func() error {
+		return s.discoveryKeepalive(ctx)
+	})
+
 	return wg.Wait()
 }
 
@@ -458,8 +473,12 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	if err != nil {
 		return
 	}
-	s.jobManager, err = NewJobManagerImplV2(ctx, s.name(),
-		s.msgService.MakeHandlerManager(), clients, metadata.NewMetaEtcd(s.etcdClient))
+	dctx := dcontext.NewContext(ctx, log.L())
+	dctx.Environ.Addr = s.cfg.AdvertiseAddr
+	dctx.Environ.NodeID = s.name()
+	s.jobManager, err = NewJobManagerImplV2(dctx, "", s.name(),
+		s.msgService.MakeHandlerManager(), p2p.NewMessageSender(s.p2pMsgRouter),
+		clients, metadata.NewMetaEtcd(s.etcdClient))
 	if err != nil {
 		return
 	}
@@ -539,7 +558,10 @@ func (s *Server) rpcForwardIfNeeded(ctx context.Context, req interface{}, respPo
 	fullMethodName := runtime.FuncForPC(pc).Name()
 	methodName := fullMethodName[strings.LastIndexByte(fullMethodName, '.')+1:]
 
-	log.L().Info("", zap.Any("payload", req), zap.String("request", methodName))
+	// TODO: rate limiter based on different sender
+	if s.rpcLogRL.Allow() {
+		log.L().Info("", zap.Any("payload", req), zap.String("request", methodName))
+	}
 
 	isLeader, needForward := s.isLeaderAndNeedForward(ctx)
 	if isLeader {
@@ -613,6 +635,80 @@ func (s *Server) memberLoop(ctx context.Context) error {
 			if err := s.updateServerMasterMembers(ctx); err != nil {
 				log.L().Warn("update server master members failed", zap.Error(err))
 			}
+		}
+	}
+}
+
+func (s *Server) initDiscoveryRunnerImpl() error {
+	value, err := s.info.ToJSON()
+	if err != nil {
+		return err
+	}
+	s.discoveryRunner = srvdiscovery.NewDiscoveryRunnerImpl(
+		s.etcdClient, metadata.NewMetaEtcd(s.etcdClient),
+		int(defaultSessionTTL/time.Second), defaultDiscoverTicker,
+		s.info.EtcdKey(), value)
+	return nil
+}
+
+func (s *Server) discoveryKeepalive(ctx context.Context) error {
+	var (
+		session srvdiscovery.Session
+		err     error
+	)
+
+	err = s.initDiscoveryRunner()
+	if err != nil {
+		return err
+	}
+	session, err = s.discoveryRunner.ResetDiscovery(ctx, true /* resetSession*/)
+	if err != nil {
+		return err
+	}
+	executors := s.discoveryRunner.GetSnapshot()
+	for uuid, exec := range executors {
+		if s.p2pMsgRouter != nil {
+			log.L().Info("add peer",
+				zap.String("uuid", uuid),
+				zap.Any("exec", exec))
+			s.p2pMsgRouter.AddPeer(uuid, exec.Addr)
+		}
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-session.Done():
+			log.L().Warn("metastore session is done", zap.String("executor-id", string(s.info.ID)))
+			session, err = s.discoveryRunner.ResetDiscovery(ctx, true /* resetSession*/)
+			if err != nil {
+				return err
+			}
+		case resp := <-s.discoveryRunner.GetWatcher():
+			if resp.Err != nil {
+				log.L().Warn("discovery watch met error", zap.Error(resp.Err))
+				_, err = s.discoveryRunner.ResetDiscovery(ctx, false /* resetSession*/)
+				if err != nil {
+					return err
+				}
+				continue
+			}
+			for uuid, add := range resp.AddSet {
+				if s.p2pMsgRouter != nil {
+					log.L().Info("add peer",
+						zap.String("uuid", uuid),
+						zap.Any("exec", add))
+					s.p2pMsgRouter.AddPeer(uuid, add.Addr)
+				}
+			}
+			for uuid := range resp.DelSet {
+				if s.p2pMsgRouter != nil {
+					log.L().Info("remove peer",
+						zap.String("uuid", uuid))
+					s.p2pMsgRouter.RemovePeer(uuid)
+				}
+			}
+			s.discoveryRunner.ApplyWatchResult(resp)
 		}
 	}
 }

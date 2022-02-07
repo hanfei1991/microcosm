@@ -29,6 +29,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 )
@@ -469,6 +470,7 @@ func (s *Server) keepHeartbeat(ctx context.Context) error {
 			})
 		}
 	}()
+	rl := rate.NewLimiter(rate.Every(time.Second*5), 1 /*burst*/)
 	for {
 		select {
 		case <-ctx.Done():
@@ -508,7 +510,9 @@ func (s *Server) keepHeartbeat(ctx context.Context) error {
 			// later than master's, which might cause that master wait for less time than executor.
 			// This gap is unsafe.
 			s.lastHearbeatTime = t
-			log.L().Info("heartbeat success", zap.String("leader", resp.Leader), zap.Strings("members", resp.Addrs))
+			if rl.Allow() {
+				log.L().Info("heartbeat success", zap.String("leader", resp.Leader), zap.Strings("members", resp.Addrs))
+			}
 			// update master client could cost long time, we make it a background
 			// job and if there is running update task, we ignore once since more
 			// heartbeats will be called later.

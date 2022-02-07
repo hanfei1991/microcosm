@@ -12,6 +12,8 @@ import (
 )
 
 const (
+	jobManagerID = "job-manager"
+
 	masterID = "master"
 
 	executorNodeID = "node-exec"
@@ -21,7 +23,7 @@ const (
 
 func newExampleMaster() *exampleMaster {
 	self := &exampleMaster{}
-	self.BaseMaster = lib.MockBaseMaster(masterID, self)
+	self.BaseMaster = lib.MockBaseMaster(jobManagerID, masterID, self)
 	return self
 }
 
