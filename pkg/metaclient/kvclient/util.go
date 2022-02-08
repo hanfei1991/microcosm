@@ -3,7 +3,7 @@ package kvclient
 import (
 	"github.com/hanfei1991/microcosm/pkg/metaclient"
 	"go.etcd.io/etcd/clientv3"
-	etcdserverpb "go.etcd.io/etcd/etcdserver/etcdserverpb"
+	"go.etcd.io/etcd/etcdserver/etcdserverpb"
 )
 
 func makePutResp(etcdResp *clientv3.PutResponse) *metaclient.PutResponse {
@@ -26,7 +26,7 @@ func makeGetResp(etcdResp *clientv3.GetResponse) *metaclient.GetResponse {
 			Key:   kv.Key,
 			Value: kv.Value,
 			// [TODO] leaseID to TTL,
-			Revision:    kv.ModRevision,
+			Revision: kv.ModRevision,
 		})
 	}
 
@@ -49,7 +49,7 @@ func makeDeleteResp(etcdResp *clientv3.DeleteResponse) *metaclient.DeleteRespons
 	return resp
 }
 
-func makeEtcdCmpFromRev(key string, revision int64) clientv3.Cmp{
+func makeEtcdCmpFromRev(key string, revision int64) clientv3.Cmp {
 	return clientv3.Compare(clientv3.ModRevision(key), "=", revision)
 }
 
@@ -59,25 +59,25 @@ func makeTxnResp(etcdResp *clientv3.TxnResponse) *metaclient.TxnResponse {
 		switch eRsp.Response.(type) {
 		case *etcdserverpb.ResponseOp_ResponseRange:
 			rsps = append(rsps, metaclient.ResponseOp{
-				Response: &metaclient.ResponseOp_ResponseGet{
+				Response: &metaclient.ResponseOpResponseGet{
 					ResponseGet: makeGetResp((*clientv3.GetResponse)(eRsp.GetResponseRange())),
 				},
 			})
 		case *etcdserverpb.ResponseOp_ResponsePut:
 			rsps = append(rsps, metaclient.ResponseOp{
-				Response: &metaclient.ResponseOp_ResponsePut{
+				Response: &metaclient.ResponseOpResponsePut{
 					ResponsePut: makePutResp((*clientv3.PutResponse)(eRsp.GetResponsePut())),
 				},
 			})
 		case *etcdserverpb.ResponseOp_ResponseDeleteRange:
 			rsps = append(rsps, metaclient.ResponseOp{
-				Response: &metaclient.ResponseOp_ResponseDelete{
+				Response: &metaclient.ResponseOpResponseDelete{
 					ResponseDelete: makeDeleteResp((*clientv3.DeleteResponse)(eRsp.GetResponseDeleteRange())),
 				},
 			})
 		case *etcdserverpb.ResponseOp_ResponseTxn:
 			rsps = append(rsps, metaclient.ResponseOp{
-				Response: &metaclient.ResponseOp_ResponseTxn{
+				Response: &metaclient.ResponseOpResponseTxn{
 					ResponseTxn: makeTxnResp((*clientv3.TxnResponse)(eRsp.GetResponseTxn())),
 				},
 			})

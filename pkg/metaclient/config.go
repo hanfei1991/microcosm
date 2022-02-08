@@ -54,7 +54,7 @@ type DialConf struct {
 
 type LogConf struct {
 	File  string
-	level int
+	Level int
 }
 
 func (cf *Config) Clone() *Config {

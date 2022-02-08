@@ -2,7 +2,7 @@ package kvclient
 
 import (
 	"context"
-	"github.com/pingcap/errors"
+
 	cerrors "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/metaclient/namespace"
@@ -75,9 +75,9 @@ func (c *etcdKVImpl) getEtcdOptions(ctx context.Context, op metaclient.Op) ([]cl
 	case op.Sort() != nil:
 		etcdOps = append(etcdOps, clientv3.WithSort((clientv3.SortTarget)(op.Sort().Target), (clientv3.SortOrder)(op.Sort().Order)))
 	// [TODO] check
-	case op.IsOptsWithPrefix() == true:
+	case op.IsOptsWithPrefix():
 		etcdOps = append(etcdOps, clientv3.WithPrefix())
-	case op.IsOptsWithFromKey() == true:
+	case op.IsOptsWithFromKey():
 		etcdOps = append(etcdOps, clientv3.WithFromKey())
 	case !op.IsOptsWithPrefix() && !op.IsOptsWithFromKey() && len(op.RangeBytes()) > 0:
 		etcdOps = append(etcdOps, clientv3.WithRange(string(op.RangeBytes())))
@@ -126,7 +126,6 @@ func (c *etcdKVImpl) getEtcdOp(ctx context.Context, op metaclient.Op) (clientv3.
 	}
 
 	panic("unknown op type")
-	return emptyOp, errors.New("unknown op type")
 }
 
 func (c *etcdKVImpl) Put(ctx context.Context, key, val string, opts ...metaclient.OpOption) (*metaclient.PutResponse, error) {
@@ -209,13 +208,11 @@ func (c *etcdKVImpl) Do(ctx context.Context, op metaclient.Op) (metaclient.OpRes
 	default:
 		panic("Unknown op")
 	}
-
-	return metaclient.OpResponse{}, nil
 }
 
 type etcdTxn struct {
 	clientv3.Txn
-	kv *etcdKVImpl
+	kv  *etcdKVImpl
 	ctx context.Context
 	// cache error to make chain operation work
 	Err error
@@ -224,7 +221,7 @@ type etcdTxn struct {
 func (c *etcdKVImpl) Txn(ctx context.Context) metaclient.Txn {
 	return &etcdTxn{
 		Txn: c.cli.Txn(ctx),
-		kv: c,
+		kv:  c,
 		ctx: ctx,
 	}
 }

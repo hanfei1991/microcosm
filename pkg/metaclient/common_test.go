@@ -10,11 +10,10 @@ func TestResponseOpUnion(t *testing.T) {
 	t.Parallel()
 
 	get := ResponseOp{
-		Response: &ResponseOp_ResponseGet{
+		Response: &ResponseOpResponseGet{
 			ResponseGet: &GetResponse{
 				Header: &ResponseHeader{
-					ClusterId: "1111",
-					Revision:  1111,
+					ClusterID: "1111",
 				},
 			},
 		},
@@ -23,11 +22,10 @@ func TestResponseOpUnion(t *testing.T) {
 	require.Nil(t, get.GetResponsePut())
 
 	put := ResponseOp{
-		Response: &ResponseOp_ResponsePut{
+		Response: &ResponseOpResponsePut{
 			ResponsePut: &PutResponse{
 				Header: &ResponseHeader{
-					ClusterId: "1111",
-					Revision:  1111,
+					ClusterID: "1111",
 				},
 			},
 		},
@@ -36,11 +34,10 @@ func TestResponseOpUnion(t *testing.T) {
 	require.Nil(t, put.GetResponseDelete())
 
 	delet := ResponseOp{
-		Response: &ResponseOp_ResponseDelete{
+		Response: &ResponseOpResponseDelete{
 			ResponseDelete: &DeleteResponse{
 				Header: &ResponseHeader{
-					ClusterId: "1111",
-					Revision:  1111,
+					ClusterID: "1111",
 				},
 			},
 		},
@@ -49,11 +46,10 @@ func TestResponseOpUnion(t *testing.T) {
 	require.Nil(t, delet.GetResponseTxn())
 
 	txn := ResponseOp{
-		Response: &ResponseOp_ResponseTxn{
+		Response: &ResponseOpResponseTxn{
 			ResponseTxn: &TxnResponse{
 				Header: &ResponseHeader{
-					ClusterId: "1111",
-					Revision:  1111,
+					ClusterID: "1111",
 				},
 			},
 		},
@@ -64,39 +60,35 @@ func TestResponseOpUnion(t *testing.T) {
 
 func TestNestedTxnResponse(t *testing.T) {
 	txn := ResponseOp{
-		Response: &ResponseOp_ResponseTxn{
+		Response: &ResponseOpResponseTxn{
 			ResponseTxn: &TxnResponse{
 				Header: &ResponseHeader{
-					ClusterId: "1111",
-					Revision:  1111,
+					ClusterID: "1111",
 				},
 				Responses: []ResponseOp{
 					ResponseOp{
-						Response: &ResponseOp_ResponseGet{
+						Response: &ResponseOpResponseGet{
 							ResponseGet: &GetResponse{
 								Header: &ResponseHeader{
-									ClusterId: "1111",
-									Revision:  1111,
+									ClusterID: "1111",
 								},
 							},
 						},
 					},
 					ResponseOp{
-						Response: &ResponseOp_ResponsePut{
+						Response: &ResponseOpResponsePut{
 							ResponsePut: &PutResponse{
 								Header: &ResponseHeader{
-									ClusterId: "1111",
-									Revision:  1111,
+									ClusterID: "1111",
 								},
 							},
 						},
 					},
 					ResponseOp{
-						Response: &ResponseOp_ResponseTxn{
+						Response: &ResponseOpResponseTxn{
 							ResponseTxn: &TxnResponse{
 								Header: &ResponseHeader{
-									ClusterId: "1111",
-									Revision:  1111,
+									ClusterID: "1111",
 								},
 							},
 						},

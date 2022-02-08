@@ -157,21 +157,21 @@ func (kv *kvPrefix) unprefixDeleteResponse(resp *metaclient.DeleteResponse) {
 func (kv *kvPrefix) unprefixTxnResponse(resp *metaclient.TxnResponse) {
 	for _, r := range resp.Responses {
 		switch tv := r.Response.(type) {
-		case *metaclient.ResponseOp_ResponseGet:
+		case *metaclient.ResponseOpResponseGet:
 			if tv.ResponseGet != nil {
-				kv.unprefixGetResponse((*metaclient.GetResponse)(tv.ResponseGet))
+				kv.unprefixGetResponse(tv.ResponseGet)
 			}
-		case *metaclient.ResponseOp_ResponsePut:
+		case *metaclient.ResponseOpResponsePut:
 			if tv.ResponsePut != nil {
-				kv.unprefixPutResponse((*metaclient.PutResponse)(tv.ResponsePut))
+				kv.unprefixPutResponse(tv.ResponsePut)
 			}
-		case *metaclient.ResponseOp_ResponseDelete:
+		case *metaclient.ResponseOpResponseDelete:
 			if tv.ResponseDelete != nil {
-				kv.unprefixDeleteResponse((*metaclient.DeleteResponse)(tv.ResponseDelete))
+				kv.unprefixDeleteResponse(tv.ResponseDelete)
 			}
-		case *metaclient.ResponseOp_ResponseTxn:
+		case *metaclient.ResponseOpResponseTxn:
 			if tv.ResponseTxn != nil {
-				kv.unprefixTxnResponse((*metaclient.TxnResponse)(tv.ResponseTxn))
+				kv.unprefixTxnResponse(tv.ResponseTxn)
 			}
 		default:
 		}

@@ -66,7 +66,7 @@ func TestPrefixInterval(t *testing.T) {
 			wEnd: []byte{0},
 		},
 	}
-	for i, tt := range tests {
+	for _, tt := range tests {
 		pfxKey, pfxEnd := prefixInterval(tt.pfx, tt.key, tt.end)
 		require.Equal(t, pfxKey, tt.wKey)
 		require.Equal(t, pfxEnd, tt.wEnd)

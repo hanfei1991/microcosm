@@ -4,7 +4,7 @@ package metaclient
 type ResponseHeader struct {
 	// ClusterId is the ID of the cluster which sent the response.
 	// Framework will generate uuid for every newcoming metastore
-	ClusterId string
+	ClusterID string
 }
 
 // Put Response
@@ -41,33 +41,33 @@ type ResponseOp struct {
 	//	*ResponseOp_ResponsePut
 	//	*ResponseOp_ResponseDeleteRange
 	//	*ResponseOp_ResponseTxn
-	Response isResponseOp_Response
+	Response isResponseOpResponse
 }
 
 // Using interface to make union
-type isResponseOp_Response interface {
-	isResponseOp_Response()
+type isResponseOpResponse interface {
+	isResponseOp()
 }
 
-type ResponseOp_ResponseGet struct {
+type ResponseOpResponseGet struct {
 	ResponseGet *GetResponse
 }
-type ResponseOp_ResponsePut struct {
+type ResponseOpResponsePut struct {
 	ResponsePut *PutResponse
 }
-type ResponseOp_ResponseDelete struct {
+type ResponseOpResponseDelete struct {
 	ResponseDelete *DeleteResponse
 }
-type ResponseOp_ResponseTxn struct {
+type ResponseOpResponseTxn struct {
 	ResponseTxn *TxnResponse
 }
 
-func (*ResponseOp_ResponseGet) isResponseOp_Response()    {}
-func (*ResponseOp_ResponsePut) isResponseOp_Response()    {}
-func (*ResponseOp_ResponseDelete) isResponseOp_Response() {}
-func (*ResponseOp_ResponseTxn) isResponseOp_Response()    {}
+func (*ResponseOpResponseGet) isResponseOp()    {}
+func (*ResponseOpResponsePut) isResponseOp()    {}
+func (*ResponseOpResponseDelete) isResponseOp() {}
+func (*ResponseOpResponseTxn) isResponseOp()    {}
 
-func (m *ResponseOp) GetResponse() isResponseOp_Response {
+func (m *ResponseOp) GetResponse() isResponseOpResponse {
 	if m != nil {
 		return m.Response
 	}
@@ -75,28 +75,28 @@ func (m *ResponseOp) GetResponse() isResponseOp_Response {
 }
 
 func (m *ResponseOp) GetResponseGet() *GetResponse {
-	if x, ok := m.GetResponse().(*ResponseOp_ResponseGet); ok {
+	if x, ok := m.GetResponse().(*ResponseOpResponseGet); ok {
 		return x.ResponseGet
 	}
 	return nil
 }
 
 func (m *ResponseOp) GetResponsePut() *PutResponse {
-	if x, ok := m.GetResponse().(*ResponseOp_ResponsePut); ok {
+	if x, ok := m.GetResponse().(*ResponseOpResponsePut); ok {
 		return x.ResponsePut
 	}
 	return nil
 }
 
 func (m *ResponseOp) GetResponseDelete() *DeleteResponse {
-	if x, ok := m.GetResponse().(*ResponseOp_ResponseDelete); ok {
+	if x, ok := m.GetResponse().(*ResponseOpResponseDelete); ok {
 		return x.ResponseDelete
 	}
 	return nil
 }
 
 func (m *ResponseOp) GetResponseTxn() *TxnResponse {
-	if x, ok := m.GetResponse().(*ResponseOp_ResponseTxn); ok {
+	if x, ok := m.GetResponse().(*ResponseOpResponseTxn); ok {
 		return x.ResponseTxn
 	}
 	return nil
