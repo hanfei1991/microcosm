@@ -79,7 +79,7 @@ func getBenchmarkServers(n int, c *C) []string {
 	return servers
 }
 
-func (t *testJobSuite) TestPause(c *C) {
+func (t *testJobSuite) testPause(c *C) {
 	cluster := NewEmptyMiniCluster()
 	masterAddr, _, _, executorCtx := cluster.Start1M1E(c)
 	client, err := client.NewMasterClient(context.Background(), []string{masterAddr})
