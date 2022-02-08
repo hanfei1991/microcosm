@@ -7,7 +7,7 @@ import (
 )
 
 type dummyExtField struct {
-	Id   int    `json:"id"`
+	ID   int    `json:"id"`
 	Name string `json:"name"`
 }
 
@@ -19,7 +19,7 @@ func TestWorkerStatusFillExt(t *testing.T) {
 	}
 	err := ws.fillExt(&dummyExtField{})
 	require.Nil(t, err)
-	require.Equal(t, &dummyExtField{Id: 10, Name: "test"}, ws.Ext)
+	require.Equal(t, &dummyExtField{ID: 10, Name: "test"}, ws.Ext)
 
 	ws = &WorkerStatus{
 		ExtBytes: []byte("10"),
