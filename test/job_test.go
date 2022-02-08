@@ -79,6 +79,8 @@ func getBenchmarkServers(n int, c *C) []string {
 	return servers
 }
 
+// nolint: unused
+// This test is outdated, can be removed later
 func (t *testJobSuite) testPause(c *C) {
 	cluster := NewEmptyMiniCluster()
 	masterAddr, _, _, executorCtx := cluster.Start1M1E(c)
