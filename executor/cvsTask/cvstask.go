@@ -34,7 +34,7 @@ type Config struct {
 }
 
 type cvsTask struct {
-	*lib.BaseWorker
+	*lib.defaultBaseWorker
 	srcHost  string
 	srcDir   string
 	dstHost  string
@@ -74,7 +74,7 @@ func NewCvsTask(ctx *dcontext.Context, _workerID lib.WorkerID, masterID lib.Mast
 		masterID,
 	)
 	base.Impl = task
-	task.BaseWorker = base
+	task.defaultBaseWorker = base
 	return task
 }
 

@@ -16,7 +16,7 @@ import (
 )
 
 var (
-	_ Worker           = (*BaseWorker)(nil)
+	_ Worker           = (*defaultBaseWorker)(nil)
 	_ runtime.Runnable = (Worker)(nil)
 )
 

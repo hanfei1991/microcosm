@@ -17,7 +17,7 @@ var _ lib.Worker = (*dummyWorker)(nil)
 type (
 	Worker      = dummyWorker
 	dummyWorker struct {
-		*lib.BaseWorker
+		*lib.defaultBaseWorker
 
 		init   bool
 		closed int32
@@ -69,7 +69,7 @@ func (d *dummyWorker) CloseImpl(ctx context.Context) error {
 func NewDummyWorker(ctx *dcontext.Context, id lib.WorkerID, masterID lib.MasterID, _ lib.WorkerConfig) lib.Worker {
 	ret := &dummyWorker{}
 	dependencies := ctx.Dependencies
-	ret.BaseWorker = lib.NewBaseWorker(
+	ret.defaultBaseWorker = lib.NewBaseWorker(
 		ret,
 		dependencies.MessageHandlerManager,
 		dependencies.MessageRouter,

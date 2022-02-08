@@ -19,7 +19,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/uuid"
 )
 
-func MockBaseMaster(id MasterID, masterImpl MasterImpl) *BaseMaster {
+func MockBaseMaster(id MasterID, masterImpl MasterImpl) *defaultBaseMaster {
 	ret := NewBaseMaster(
 		// ctx is nil for now
 		// TODO refine this
@@ -32,12 +32,12 @@ func MockBaseMaster(id MasterID, masterImpl MasterImpl) *BaseMaster {
 		client.NewClientManager(),
 		&client.MockServerMasterClient{})
 
-	return ret
+	return ret.(*defaultBaseMaster)
 }
 
 func MockBaseMasterCreateWorker(
 	t *testing.T,
-	master *BaseMaster,
+	master *defaultBaseMaster,
 	workerType WorkerType,
 	config WorkerConfig,
 	cost model.RescUnit,
@@ -91,7 +91,7 @@ func MockBaseMasterCreateWorker(
 
 func MockBaseMasterWorkerHeartbeat(
 	t *testing.T,
-	master *BaseMaster,
+	master *defaultBaseMaster,
 	masterID MasterID,
 	workerID WorkerID,
 	executorID p2p.NodeID,
