@@ -33,5 +33,5 @@ func TestWorkerStatusFillExt(t *testing.T) {
 		ExtBytes: []byte("10"),
 	}
 	err = ws.fillExt(int64(0))
-	require.EqualError(t, err, "fill ext failed: reflect: Elem of invalid type int64")
+	require.Regexp(t, ".*reflect: Elem of invalid type int64", err)
 }

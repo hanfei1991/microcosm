@@ -83,7 +83,7 @@ func (s *WorkerStatus) fillExt(tpi interface{}) (err error) {
 		// ExtBytes is no longer useful after this function returns.
 		s.ExtBytes = nil
 		if r := recover(); r != nil {
-			err = errors.Errorf("fill ext failed: %v", r)
+			err = errors.Errorf("Fill ext field of worker status failed: %v", r)
 		}
 	}()
 	obj := reflect.New(reflect.TypeOf(tpi).Elem()).Interface()
