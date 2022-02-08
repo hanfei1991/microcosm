@@ -36,7 +36,6 @@ func makePutResp(etcdResp *clientv3.PutResponse) *metaclient.PutResponse {
 	resp := &metaclient.PutResponse{
 		Header: &metaclient.ResponseHeader{
 			// [TODO] ClusterID
-			Revision: etcdResp.Header.Revision,
 		},
 	}
 	return resp
@@ -45,19 +44,21 @@ func makePutResp(etcdResp *clientv3.PutResponse) *metaclient.PutResponse {
 func makeGetResp(etcdResp *clientv3.GetResponse) *metaclient.GetResponse {
 	kvs := make([]*metaclient.KeyValue, len(etcdResp.Kvs))
 	for _, kv := range etcdResp.Kvs {
+		if kv.Version == 0 {
+			// This key has been deleted, don't return to user
+			continue
+		}
 		kvs = append(kvs, &metaclient.KeyValue{
 			Key:   kv.Key,
 			Value: kv.Value,
 			// [TODO] leaseID to TTL,
-			CreateRevision: kv.CreateRevision,
-			ModRevision:    kv.ModRevision,
+			Revision:    kv.ModRevision,
 		})
 	}
 
 	resp := &metaclient.GetResponse{
 		Header: &metaclient.ResponseHeader{
 			// [TODO] ClusterID
-			Revision: etcdResp.Header.Revision,
 		},
 		Kvs: kvs,
 	}
@@ -69,10 +70,13 @@ func makeDeleteResp(etcdResp *clientv3.DeleteResponse) *metaclient.DeleteRespons
 	resp := &metaclient.DeleteResponse{
 		Header: &metaclient.ResponseHeader{
 			// [TODO] ClusterID
-			Revision: etcdResp.Header.Revision,
 		},
 	}
 	return resp
+}
+
+func makeEtcdCmpFromRev(key string, revision int64) clientv3.Cmp{
+	return clientv3.Compare(ModRevision(key), "=", revision)
 }
 
 func getEtcdOp(op metaClient.Op) (clientv3.Op, error) {
@@ -84,9 +88,21 @@ func getEtcdOp(op metaClient.Op) (clientv3.Op, error) {
 	case tGet:
 		return clientv3.OpGet(string(op.KeyBytes()), opts...), nil
 	case tPut:
-		return clientv3.OpPut(string(op.KeyBytes()), string(op.ValueBytes()), opts...), nil
+		cop := clientv3.OpPut(string(op.KeyBytes()), string(op.ValueBytes()), opts...),
+		if op.Revision() == metaclient.noRevision { 
+			return cop, nil
+		}
+		// make idempotent put operation
+		cmp := makeEtcdCmpFromRev(string(op.KeyBytes()), op.Revision())	
+		return clientv3.OpTxn([]clientv3.Cmp{cop}, []clientv3.Op{cop}, nil)	
 	case tDelete:
-		return clientv3.OpDelete(string(op.KeyBytes()), opts...), nil
+		cop := clientv3.OpDelete(string(op.KeyBytes()), opts...)
+		if op.Revision() == metaclient.noRevision { 
+			return cop, nil
+		}
+		// make idempotent delete operation
+		cmp := makeEtcdCmpFromRev(string(op.KeyBytes()), op.Revision())	
+		return clientv3.OpTxn([]clientv3.Cmp{cop}, []clientv3.Op{cop}, nil)	
 	case tTxn:
 		ops := op.Txn()
 		etcdOps := make([]clientv3.Op, len(ops))
@@ -138,7 +154,6 @@ func makeTxnResp(etcdResp *clientv3.TxnResponse) *metaclient.TxnResponse {
 	return &metaclient.TxnResponse{
 		Header: &metaclient.Header{
 			//[ClusterID]
-			Revision: etcdResp.Header.Revision,
 		},
 		Responses: rsps,
 	}

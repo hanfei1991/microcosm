@@ -17,10 +17,11 @@ type KV interface {
 	// an immutable representation of that bytes array.
 	// To get a string of bytes, do string([]byte{0x10, 0x20}).
 	// When passed WithTTL(ttl), Put will insert a key with ttl duration.
-	// When passed WithRevision(revision), Put will be executed with corresponding revision, or do nothing on vice verse.
+	// When passed WithRevision(revision), Put will be executed with corresponding revision,
+	// or do nothing on vice verse.
 	Put(ctx context.Context, key, val string, opts ...OpOption) (*PutResponse, error)
 
-	// Get retrieves keys.
+	// Get retrieves keys with newest revision.
 	// By default, Get will return the value for "key", if any.
 	// When passed WithRange(end), Get will return the keys in the range [key, end).
 	// When passed WithFromKey(), Get returns keys greater than or equal to key.
@@ -31,6 +32,7 @@ type KV interface {
 
 	// Delete deletes a key, or optionally using WithRange(end), [key, end).
 	// When passed WithRevision(revision), Put will be executed with corresponding revision
+	// [TODO] How to support idempotent range delete???
 	Delete(ctx context.Context, key string, opts ...OpOption) (*DeleteResponse, error)
 
 	// Do applies a single Op on KV without a transaction.

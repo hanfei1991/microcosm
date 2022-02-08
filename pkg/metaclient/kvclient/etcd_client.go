@@ -61,7 +61,6 @@ func NewEtcdKVImpl(config *metaclient.Config) (metaclient.KV, error) {
 	return c, nil
 }
 
-// [TODO] idempotent put
 func (c *etcdKVImpl) Put(ctx context.Context, key, val string, opts ...metaclient.OpOption) (*metaclient.PutResponse, error) {
 	op, err := OpPut(key, val, opts)
 	if err != nil {
@@ -147,14 +146,14 @@ func (c *etcdKVImpl) Do(ctx context.Context, op metaclient.Op) (metaclient.OpRes
 }
 
 type etcdTxn struct {
-	Txn clientv3.Txn
+	clientv3.Txn
 	// cache error to make chain operation work
 	Err error
 }
 
 func (c *etcdKVImpl) Txn(ctx context.Context) metaclient.Txn {
 	return &etcdTxn{
-		Txn: c.cli.Txn(ctx),
+		clientv3.Txn: c.cli.Txn(ctx),
 	}
 }
 
@@ -180,7 +179,7 @@ func (t *etcdTxn) Commit(ctx context.Context) (*metaclient.TxnResponse, error) {
 	if t.Err != nil {
 		return nil, errors.ErrMetaOpFail.Wrap(t.Err)
 	}
-	etcdResp, err := t.Txn.Commit(ctx)
+	etcdResp, err := t.Txn.Commit()
 	if err != nil {
 		return nil, errors.ErrMetaOpFail.Wrap(t.Err)
 	}
