@@ -43,7 +43,7 @@ type WorkerImpl interface {
 	// OnMasterFailover is called when the master is failed over.
 	OnMasterFailover(reason MasterFailoverReason) error
 
-	// CloseImpl tells the WorkerImpl to quitrunStatusWorker and release resources.
+	// CloseImpl tells the WorkerImpl to quit running StatusWorker and release resources.
 	CloseImpl(ctx context.Context) error
 }
 
