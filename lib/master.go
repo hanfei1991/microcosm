@@ -59,6 +59,7 @@ type MasterImpl interface {
 
 	// GetWorkerStatusExtTypeInfo returns an empty object that described the actual type
 	// of the `Ext` field in WorkerStatus.
+	// The returned type's kind must be Array, Chan, Map, Ptr, or Slice.
 	GetWorkerStatusExtTypeInfo() interface{}
 }
 
@@ -495,5 +496,6 @@ func (m *BaseMaster) CreateWorker(workerType WorkerType, config WorkerConfig, co
 func (m *BaseMaster) GetWorkerStatusExtTypeInfo() interface{} {
 	// This function provides a trivial default implementation of
 	// GetWorkerStatusExtTypeInfo.
-	return int64(0)
+	info := int64(0)
+	return &info
 }
