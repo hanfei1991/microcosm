@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/hanfei1991/microcosm/client"
-	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
@@ -417,13 +416,6 @@ func (s *Server) reset(ctx context.Context) error {
 		return errors.Wrap(errors.ErrMasterNewServer, err)
 	}
 
-	// TODO: server master membership can share the same key with node info
-	_, err = s.etcdClient.Put(ctx, adapter.MasterInfoKey.Encode(s.name()),
-		s.cfg.String(), clientv3.WithLease(sess.Lease()))
-	if err != nil {
-		return errors.Wrap(errors.ErrEtcdAPIError, err)
-	}
-
 	// register NodeInfo key used in service discovery
 	value, err := s.info.ToJSON()
 	if err != nil {
@@ -466,7 +458,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	if err != nil {
 		return
 	}
-	s.jobManager, err = NewJobManagerImplV2(ctx, lib.MasterID(s.name()),
+	s.jobManager, err = NewJobManagerImplV2(ctx, s.name(),
 		s.msgService.MakeHandlerManager(), clients, metadata.NewMetaEtcd(s.etcdClient))
 	if err != nil {
 		return
