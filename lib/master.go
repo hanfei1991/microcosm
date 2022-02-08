@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/hanfei1991/microcosm/client"
+	runtime "github.com/hanfei1991/microcosm/executor/worker"
 	"github.com/hanfei1991/microcosm/lib/quota"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
@@ -15,6 +16,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/pkg/workerpool"
@@ -27,7 +29,7 @@ type Master interface {
 	Poll(ctx context.Context) error
 	MasterID() MasterID
 
-	Closer
+	runtime.Closer
 }
 
 type MasterImpl interface {
@@ -54,6 +56,11 @@ type MasterImpl interface {
 
 	// CloseImpl is called when the master is being closed
 	CloseImpl(ctx context.Context) error
+
+	// GetWorkerStatusExtTypeInfo returns an empty object that described the actual type
+	// of the `Ext` field in WorkerStatus.
+	// The returned type's kind must be Array, Chan, Map, Ptr, or Slice.
+	GetWorkerStatusExtTypeInfo() interface{}
 }
 
 const (
@@ -369,6 +376,10 @@ func (m *BaseMaster) registerHandlerForWorker(ctx context.Context, workerID Work
 		&StatusUpdateMessage{},
 		func(sender p2p.NodeID, value p2p.MessageValue) error {
 			statusUpdateMessage := value.(*StatusUpdateMessage)
+			if err := statusUpdateMessage.Status.fillExt(m.Impl.GetWorkerStatusExtTypeInfo()); err != nil {
+				m.OnError(err)
+				return nil
+			}
 			m.workerManager.UpdateStatus(statusUpdateMessage)
 			return nil
 		})
@@ -393,7 +404,7 @@ func (m *BaseMaster) CreateWorker(workerType WorkerType, config WorkerConfig, co
 	}
 
 	// workerID is expected to be globally unique.
-	workerID := WorkerID(m.uuidGen.NewString())
+	workerID := m.uuidGen.NewString()
 
 	if !m.createWorkerQuota.TryConsume() {
 		return "", derror.ErrMasterConcurrencyExceeded.GenWithStackByArgs()
@@ -440,8 +451,8 @@ func (m *BaseMaster) CreateWorker(workerType WorkerType, config WorkerConfig, co
 			Req: &pb.DispatchTaskRequest{
 				TaskTypeId: int64(workerType),
 				TaskConfig: configBytes,
-				MasterId:   string(m.id),
-				WorkerId:   string(workerID),
+				MasterId:   m.id,
+				WorkerId:   workerID,
 			},
 		})
 		if err != nil {
@@ -480,4 +491,11 @@ func (m *BaseMaster) CreateWorker(workerType WorkerType, config WorkerConfig, co
 		return "", errors.Trace(err)
 	}
 	return workerID, nil
+}
+
+func (m *BaseMaster) GetWorkerStatusExtTypeInfo() interface{} {
+	// This function provides a trivial default implementation of
+	// GetWorkerStatusExtTypeInfo.
+	info := int64(0)
+	return &info
 }
