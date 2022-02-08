@@ -56,12 +56,12 @@ func (s *SortOption) Clone() *SortOption {
 var noPrefixEnd = []byte{0}
 
 // [NOTICE]: 0 means no user-specified revision for key.
-var noRevision = int64(0)
+var NoRevision = int64(0)
 
 // Op represents an Operation that kv can execute.
 // Support Idempotent/TTL/Key Range/From Key/Key Prefix/Sort/Limit attributes
 type Op struct {
-	t   opType
+	T   opType
 	key []byte
 	end []byte
 
@@ -86,16 +86,16 @@ type Op struct {
 // accessors / mutators
 
 // IsTxn returns true if the "Op" type is transaction.
-func (op Op) IsTxn() bool { return op.t == tTxn }
+func (op Op) IsTxn() bool { return op.T == tTxn }
 
 // IsPut returns true if the operation is a Put.
-func (op Op) IsPut() bool { return op.t == tPut }
+func (op Op) IsPut() bool { return op.T == tPut }
 
 // IsGet returns true if the operation is a Get.
-func (op Op) IsGet() bool { return op.t == tGet }
+func (op Op) IsGet() bool { return op.T == tGet }
 
 // IsDelete returns true if the operation is a Delete.
-func (op Op) IsDelete() bool { return op.t == tDelete }
+func (op Op) IsDelete() bool { return op.T == tDelete }
 
 // IsOptsWithPrefix returns true if WithPrefix option is called in the given opts.
 func (op Op) IsOptsWithPrefix() bool { return op.isOptsWithPrefix }
@@ -179,14 +179,14 @@ func IsOptsWithFromKey(opts []OpOption) bool {
 
 // OpGet returns "get" operation based on given key and operation options.
 func OpGet(key string, opts ...OpOption) (Op, error) {
-	ret := Op{t: tGet, key: []byte(key)}
+	ret := Op{T: tGet, key: []byte(key)}
 	ret.ApplyOpts(opts)
 	return ret, nil
 }
 
 // OpDelete returns "delete" operation based on given key and operation options.
 func OpDelete(key string, opts ...OpOption) (Op, error) {
-	ret := Op{t: tDelete, key: []byte(key)}
+	ret := Op{T: tDelete, key: []byte(key)}
 	ret.ApplyOpts(opts)
 	switch {
 	case ret.sort != nil:
@@ -197,7 +197,7 @@ func OpDelete(key string, opts ...OpOption) (Op, error) {
 
 // OpPut returns "put" operation based on given key-value and operation options.
 func OpPut(key, val string, opts ...OpOption) (Op, error) {
-	ret := Op{t: tPut, key: []byte(key), val: []byte(val)}
+	ret := Op{T: tPut, key: []byte(key), val: []byte(val)}
 	ret.ApplyOpts(opts)
 	switch {
 	case ret.limit != 0:
@@ -210,7 +210,7 @@ func OpPut(key, val string, opts ...OpOption) (Op, error) {
 
 // OpTxn returns "txn" operation based on given transaction conditions.
 func OpTxn(ops []Op) (Op, error) {
-	return Op{t: tTxn, ops: ops}, nil
+	return Op{T: tTxn, ops: ops}, nil
 }
 
 // GetPrefixRangeEnd gets the range end of the prefix.

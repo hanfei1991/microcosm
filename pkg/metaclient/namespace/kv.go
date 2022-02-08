@@ -119,8 +119,8 @@ func (txn *txnPrefix) Do(ops ...metaclient.Op) metaclient.Txn {
 	return txn
 }
 
-func (txn *txnPrefix) Commit(ctx context.Context) (*metaclient.TxnResponse, error) {
-	resp, err := txn.Txn.Commit(ctx)
+func (txn *txnPrefix) Commit() (*metaclient.TxnResponse, error) {
+	resp, err := txn.Txn.Commit()
 	if err != nil {
 		return nil, err
 	}

@@ -3,12 +3,12 @@ package metaclient
 import "context"
 
 type Txn interface {
-	// Cache Ops in the Txn
+	// Do cache Ops in the Txn
 	Do(ops ...Op) Txn
 
 	// Commit tries to commit the transaction.
 	// Any Op error will cause entire txn rollback and return error
-	Commit(ctx context.Context) (*TxnResponse, error)
+	Commit() (*TxnResponse, error)
 }
 
 type KV interface {
