@@ -94,7 +94,7 @@ func TestDiscoveryKeepalive(t *testing.T) {
 		Type: model.NodeTypeExecutor,
 		ID:   "uuid-1",
 	}
-	keeper := NewDiscoveryKeepaliver(info, nil, nil, 10, time.Millisecond*10, router)
+	keeper := NewDiscoveryKeepaliver(info, nil, 10, time.Millisecond*10, router)
 	keeper.initDiscoveryRunner = func() error {
 		keeper.discoveryRunner = runner
 		return nil

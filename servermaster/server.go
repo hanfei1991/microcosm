@@ -355,8 +355,8 @@ func (s *Server) Run(ctx context.Context) (err error) {
 	})
 
 	s.discoveryKeeper = serverutils.NewDiscoveryKeepaliver(
-		s.info, s.etcdClient, metadata.NewMetaEtcd(s.etcdClient),
-		int(defaultSessionTTL/time.Second), defaultDiscoverTicker, s.p2pMsgRouter,
+		s.info, s.etcdClient, int(defaultSessionTTL/time.Second),
+		defaultDiscoverTicker, s.p2pMsgRouter,
 	)
 	wg.Go(func() error {
 		return s.discoveryKeeper.Keepalive(ctx)

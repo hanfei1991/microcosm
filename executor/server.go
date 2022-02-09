@@ -266,7 +266,7 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 
 	s.discoveryKeeper = serverutils.NewDiscoveryKeepaliver(
-		s.info, s.etcdCli, s.metastore, s.cfg.SessionTTL, defaultDiscoverTicker,
+		s.info, s.etcdCli, s.cfg.SessionTTL, defaultDiscoverTicker,
 		s.p2pMsgRouter,
 	)
 	// connects to metastore and maintains a etcd session

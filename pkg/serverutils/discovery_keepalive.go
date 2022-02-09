@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/hanfei1991/microcosm/model"
-	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/srvdiscovery"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/pkg/p2p"
@@ -17,7 +16,6 @@ import (
 type DiscoveryKeepaliver struct {
 	info       *model.NodeInfo
 	etcdCli    *clientv3.Client
-	metastore  metadata.MetaKV
 	sessionTTL int
 	watchDur   time.Duration
 
@@ -30,7 +28,6 @@ type DiscoveryKeepaliver struct {
 func NewDiscoveryKeepaliver(
 	info *model.NodeInfo,
 	etcdCli *clientv3.Client,
-	metastore metadata.MetaKV,
 	sessionTTL int,
 	watchDur time.Duration,
 	msgRouter p2p.MessageRouter,
@@ -38,7 +35,6 @@ func NewDiscoveryKeepaliver(
 	k := &DiscoveryKeepaliver{
 		info:         info,
 		etcdCli:      etcdCli,
-		metastore:    metastore,
 		sessionTTL:   sessionTTL,
 		watchDur:     watchDur,
 		p2pMsgRouter: msgRouter,
@@ -54,7 +50,7 @@ func (k *DiscoveryKeepaliver) InitRunnerImpl() error {
 	}
 
 	k.discoveryRunner = srvdiscovery.NewDiscoveryRunnerImpl(
-		k.etcdCli, k.metastore, k.sessionTTL, k.watchDur, k.info.EtcdKey(), value)
+		k.etcdCli, k.sessionTTL, k.watchDur, k.info.EtcdKey(), value)
 	return nil
 }
 
