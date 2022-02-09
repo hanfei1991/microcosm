@@ -106,10 +106,6 @@ type DefaultBaseMaster struct {
 	// closeCh is closed when the BaseMaster is exiting
 	closeCh chan struct{}
 
-	// read-only fields
-	// if this master is job master, masterID represents job manager id
-	// if this master is job manager, master ID is ""
-	masterID      MasterID
 	id            MasterID // id of this master
 	advertiseAddr string
 	nodeID        p2p.NodeID
@@ -125,7 +121,6 @@ type DefaultBaseMaster struct {
 func NewBaseMaster(
 	ctx *dcontext.Context,
 	impl MasterImpl,
-	masterID MasterID,
 	id MasterID,
 	messageHandlerManager p2p.MessageHandlerManager,
 	messageRouter p2p.MessageSender,
@@ -149,7 +144,6 @@ func NewBaseMaster(
 		executorClientManager: executorClientManager,
 		serverMasterClient:    serverMasterClient,
 		pool:                  workerpool.NewDefaultAsyncPool(4),
-		masterID:              masterID,
 		id:                    id,
 		clock:                 clock.New(),
 
