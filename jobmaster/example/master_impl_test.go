@@ -23,7 +23,7 @@ const (
 
 func newExampleMaster() *exampleMaster {
 	self := &exampleMaster{}
-	self.BaseMaster = lib.MockBaseMaster(jobManagerID, masterID, self)
+	self.DefaultBaseMaster = lib.MockBaseMaster(jobManagerID, masterID, self)
 	return self
 }
 
@@ -38,7 +38,7 @@ func TestExampleMaster(t *testing.T) {
 	// master.Init will call CreateWorker, so we mock it first
 	lib.MockBaseMasterCreateWorker(
 		t,
-		master.BaseMaster,
+		master.DefaultBaseMaster,
 		exampleWorkerType,
 		exampleWorkerCfg,
 		exampleWorkerCost,
@@ -73,7 +73,7 @@ func TestExampleMaster(t *testing.T) {
 	master.worker.mu.Unlock()
 	require.Equal(t, lib.WorkerStatusCreated, code)
 
-	lib.MockBaseMasterWorkerHeartbeat(t, master.BaseMaster, masterID, workerID, executorNodeID)
+	lib.MockBaseMasterWorkerHeartbeat(t, master.DefaultBaseMaster, masterID, workerID, executorNodeID)
 
 	// worker is online after one heartbeat
 	require.Eventually(t, func() bool {
