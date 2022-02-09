@@ -123,11 +123,11 @@ func (suite *SuiteTestEtcd) TestBasicKV() {
 	revision = grsp.Kvs[0].Revision
 	log.Printf("revision is %d", revision)
 	require.Equal(t, "world again", string(grsp.Kvs[0].Value))
-
+	cli.Close()
 	// [TODO] using failpoint to test basic kv timeout and cancel
 }
 
-func (suite *SuiteTestEtcd) TestIdempotentOptions() {
+func (suite *SuiteTestEtcd) TestIdempotentOption() {
 	conf := &metaclient.Config{
 		Endpoints: []string{suite.endpoints},
 	}
@@ -191,9 +191,50 @@ func (suite *SuiteTestEtcd) TestIdempotentOptions() {
 	grsp, gerr = cli.Get(ctx, "hello")
 	require.Nil(t, gerr)
 	require.Len(t, grsp.Kvs, 0)
+	cli.Close()
+}
+
+func (suite *SuiteTestEtcd) TestTTLOption() {
+	// [TODO] ttl not support quite well now
+}
+
+func (suite *SuiteTestEtcd) TestKeyRangeOption() {
+	conf := &metaclient.Config{
+		Endpoints: []string{suite.endpoints},
+	}
+	t := suite.T()
+	cli, err := NewEtcdKVClient(conf, "TestKeyRangeOption")
+	require.Nil(t, err)
+	defer cli.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	// test get key range
+	prsp, perr := cli.Put(ctx, "hello", "world")
+	require.Nil(t, perr)
+	cluster := prsp.Header.ClusterID
+	require.NotEmpty(t, cluster)
+	prsp, perr = cli.Put(ctx, "hello1", "world1")
+	require.Nil(t, perr)
+	prsp, perr = cli.Put(ctx, "hello2", "world2")
+	require.Nil(t, perr)
+	prsp, perr = cli.Put(ctx, "interesting", "world")
+	require.Nil(t, perr)
+	prsp, perr = cli.Put(ctx, "dataflow", "engine")
+	require.Nil(t, perr)
+	prsp, perr = cli.Put(ctx, "TiDB", "component")
+	require.Nil(t, perr)
+
+	grsp, gerr := cli.Get(ctx, "hello", metaclient.WithRange("z"))
+	require.Nil(t, gerr)
+	require.Len(t, grsp.Kvs, 4)
+	grsp, gerr = cli.Get(ctx, "hello2", metaclient.WithRange("Z"))
+	require.Nil(t, gerr)
+	require.Len(t, grsp.Kvs, 0)
 }
 
 func (suite *SuiteTestEtcd) TestTxn() {
+
 }
 
 func (suite *SuiteTestEtcd) TestConfig() {

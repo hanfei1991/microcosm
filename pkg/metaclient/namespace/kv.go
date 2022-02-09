@@ -21,18 +21,18 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/metaclient"
 )
 
-type kvPrefix struct {
-	metaclient.KV
+type kvPrefixClient struct {
+	metaclient.KVClient
 	pfx string
 }
 
-// NewPrefixKV wraps a KV instance so that all requests
+// NewPrefixKV wraps a KVClient instance so that all requests
 // are prefixed with a given string.
-func NewPrefixKV(kv metaclient.KV, prefix string) metaclient.KV {
-	return &kvPrefix{kv, prefix}
+func NewPrefixKVClient(kvc metaclient.KVClient, prefix string) metaclient.KVClient {
+	return &kvPrefixClient{kvc, prefix}
 }
 
-func (kv *kvPrefix) Put(ctx context.Context, key, val string, opts ...metaclient.OpOption) (*metaclient.PutResponse, error) {
+func (kvc *kvPrefixClient) Put(ctx context.Context, key, val string, opts ...metaclient.OpOption) (*metaclient.PutResponse, error) {
 	if len(key) == 0 {
 		return nil, cerrors.ErrMetaEmptyKey
 	}
@@ -40,17 +40,17 @@ func (kv *kvPrefix) Put(ctx context.Context, key, val string, opts ...metaclient
 	if err != nil {
 		return nil, err
 	}
-	op := kv.prefixOp(orgOp)
-	r, err := kv.KV.Do(ctx, op)
+	op := kvc.prefixOp(orgOp)
+	r, err := kvc.KVClient.Do(ctx, op)
 	if err != nil {
 		return nil, err
 	}
 	put := r.Put()
-	kv.unprefixPutResponse(put)
+	kvc.unprefixPutResponse(put)
 	return put, nil
 }
 
-func (kv *kvPrefix) Get(ctx context.Context, key string, opts ...metaclient.OpOption) (*metaclient.GetResponse, error) {
+func (kvc *kvPrefixClient) Get(ctx context.Context, key string, opts ...metaclient.OpOption) (*metaclient.GetResponse, error) {
 	if len(key) == 0 && !(metaclient.IsOptsWithFromKey(opts) || metaclient.IsOptsWithPrefix(opts)) {
 		return nil, cerrors.ErrMetaEmptyKey
 	}
@@ -58,16 +58,16 @@ func (kv *kvPrefix) Get(ctx context.Context, key string, opts ...metaclient.OpOp
 	if err != nil {
 		return nil, err
 	}
-	r, err := kv.KV.Do(ctx, kv.prefixOp(orgOp))
+	r, err := kvc.KVClient.Do(ctx, kvc.prefixOp(orgOp))
 	if err != nil {
 		return nil, err
 	}
 	get := r.Get()
-	kv.unprefixGetResponse(get)
+	kvc.unprefixGetResponse(get)
 	return get, nil
 }
 
-func (kv *kvPrefix) Delete(ctx context.Context, key string, opts ...metaclient.OpOption) (*metaclient.DeleteResponse, error) {
+func (kvc *kvPrefixClient) Delete(ctx context.Context, key string, opts ...metaclient.OpOption) (*metaclient.DeleteResponse, error) {
 	if len(key) == 0 && !(metaclient.IsOptsWithFromKey(opts) || metaclient.IsOptsWithPrefix(opts)) {
 		return nil, cerrors.ErrMetaEmptyKey
 	}
@@ -75,47 +75,51 @@ func (kv *kvPrefix) Delete(ctx context.Context, key string, opts ...metaclient.O
 	if err != nil {
 		return nil, err
 	}
-	r, err := kv.KV.Do(ctx, kv.prefixOp(orgOp))
+	r, err := kvc.KVClient.Do(ctx, kvc.prefixOp(orgOp))
 	if err != nil {
 		return nil, err
 	}
 	del := r.Del()
-	kv.unprefixDeleteResponse(del)
+	kvc.unprefixDeleteResponse(del)
 	return del, nil
 }
 
-func (kv *kvPrefix) Do(ctx context.Context, op metaclient.Op) (metaclient.OpResponse, error) {
+func (kvc *kvPrefixClient) Do(ctx context.Context, op metaclient.Op) (metaclient.OpResponse, error) {
 	if len(op.KeyBytes()) == 0 && !op.IsTxn() {
 		return metaclient.OpResponse{}, cerrors.ErrMetaEmptyKey
 	}
-	r, err := kv.KV.Do(ctx, kv.prefixOp(op))
+	r, err := kvc.KVClient.Do(ctx, kvc.prefixOp(op))
 	if err != nil {
 		return r, err
 	}
 	switch {
 	case r.Get() != nil:
-		kv.unprefixGetResponse(r.Get())
+		kvc.unprefixGetResponse(r.Get())
 	case r.Put() != nil:
-		kv.unprefixPutResponse(r.Put())
+		kvc.unprefixPutResponse(r.Put())
 	case r.Del() != nil:
-		kv.unprefixDeleteResponse(r.Del())
+		kvc.unprefixDeleteResponse(r.Del())
 	case r.Txn() != nil:
-		kv.unprefixTxnResponse(r.Txn())
+		kvc.unprefixTxnResponse(r.Txn())
 	}
 	return r, nil
 }
 
 type txnPrefix struct {
 	metaclient.Txn
-	kv *kvPrefix
+	kvc *kvPrefixClient
 }
 
-func (kv *kvPrefix) Txn(ctx context.Context) metaclient.Txn {
-	return &txnPrefix{kv.KV.Txn(ctx), kv}
+func (kvc *kvPrefixClient) Txn(ctx context.Context) metaclient.Txn {
+	return &txnPrefix{kvc.KVClient.Txn(ctx), kvc}
+}
+
+func (kvc *kvPrefixClient) Close() {
+	kvc.KVClient.Close()
 }
 
 func (txn *txnPrefix) Do(ops ...metaclient.Op) metaclient.Txn {
-	txn.Txn = txn.Txn.Do(txn.kv.prefixOps(ops)...)
+	txn.Txn = txn.Txn.Do(txn.kvc.prefixOps(ops)...)
 	return txn
 }
 
@@ -124,68 +128,68 @@ func (txn *txnPrefix) Commit() (*metaclient.TxnResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	txn.kv.unprefixTxnResponse(resp)
+	txn.kvc.unprefixTxnResponse(resp)
 	return resp, nil
 }
 
-func (kv *kvPrefix) prefixOp(op metaclient.Op) metaclient.Op {
+func (kvc *kvPrefixClient) prefixOp(op metaclient.Op) metaclient.Op {
 	if !op.IsTxn() {
-		begin, end := kv.prefixInterval(op.KeyBytes(), op.RangeBytes())
+		begin, end := kvc.prefixInterval(op.KeyBytes(), op.RangeBytes())
 		op.WithKeyBytes(begin)
 		op.WithRangeBytes(end)
 		return op
 	}
-	op, err := metaclient.OpTxn(kv.prefixOps(op.Txn()))
+	op, err := metaclient.OpTxn(kvc.prefixOps(op.Txn()))
 	if err != nil {
 		panic("unreachable b")
 	}
 	return op
 }
 
-func (kv *kvPrefix) unprefixGetResponse(resp *metaclient.GetResponse) {
+func (kvc *kvPrefixClient) unprefixGetResponse(resp *metaclient.GetResponse) {
 	for i := range resp.Kvs {
-		resp.Kvs[i].Key = resp.Kvs[i].Key[len(kv.pfx):]
+		resp.Kvs[i].Key = resp.Kvs[i].Key[len(kvc.pfx):]
 	}
 }
 
-func (kv *kvPrefix) unprefixPutResponse(resp *metaclient.PutResponse) {
+func (kvc *kvPrefixClient) unprefixPutResponse(resp *metaclient.PutResponse) {
 }
 
-func (kv *kvPrefix) unprefixDeleteResponse(resp *metaclient.DeleteResponse) {
+func (kvc *kvPrefixClient) unprefixDeleteResponse(resp *metaclient.DeleteResponse) {
 }
 
-func (kv *kvPrefix) unprefixTxnResponse(resp *metaclient.TxnResponse) {
+func (kvc *kvPrefixClient) unprefixTxnResponse(resp *metaclient.TxnResponse) {
 	for _, r := range resp.Responses {
 		switch tv := r.Response.(type) {
 		case *metaclient.ResponseOpResponseGet:
 			if tv.ResponseGet != nil {
-				kv.unprefixGetResponse(tv.ResponseGet)
+				kvc.unprefixGetResponse(tv.ResponseGet)
 			}
 		case *metaclient.ResponseOpResponsePut:
 			if tv.ResponsePut != nil {
-				kv.unprefixPutResponse(tv.ResponsePut)
+				kvc.unprefixPutResponse(tv.ResponsePut)
 			}
 		case *metaclient.ResponseOpResponseDelete:
 			if tv.ResponseDelete != nil {
-				kv.unprefixDeleteResponse(tv.ResponseDelete)
+				kvc.unprefixDeleteResponse(tv.ResponseDelete)
 			}
 		case *metaclient.ResponseOpResponseTxn:
 			if tv.ResponseTxn != nil {
-				kv.unprefixTxnResponse(tv.ResponseTxn)
+				kvc.unprefixTxnResponse(tv.ResponseTxn)
 			}
 		default:
 		}
 	}
 }
 
-func (kv *kvPrefix) prefixInterval(key, end []byte) (pfxKey []byte, pfxEnd []byte) {
-	return prefixInterval(kv.pfx, key, end)
+func (kvc *kvPrefixClient) prefixInterval(key, end []byte) (pfxKey []byte, pfxEnd []byte) {
+	return prefixInterval(kvc.pfx, key, end)
 }
 
-func (kv *kvPrefix) prefixOps(ops []metaclient.Op) []metaclient.Op {
+func (kvc *kvPrefixClient) prefixOps(ops []metaclient.Op) []metaclient.Op {
 	newOps := make([]metaclient.Op, len(ops))
 	for i := range ops {
-		newOps[i] = kv.prefixOp(ops[i])
+		newOps[i] = kvc.prefixOp(ops[i])
 	}
 	return newOps
 }

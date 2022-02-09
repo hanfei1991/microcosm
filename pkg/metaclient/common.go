@@ -1,10 +1,16 @@
 package metaclient
 
+import "fmt"
+
 // ResponseHeader is common response header
 type ResponseHeader struct {
 	// ClusterId is the ID of the cluster which sent the response.
 	// Framework will generate uuid for every newcoming metastore
 	ClusterID string
+}
+
+func (h *ResponseHeader) String() string {
+	return fmt.Sprintf("clusterID:%s;", h.ClusterID)
 }
 
 // Put Response
@@ -18,6 +24,16 @@ type GetResponse struct {
 	// kvs is the list of key-value pairs matched by the range request.
 	// kvs is empty when count is requested.
 	Kvs []*KeyValue
+}
+
+func (g *GetResponse) String() string {
+	s := fmt.Sprintf("header:[%s];kvs:[", g.Header)
+	for _, kv := range g.Kvs {
+		s += fmt.Sprintf("%s", kv)
+	}
+
+	s += "];"
+	return s
 }
 
 // Delete Response
@@ -144,4 +160,8 @@ type KeyValue struct {
 	// user can always expect an increasing revision after each operation.
 	// So `delete + create` will not make revision fallback, which will avoid ABA problem.
 	Revision int64
+}
+
+func (kv *KeyValue) String() string {
+	return fmt.Sprintf("key:%s, value:%s, ttl:%d, revision:%s;", string(kv.Key), string(kv.Value), kv.TTL, kv.Revision)
 }

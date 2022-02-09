@@ -25,18 +25,19 @@ func NewEtcdKVClient(config *metaclient.Config, leaseID string) (metaclient.KVCl
 		return nil, err
 	}
 
-	pfKV := namespace.NewPrefixKV(impl, makeNamespacePrefix(leaseID))
+	pfKVC := namespace.NewPrefixKVClient(impl, makeNamespacePrefix(leaseID))
 	return &etcdKVClient{
-		KVClient: pfKV,
+		KVClient: pfKVC,
 		leaseID:  leaseID,
 	}, nil
 }
 
+// etcdKVImpl is the etcd implement of KVClient interface
 type etcdKVImpl struct {
 	cli *clientv3.Client
 }
 
-func NewEtcdKVImpl(config *metaclient.Config) (metaclient.KV, error) {
+func NewEtcdKVImpl(config *metaclient.Config) (metaclient.KVClient, error) {
 	conf := config.Clone()
 	cli, err := clientv3.New(clientv3.Config{
 		Endpoints: conf.Endpoints,
@@ -271,6 +272,10 @@ func (c *etcdKVImpl) Txn(ctx context.Context) metaclient.Txn {
 		kv:  c,
 		ctx: ctx,
 	}
+}
+
+func (c *etcdKVImpl) Close() {
+	c.cli.Close()
 }
 
 func (t *etcdTxn) Do(ops ...metaclient.Op) metaclient.Txn {
