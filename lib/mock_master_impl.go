@@ -18,8 +18,9 @@ type MockMasterImpl struct {
 	mu sync.Mutex
 	mock.Mock
 
-	*BaseMaster
-	id MasterID
+	*DefaultBaseMaster
+	masterID MasterID
+	id       MasterID
 
 	tickCount         atomic.Int64
 	onlineWorkerCount atomic.Int64
@@ -33,8 +34,9 @@ type MockMasterImpl struct {
 	serverMasterClient    *client.MockServerMasterClient
 }
 
-func NewMockMasterImpl(id MasterID) *MockMasterImpl {
+func NewMockMasterImpl(masterID, id MasterID) *MockMasterImpl {
 	ret := &MockMasterImpl{
+		masterID:              masterID,
 		id:                    id,
 		dispatchedWorkers:     make(chan WorkerHandle),
 		messageHandlerManager: p2p.NewMockMessageHandlerManager(),
@@ -43,17 +45,18 @@ func NewMockMasterImpl(id MasterID) *MockMasterImpl {
 		executorClientManager: client.NewClientManager(),
 		serverMasterClient:    &client.MockServerMasterClient{},
 	}
-	ret.BaseMaster = NewBaseMaster(
+	ret.DefaultBaseMaster = NewBaseMaster(
 		// ctx is nil for now
 		// TODO refine this
 		nil,
 		ret,
+		masterID,
 		id,
 		ret.messageHandlerManager,
 		ret.messageSender,
 		ret.metaKVClient,
 		ret.executorClientManager,
-		ret.serverMasterClient)
+		ret.serverMasterClient).(*DefaultBaseMaster)
 
 	return ret
 }
@@ -65,15 +68,16 @@ func (m *MockMasterImpl) Reset() {
 	m.Mock.ExpectedCalls = nil
 	m.Mock.Calls = nil
 
-	m.BaseMaster = NewBaseMaster(
+	m.DefaultBaseMaster = NewBaseMaster(
 		nil,
 		m,
+		m.masterID,
 		m.id,
 		m.messageHandlerManager,
 		m.messageSender,
 		m.metaKVClient,
 		m.executorClientManager,
-		m.serverMasterClient)
+		m.serverMasterClient).(*DefaultBaseMaster)
 }
 
 func (m *MockMasterImpl) TickCount() int64 {

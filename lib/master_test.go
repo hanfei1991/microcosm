@@ -51,7 +51,7 @@ func TestMasterInit(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
-	master := NewMockMasterImpl(masterName)
+	master := NewMockMasterImpl("", masterName)
 	prepareMeta(ctx, t, master.metaKVClient)
 
 	master.On("InitImpl", mock.Anything).Return(nil)
@@ -89,7 +89,7 @@ func TestMasterPollAndClose(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
-	master := NewMockMasterImpl(masterName)
+	master := NewMockMasterImpl("", masterName)
 	prepareMeta(ctx, t, master.metaKVClient)
 
 	master.On("InitImpl", mock.Anything).Return(nil)
@@ -129,7 +129,7 @@ func TestMasterCreateWorker(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
-	master := NewMockMasterImpl(masterName)
+	master := NewMockMasterImpl("", masterName)
 	master.timeoutConfig.masterHeartbeatCheckLoopInterval = time.Millisecond * 10
 	master.uuidGen = uuid.NewMock()
 	prepareMeta(ctx, t, master.metaKVClient)
@@ -140,7 +140,7 @@ func TestMasterCreateWorker(t *testing.T) {
 
 	MockBaseMasterCreateWorker(
 		t,
-		master.BaseMaster,
+		master.DefaultBaseMaster,
 		workerTypePlaceholder,
 		&dummyConfig{param: 1},
 		100,
@@ -157,7 +157,7 @@ func TestMasterCreateWorker(t *testing.T) {
 
 	master.On("OnWorkerOnline", mock.AnythingOfType("*lib.workerHandleImpl")).Return(nil)
 
-	MockBaseMasterWorkerHeartbeat(t, master.BaseMaster, masterName, workerID1, executorNodeID1)
+	MockBaseMasterWorkerHeartbeat(t, master.DefaultBaseMaster, masterName, workerID1, executorNodeID1)
 
 	master.On("Tick", mock.Anything).Return(nil)
 	err = master.Poll(ctx)

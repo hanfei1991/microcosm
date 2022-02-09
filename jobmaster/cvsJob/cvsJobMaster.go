@@ -39,7 +39,7 @@ func (e *errorInfo) Error() string {
 }
 
 type JobMaster struct {
-	*lib.BaseMaster
+	lib.BaseMaster
 	syncInfo      *Config
 	syncFilesInfo map[lib.WorkerID]*workerInfo
 	counter       int64
@@ -63,6 +63,7 @@ func NewCVSJobMaster(ctx *dcontext.Context, _workerID lib.WorkerID, masterID lib
 	base := lib.NewBaseMaster(
 		ctx,
 		jm,
+		"fake-job-manager",
 		masterID,
 		deps.MessageHandlerManager,
 		deps.MessageRouter,

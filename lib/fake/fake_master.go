@@ -28,7 +28,7 @@ const (
 )
 
 type Master struct {
-	*lib.BaseMaster
+	lib.BaseMaster
 
 	// workerID stores the ID of the Master AS A WORKER.
 	workerID lib.WorkerID
@@ -36,6 +36,7 @@ type Master struct {
 	workerListMu     sync.Mutex
 	workerList       [fakeWorkerCount]lib.WorkerHandle
 	pendingWorkerSet map[lib.WorkerID]int
+	tick             int64
 }
 
 func (m *Master) ID() worker.RunnableID {
@@ -46,17 +47,16 @@ func (m *Master) Workload() model.RescUnit {
 	return 0
 }
 
-func (m *Master) Close(ctx context.Context) error {
-	return m.Impl.CloseImpl(ctx)
-}
-
 func (m *Master) InitImpl(ctx context.Context) error {
 	log.L().Info("FakeMaster: Init")
 	return nil
 }
 
 func (m *Master) Tick(ctx context.Context) error {
-	log.L().Info("FakeMaster: Tick")
+	m.tick++
+	if m.tick%200 == 0 {
+		log.L().Info("FakeMaster: Tick", zap.Int64("tick", m.tick))
+	}
 
 	m.workerListMu.Lock()
 	defer m.workerListMu.Unlock()
@@ -140,7 +140,7 @@ func (m *Master) CloseImpl(ctx context.Context) error {
 	return nil
 }
 
-func NewFakeMaster(ctx *dcontext.Context, _workerID lib.WorkerID, masterID lib.MasterID, _config lib.WorkerConfig) *Master {
+func NewFakeMaster(ctx *dcontext.Context, workerID lib.WorkerID, masterID lib.MasterID, _config lib.WorkerConfig) *Master {
 	ret := &Master{
 		pendingWorkerSet: make(map[lib.WorkerID]int),
 	}
@@ -149,6 +149,7 @@ func NewFakeMaster(ctx *dcontext.Context, _workerID lib.WorkerID, masterID lib.M
 		ctx,
 		ret,
 		masterID,
+		workerID,
 		deps.MessageHandlerManager,
 		deps.MessageRouter,
 		deps.MetaKVClient,
