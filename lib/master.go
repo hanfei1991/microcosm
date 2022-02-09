@@ -80,7 +80,7 @@ type BaseMaster interface {
 	GetWorkerStatusExtTypeInfo() interface{}
 }
 
-type defaultBaseMaster struct {
+type DefaultBaseMaster struct {
 	Impl MasterImpl
 
 	// dependencies
@@ -134,7 +134,7 @@ func NewBaseMaster(
 		nodeID = ctx.Environ.NodeID
 		advertiseAddr = ctx.Environ.Addr
 	}
-	return &defaultBaseMaster{
+	return &DefaultBaseMaster{
 		Impl:                  impl,
 		messageHandlerManager: messageHandlerManager,
 		messageRouter:         messageRouter,
@@ -158,11 +158,11 @@ func NewBaseMaster(
 	}
 }
 
-func (m *defaultBaseMaster) MetaKVClient() metadata.MetaKV {
+func (m *DefaultBaseMaster) MetaKVClient() metadata.MetaKV {
 	return m.metaKVClient
 }
 
-func (m *defaultBaseMaster) Init(ctx context.Context) error {
+func (m *DefaultBaseMaster) Init(ctx context.Context) error {
 	isInit, epoch, err := m.initMetadata(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -188,7 +188,7 @@ func (m *defaultBaseMaster) Init(ctx context.Context) error {
 	return nil
 }
 
-func (m *defaultBaseMaster) Poll(ctx context.Context) error {
+func (m *DefaultBaseMaster) Poll(ctx context.Context) error {
 	select {
 	case err := <-m.errCh:
 		if err != nil {
@@ -210,15 +210,15 @@ func (m *defaultBaseMaster) Poll(ctx context.Context) error {
 	return nil
 }
 
-func (m *defaultBaseMaster) MasterID() MasterID {
+func (m *DefaultBaseMaster) MasterID() MasterID {
 	return m.id
 }
 
-func (m *defaultBaseMaster) GetWorkers() map[WorkerID]WorkerHandle {
+func (m *DefaultBaseMaster) GetWorkers() map[WorkerID]WorkerHandle {
 	return m.workerManager.GetWorkers()
 }
 
-func (m *defaultBaseMaster) Close(ctx context.Context) error {
+func (m *DefaultBaseMaster) Close(ctx context.Context) error {
 	if err := m.Impl.CloseImpl(ctx); err != nil {
 		return errors.Trace(err)
 	}
@@ -231,7 +231,7 @@ func (m *defaultBaseMaster) Close(ctx context.Context) error {
 	return nil
 }
 
-func (m *defaultBaseMaster) startBackgroundTasks() {
+func (m *DefaultBaseMaster) startBackgroundTasks() {
 	cctx, cancel := context.WithCancel(context.Background())
 	m.wg.Add(1)
 	go func() {
@@ -257,7 +257,7 @@ func (m *defaultBaseMaster) startBackgroundTasks() {
 	}()
 }
 
-func (m *defaultBaseMaster) runWorkerCheck(ctx context.Context) error {
+func (m *DefaultBaseMaster) runWorkerCheck(ctx context.Context) error {
 	ticker := time.NewTicker(m.timeoutConfig.masterHeartbeatCheckLoopInterval)
 	for {
 		select {
@@ -290,7 +290,7 @@ func (m *defaultBaseMaster) runWorkerCheck(ctx context.Context) error {
 	}
 }
 
-func (m *defaultBaseMaster) OnError(err error) {
+func (m *DefaultBaseMaster) OnError(err error) {
 	if errors.Cause(err) == context.Canceled {
 		// TODO think about how to gracefully handle cancellation here.
 		log.L().Warn("BaseMaster is being canceled", zap.Error(err))
@@ -302,7 +302,7 @@ func (m *defaultBaseMaster) OnError(err error) {
 	}
 }
 
-func (m *defaultBaseMaster) initMetadata(ctx context.Context) (isInit bool, epoch Epoch, err error) {
+func (m *DefaultBaseMaster) initMetadata(ctx context.Context) (isInit bool, epoch Epoch, err error) {
 	// TODO refine this logic to make it correct and easier to understand.
 
 	metaClient := NewMetadataClient(m.id, m.metaKVClient)
@@ -337,7 +337,7 @@ func (m *defaultBaseMaster) initMetadata(ctx context.Context) (isInit bool, epoc
 	return
 }
 
-func (m *defaultBaseMaster) markInitializedInMetadata(ctx context.Context) error {
+func (m *DefaultBaseMaster) markInitializedInMetadata(ctx context.Context) error {
 	metaClient := NewMetadataClient(m.id, m.metaKVClient)
 	masterMeta, err := metaClient.Load(ctx)
 	if err != nil {
@@ -352,7 +352,7 @@ func (m *defaultBaseMaster) markInitializedInMetadata(ctx context.Context) error
 	return nil
 }
 
-func (m *defaultBaseMaster) registerHandlerForWorker(ctx context.Context, workerID WorkerID) error {
+func (m *DefaultBaseMaster) registerHandlerForWorker(ctx context.Context, workerID WorkerID) error {
 	topic := HeartbeatPingTopic(m.id, workerID)
 	ok, err := m.messageHandlerManager.RegisterHandler(
 		ctx,
@@ -405,7 +405,7 @@ func (m *defaultBaseMaster) registerHandlerForWorker(ctx context.Context, worker
 	return nil
 }
 
-func (m *defaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error) {
+func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error) {
 	log.L().Info("CreateWorker",
 		zap.Int64("worker-type", int64(workerType)),
 		zap.Any("worker-config", config))
@@ -505,7 +505,7 @@ func (m *defaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 	return workerID, nil
 }
 
-func (m *defaultBaseMaster) GetWorkerStatusExtTypeInfo() interface{} {
+func (m *DefaultBaseMaster) GetWorkerStatusExtTypeInfo() interface{} {
 	// This function provides a trivial default implementation of
 	// GetWorkerStatusExtTypeInfo.
 	info := int64(0)

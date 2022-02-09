@@ -56,7 +56,7 @@ type BaseWorker interface {
 	MetaKVClient() metadata.MetaKV
 }
 
-type defaultBaseWorker struct {
+type DefaultBaseWorker struct {
 	Impl WorkerImpl
 
 	messageHandlerManager p2p.MessageHandlerManager
@@ -86,7 +86,7 @@ func NewBaseWorker(
 	workerID WorkerID,
 	masterID MasterID,
 ) BaseWorker {
-	return &defaultBaseWorker{
+	return &DefaultBaseWorker{
 		Impl:                  impl,
 		messageHandlerManager: messageHandlerManager,
 		messageSender:         messageSender,
@@ -101,11 +101,11 @@ func NewBaseWorker(
 	}
 }
 
-func (w *defaultBaseWorker) Workload() model.RescUnit {
+func (w *DefaultBaseWorker) Workload() model.RescUnit {
 	return w.Impl.Workload()
 }
 
-func (w *defaultBaseWorker) Init(ctx context.Context) error {
+func (w *DefaultBaseWorker) Init(ctx context.Context) error {
 	w.masterClient = newMasterClient(
 		w.masterID,
 		w.id,
@@ -135,7 +135,7 @@ func (w *defaultBaseWorker) Init(ctx context.Context) error {
 	return nil
 }
 
-func (w *defaultBaseWorker) Poll(ctx context.Context) error {
+func (w *DefaultBaseWorker) Poll(ctx context.Context) error {
 	if err := w.messageHandlerManager.CheckError(ctx); err != nil {
 		return errors.Trace(err)
 	}
@@ -154,7 +154,7 @@ func (w *defaultBaseWorker) Poll(ctx context.Context) error {
 	return nil
 }
 
-func (w *defaultBaseWorker) Close(ctx context.Context) error {
+func (w *DefaultBaseWorker) Close(ctx context.Context) error {
 	w.cancelMu.Lock()
 	w.cancelBgTasks()
 	w.cancelMu.Unlock()
@@ -176,15 +176,15 @@ func (w *defaultBaseWorker) Close(ctx context.Context) error {
 	return nil
 }
 
-func (w *defaultBaseWorker) ID() runtime.RunnableID {
+func (w *DefaultBaseWorker) ID() runtime.RunnableID {
 	return w.id
 }
 
-func (w *defaultBaseWorker) MetaKVClient() metadata.MetaKV {
+func (w *DefaultBaseWorker) MetaKVClient() metadata.MetaKV {
 	return w.metaKVClient
 }
 
-func (w *defaultBaseWorker) startBackgroundTasks() {
+func (w *DefaultBaseWorker) startBackgroundTasks() {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	w.cancelMu.Lock()
@@ -216,7 +216,7 @@ func (w *defaultBaseWorker) startBackgroundTasks() {
 	}()
 }
 
-func (w *defaultBaseWorker) runHeartbeatWorker(ctx context.Context) error {
+func (w *DefaultBaseWorker) runHeartbeatWorker(ctx context.Context) error {
 	ticker := w.clock.Ticker(w.timeoutConfig.workerHeartbeatInterval)
 	for {
 		select {
@@ -230,7 +230,7 @@ func (w *defaultBaseWorker) runHeartbeatWorker(ctx context.Context) error {
 	}
 }
 
-func (w *defaultBaseWorker) runStatusWorker(ctx context.Context) error {
+func (w *DefaultBaseWorker) runStatusWorker(ctx context.Context) error {
 	ticker := w.clock.Ticker(w.timeoutConfig.workerReportStatusInterval)
 	for {
 		select {
@@ -246,7 +246,7 @@ func (w *defaultBaseWorker) runStatusWorker(ctx context.Context) error {
 	}
 }
 
-func (w *defaultBaseWorker) runWatchDog(ctx context.Context) error {
+func (w *DefaultBaseWorker) runWatchDog(ctx context.Context) error {
 	ticker := w.clock.Ticker(w.timeoutConfig.workerHeartbeatInterval)
 	for {
 		select {
@@ -265,7 +265,7 @@ func (w *defaultBaseWorker) runWatchDog(ctx context.Context) error {
 	}
 }
 
-func (w *defaultBaseWorker) initMessageHandlers(ctx context.Context) error {
+func (w *DefaultBaseWorker) initMessageHandlers(ctx context.Context) error {
 	topic := HeartbeatPongTopic(w.masterClient.MasterID(), w.id)
 	ok, err := w.messageHandlerManager.RegisterHandler(
 		ctx,
@@ -288,7 +288,7 @@ func (w *defaultBaseWorker) initMessageHandlers(ctx context.Context) error {
 	return nil
 }
 
-func (w *defaultBaseWorker) onError(err error) {
+func (w *DefaultBaseWorker) onError(err error) {
 	select {
 	case w.errCh <- err:
 	default:
