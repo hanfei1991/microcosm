@@ -20,7 +20,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/etcdutils"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
-	"github.com/hanfei1991/microcosm/pkg/srvdiscovery"
+	"github.com/hanfei1991/microcosm/pkg/serverutils"
 	"github.com/hanfei1991/microcosm/servermaster/cluster"
 	"github.com/hanfei1991/microcosm/test"
 	"github.com/hanfei1991/microcosm/test/mock"
@@ -65,11 +65,10 @@ type Server struct {
 	cfg  *Config
 	info *model.NodeInfo
 
-	msgService          *p2p.MessageRPCService
-	p2pMsgRouter        p2p.MessageRouter
-	rpcLogRL            *rate.Limiter
-	discoveryRunner     srvdiscovery.DiscoveryRunner
-	initDiscoveryRunner func() error
+	msgService      *p2p.MessageRPCService
+	p2pMsgRouter    p2p.MessageRouter
+	rpcLogRL        *rate.Limiter
+	discoveryKeeper *serverutils.DiscoveryKeepaliver
 
 	initialized atomic.Bool
 
@@ -110,7 +109,6 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 		rpcLogRL:        rate.NewLimiter(rate.Every(time.Second*5), 3 /*burst*/),
 	}
 	server.leaderServiceFn = server.runLeaderService
-	server.initDiscoveryRunner = server.initDiscoveryRunnerImpl
 	return server, nil
 }
 
@@ -356,8 +354,12 @@ func (s *Server) Run(ctx context.Context) (err error) {
 		return s.memberLoop(ctx)
 	})
 
+	s.discoveryKeeper = serverutils.NewDiscoveryKeepaliver(
+		s.info, s.etcdClient, metadata.NewMetaEtcd(s.etcdClient),
+		int(defaultSessionTTL/time.Second), defaultDiscoverTicker, s.p2pMsgRouter,
+	)
 	wg.Go(func() error {
-		return s.discoveryKeepalive(ctx)
+		return s.discoveryKeeper.Keepalive(ctx)
 	})
 
 	return wg.Wait()
@@ -635,80 +637,6 @@ func (s *Server) memberLoop(ctx context.Context) error {
 			if err := s.updateServerMasterMembers(ctx); err != nil {
 				log.L().Warn("update server master members failed", zap.Error(err))
 			}
-		}
-	}
-}
-
-func (s *Server) initDiscoveryRunnerImpl() error {
-	value, err := s.info.ToJSON()
-	if err != nil {
-		return err
-	}
-	s.discoveryRunner = srvdiscovery.NewDiscoveryRunnerImpl(
-		s.etcdClient, metadata.NewMetaEtcd(s.etcdClient),
-		int(defaultSessionTTL/time.Second), defaultDiscoverTicker,
-		s.info.EtcdKey(), value)
-	return nil
-}
-
-func (s *Server) discoveryKeepalive(ctx context.Context) error {
-	var (
-		session srvdiscovery.Session
-		err     error
-	)
-
-	err = s.initDiscoveryRunner()
-	if err != nil {
-		return err
-	}
-	session, err = s.discoveryRunner.ResetDiscovery(ctx, true /* resetSession*/)
-	if err != nil {
-		return err
-	}
-	executors := s.discoveryRunner.GetSnapshot()
-	for uuid, exec := range executors {
-		if s.p2pMsgRouter != nil {
-			log.L().Info("add peer",
-				zap.String("uuid", uuid),
-				zap.Any("exec", exec))
-			s.p2pMsgRouter.AddPeer(uuid, exec.Addr)
-		}
-	}
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-session.Done():
-			log.L().Warn("metastore session is done", zap.String("executor-id", string(s.info.ID)))
-			session, err = s.discoveryRunner.ResetDiscovery(ctx, true /* resetSession*/)
-			if err != nil {
-				return err
-			}
-		case resp := <-s.discoveryRunner.GetWatcher():
-			if resp.Err != nil {
-				log.L().Warn("discovery watch met error", zap.Error(resp.Err))
-				_, err = s.discoveryRunner.ResetDiscovery(ctx, false /* resetSession*/)
-				if err != nil {
-					return err
-				}
-				continue
-			}
-			for uuid, add := range resp.AddSet {
-				if s.p2pMsgRouter != nil {
-					log.L().Info("add peer",
-						zap.String("uuid", uuid),
-						zap.Any("exec", add))
-					s.p2pMsgRouter.AddPeer(uuid, add.Addr)
-				}
-			}
-			for uuid := range resp.DelSet {
-				if s.p2pMsgRouter != nil {
-					log.L().Info("remove peer",
-						zap.String("uuid", uuid))
-					s.p2pMsgRouter.RemovePeer(uuid)
-				}
-			}
-			s.discoveryRunner.ApplyWatchResult(resp)
 		}
 	}
 }
