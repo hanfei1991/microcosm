@@ -22,7 +22,7 @@ type KV interface {
 	// or do nothing on vice verse.
 	Put(ctx context.Context, key, val string, opts ...OpOption) (*PutResponse, error)
 
-	// Get retrieves keys with newest revision.
+	// Get retrieves keys with latest revision.
 	// By default, Get will return the value for "key", if any.
 	// When passed WithRange(end), Get will return the keys in the range [key, end).
 	// When passed WithFromKey(), Get returns keys greater than or equal to key.
