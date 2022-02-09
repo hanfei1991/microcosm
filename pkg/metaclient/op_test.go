@@ -6,9 +6,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var key string = "key"
-var value string = "value"
-var end string = "value_end"
+var (
+	key   string = "key"
+	value string = "value"
+	end   string = "value_end"
+)
 
 func TestOpAccessorsAndMutators(t *testing.T) {
 	t.Parallel()

@@ -1,6 +1,8 @@
 package kvclient
 
 import (
+	"strconv"
+
 	"github.com/hanfei1991/microcosm/pkg/metaclient"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/etcdserver/etcdserverpb"
@@ -9,14 +11,15 @@ import (
 func makePutResp(etcdResp *clientv3.PutResponse) *metaclient.PutResponse {
 	resp := &metaclient.PutResponse{
 		Header: &metaclient.ResponseHeader{
-			// [TODO] ClusterID
+			// [TODO] use another ClusterID
+			ClusterID: strconv.FormatUint(etcdResp.Header.ClusterId, 10),
 		},
 	}
 	return resp
 }
 
 func makeGetResp(etcdResp *clientv3.GetResponse) *metaclient.GetResponse {
-	kvs := make([]*metaclient.KeyValue, len(etcdResp.Kvs))
+	kvs := make([]*metaclient.KeyValue, 0)
 	for _, kv := range etcdResp.Kvs {
 		if kv.Version == 0 {
 			// This key has been deleted, don't return to user
@@ -32,7 +35,7 @@ func makeGetResp(etcdResp *clientv3.GetResponse) *metaclient.GetResponse {
 
 	resp := &metaclient.GetResponse{
 		Header: &metaclient.ResponseHeader{
-			// [TODO] ClusterID
+			ClusterID: strconv.FormatUint(etcdResp.Header.ClusterId, 10),
 		},
 		Kvs: kvs,
 	}
@@ -43,7 +46,7 @@ func makeGetResp(etcdResp *clientv3.GetResponse) *metaclient.GetResponse {
 func makeDeleteResp(etcdResp *clientv3.DeleteResponse) *metaclient.DeleteResponse {
 	resp := &metaclient.DeleteResponse{
 		Header: &metaclient.ResponseHeader{
-			// [TODO] ClusterID
+			ClusterID: strconv.FormatUint(etcdResp.Header.ClusterId, 10),
 		},
 	}
 	return resp
@@ -54,7 +57,7 @@ func makeEtcdCmpFromRev(key string, revision int64) clientv3.Cmp {
 }
 
 func makeTxnResp(etcdResp *clientv3.TxnResponse) *metaclient.TxnResponse {
-	rsps := make([]metaclient.ResponseOp, len(etcdResp.Responses))
+	rsps := make([]metaclient.ResponseOp, 0, len(etcdResp.Responses))
 	for _, eRsp := range etcdResp.Responses {
 		switch eRsp.Response.(type) {
 		case *etcdserverpb.ResponseOp_ResponseRange:
@@ -86,7 +89,7 @@ func makeTxnResp(etcdResp *clientv3.TxnResponse) *metaclient.TxnResponse {
 
 	return &metaclient.TxnResponse{
 		Header: &metaclient.ResponseHeader{
-			//[ClusterID]
+			ClusterID: strconv.FormatUint(etcdResp.Header.ClusterId, 10),
 		},
 		Responses: rsps,
 	}

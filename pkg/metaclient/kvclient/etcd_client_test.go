@@ -90,7 +90,6 @@ func (suite *SuiteTestEtcd) TestTxn() {
 }
 
 func (suite *SuiteTestEtcd) TestConfig() {
-
 }
 
 func (suite *SuiteTestEtcd) TestNamspace() {

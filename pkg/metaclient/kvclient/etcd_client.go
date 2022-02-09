@@ -114,7 +114,7 @@ func (c *etcdKVImpl) getEtcdOp(ctx context.Context, op metaclient.Op) (clientv3.
 		return clientv3.OpTxn([]clientv3.Cmp{cmp}, []clientv3.Op{cop}, nil), nil
 	case op.IsTxn():
 		ops := op.Txn()
-		etcdOps := make([]clientv3.Op, len(ops))
+		etcdOps := make([]clientv3.Op, 0, len(ops))
 		for _, sop := range ops {
 			etcdOp, err := c.getEtcdOp(ctx, sop)
 			if err != nil {
@@ -230,7 +230,7 @@ func (t *etcdTxn) Do(ops ...metaclient.Op) metaclient.Txn {
 	if t.Err != nil {
 		return t
 	}
-	etcdOps := make([]clientv3.Op, len(ops))
+	etcdOps := make([]clientv3.Op, 0, len(ops))
 	for _, op := range ops {
 		etcdOp, err := t.kv.getEtcdOp(t.ctx, op)
 		if err != nil {
