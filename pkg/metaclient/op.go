@@ -58,7 +58,7 @@ func (s *SortOption) Clone() *SortOption {
 var noPrefixEnd = []byte{0}
 
 // [NOTICE]: 0 means no user-specified revision for key.
-var NoRevision = int64(0)
+var noRevision = int64(0)
 
 // Op represents an Operation that kv can execute.
 // Support Idempotent/TTL/Key Range/From Key/Key Prefix/Sort/Limit attributes
@@ -143,6 +143,9 @@ func (op Op) Revision() int64 { return op.revision }
 
 // WithRevision sets the revision for key.
 func (op *Op) WithRevision(revision int64) { op.revision = revision }
+
+// NoRevision returns if revision is noRevision
+func (op Op) NoRevision() bool { return op.revision == noRevision }
 
 // WithSort sets the sort option for `Get` response.
 func (op *Op) WithSort(sort SortOption) { op.sort = sort.Clone() }

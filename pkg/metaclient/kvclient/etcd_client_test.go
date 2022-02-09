@@ -38,10 +38,12 @@ func (suite *SuiteTestEtcd) SetupSuite() {
 	require.Nil(suite.T(), err)
 	cfg.Dir = dir
 	peers := allocTempURL(suite.T())
+	log.Printf("Allocate server peer port is %s", peers)
 	u, err := url.Parse(peers)
 	require.Nil(suite.T(), err)
 	cfg.LPUrls = []url.URL{*u}
 	advertises := allocTempURL(suite.T())
+	log.Printf("Allocate server advertises port is %s", advertises)
 	u, err = url.Parse(advertises)
 	require.Nil(suite.T(), err)
 	cfg.LCUrls = []url.URL{*u}
@@ -74,16 +76,121 @@ func (suite *SuiteTestEtcd) TestBasicKV() {
 	conf := &metaclient.Config{
 		Endpoints: []string{suite.endpoints},
 	}
-	cli, err := NewEtcdKVClient(conf, "111")
-	require.Nil(suite.T(), err)
+	t := suite.T()
+	cli, err := NewEtcdKVClient(conf, "TestBasicKV")
+	require.Nil(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	rsp, err := cli.Get(ctx, "key1")
-	require.Nil(suite.T(), err)
-	require.Len(suite.T(), rsp.Kvs, 0)
-	cancel()
+	defer cancel()
+	// get a non-existed key
+	grsp, gerr := cli.Get(ctx, "hello")
+	require.Nil(t, gerr)
+	cluster := grsp.Header.ClusterID
+	require.NotEmpty(t, cluster)
+	require.Len(t, grsp.Kvs, 0)
+
+	// put a key and get it back
+	prsp, perr := cli.Put(ctx, "hello", "world")
+	require.Nil(t, perr)
+	require.Equal(t, cluster, prsp.Header.ClusterID)
+	grsp, gerr = cli.Get(ctx, "hello")
+	require.Nil(t, gerr)
+	require.Len(t, grsp.Kvs, 1)
+	revision := grsp.Kvs[0].Revision
+	log.Printf("revision is %d", revision)
+	require.Greater(t, revision, int64(0))
+	require.Equal(t, "world", string(grsp.Kvs[0].Value))
+	grsp, gerr = cli.Get(ctx, "hello")
+	require.Nil(t, gerr)
+	require.Len(t, grsp.Kvs, 1)
+	require.Equal(t, revision, grsp.Kvs[0].Revision)
+	require.Equal(t, "world", string(grsp.Kvs[0].Value))
+
+	// delete a key, get it back, put the same key and get it back
+	drsp, derr := cli.Delete(ctx, "hello")
+	require.Nil(t, derr)
+	require.Equal(t, cluster, drsp.Header.ClusterID)
+	grsp, gerr = cli.Get(ctx, "hello")
+	require.Nil(t, gerr)
+	require.Len(t, grsp.Kvs, 0)
+	prsp, perr = cli.Put(ctx, "hello", "world again")
+	require.Nil(t, perr)
+	require.Equal(t, cluster, prsp.Header.ClusterID)
+	grsp, gerr = cli.Get(ctx, "hello")
+	require.Nil(t, gerr)
+	require.Len(t, grsp.Kvs, 1)
+	// after a delete + put, we still expect an increasing revision to avoid ABA problem
+	require.Greater(t, grsp.Kvs[0].Revision, revision)
+	revision = grsp.Kvs[0].Revision
+	log.Printf("revision is %d", revision)
+	require.Equal(t, "world again", string(grsp.Kvs[0].Value))
+
+	// [TODO] using failpoint to test basic kv timeout and cancel
 }
 
-func (suite *SuiteTestEtcd) TestOptions() {
+func (suite *SuiteTestEtcd) TestIdempotentOptions() {
+	conf := &metaclient.Config{
+		Endpoints: []string{suite.endpoints},
+	}
+	t := suite.T()
+	cli, err := NewEtcdKVClient(conf, "TestOptions")
+	require.Nil(t, err)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	// test idempotent put
+	prsp, perr := cli.Put(ctx, "hello", "world")
+	require.Nil(t, perr)
+	cluster := prsp.Header.ClusterID
+	require.NotEmpty(t, cluster)
+	grsp, gerr := cli.Get(ctx, "hello")
+	require.Nil(t, gerr)
+	require.Len(t, grsp.Kvs, 1)
+	revision := grsp.Kvs[0].Revision
+	log.Printf("revision is %d", revision)
+	require.Greater(t, revision, int64(0))
+	require.Equal(t, "world", string(grsp.Kvs[0].Value))
+	// right revision
+	prsp, perr = cli.Put(ctx, "hello", "world2", metaclient.WithRevision(revision))
+	require.Nil(t, perr)
+	grsp, gerr = cli.Get(ctx, "hello")
+	require.Nil(t, gerr)
+	require.Len(t, grsp.Kvs, 1)
+	require.Greater(t, grsp.Kvs[0].Revision, revision)
+	revision2 := grsp.Kvs[0].Revision
+	require.Equal(t, "world2", string(grsp.Kvs[0].Value))
+	// wrong revision
+	prsp, perr = cli.Put(ctx, "hello", "world2", metaclient.WithRevision(revision))
+	require.NotNil(t, perr)
+	//require.ErrorAs(t, perr, cerrors.ErrMetaRevisionUnmatch)
+	// [TODO] check the specified error
+	require.Nil(t, prsp)
+	// right revision
+	prsp, perr = cli.Put(ctx, "hello", "world3", metaclient.WithRevision(revision2))
+	require.Nil(t, perr)
+	grsp, gerr = cli.Get(ctx, "hello")
+	require.Nil(t, gerr)
+	require.Len(t, grsp.Kvs, 1)
+	require.Greater(t, grsp.Kvs[0].Revision, revision2)
+	revision2 = grsp.Kvs[0].Revision
+	require.Equal(t, "world3", string(grsp.Kvs[0].Value))
+
+	// test idempotent delete
+	// wrong version
+	drsp, derr := cli.Delete(ctx, "hello", metaclient.WithRevision(revision))
+	require.NotNil(t, derr)
+	require.Nil(t, drsp)
+	grsp, gerr = cli.Get(ctx, "hello")
+	require.Nil(t, gerr)
+	require.Len(t, grsp.Kvs, 1)
+	require.Equal(t, revision2, grsp.Kvs[0].Revision)
+	revision2 = grsp.Kvs[0].Revision
+	require.Equal(t, "world3", string(grsp.Kvs[0].Value))
+
+	// right version
+	drsp, derr = cli.Delete(ctx, "hello", metaclient.WithRevision(revision2))
+	require.Nil(t, derr)
+	grsp, gerr = cli.Get(ctx, "hello")
+	require.Nil(t, gerr)
+	require.Len(t, grsp.Kvs, 0)
 }
 
 func (suite *SuiteTestEtcd) TestTxn() {

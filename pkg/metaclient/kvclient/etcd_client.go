@@ -39,15 +39,15 @@ type etcdKVImpl struct {
 func NewEtcdKVImpl(config *metaclient.Config) (metaclient.KV, error) {
 	conf := config.Clone()
 	cli, err := clientv3.New(clientv3.Config{
-		Endpoints:            conf.Endpoints,
-		DialTimeout:          conf.Dial.DialTimeout,
-		DialKeepAliveTime:    conf.Dial.DialKeepAliveTime,
-		DialKeepAliveTimeout: conf.Dial.DialKeepAliveTimeout,
-		MaxCallSendMsgSize:   conf.Dial.MaxSendMsgSize,
-		MaxCallRecvMsgSize:   conf.Dial.MaxRecvMsgSize,
+		Endpoints: conf.Endpoints,
+		//DialTimeout:          conf.Dial.DialTimeout,
+		//DialKeepAliveTime:    conf.Dial.DialKeepAliveTime,
+		//DialKeepAliveTimeout: conf.Dial.DialKeepAliveTimeout,
+		//MaxCallSendMsgSize:   conf.Dial.MaxSendMsgSize,
+		//MaxCallRecvMsgSize:   conf.Dial.MaxRecvMsgSize,
 		// [TODO] TLS
-		Username: conf.Auth.Username,
-		Password: conf.Auth.Password,
+		//Username: conf.Auth.Username,
+		//Password: conf.Auth.Password,
 		// [TODO] LOG
 	})
 	if err != nil {
@@ -98,7 +98,7 @@ func (c *etcdKVImpl) getEtcdOp(ctx context.Context, op metaclient.Op) (clientv3.
 		return clientv3.OpGet(string(op.KeyBytes()), opts...), nil
 	case op.IsPut():
 		cop := clientv3.OpPut(string(op.KeyBytes()), string(op.ValueBytes()), opts...)
-		if op.Revision() == metaclient.NoRevision {
+		if op.NoRevision() {
 			return cop, nil
 		}
 		// make idempotent put operation
@@ -106,7 +106,7 @@ func (c *etcdKVImpl) getEtcdOp(ctx context.Context, op metaclient.Op) (clientv3.
 		return clientv3.OpTxn([]clientv3.Cmp{cmp}, []clientv3.Op{cop}, nil), nil
 	case op.IsDelete():
 		cop := clientv3.OpDelete(string(op.KeyBytes()), opts...)
-		if op.Revision() == metaclient.NoRevision {
+		if op.NoRevision() {
 			return cop, nil
 		}
 		// make idempotent delete operation
@@ -128,6 +128,37 @@ func (c *etcdKVImpl) getEtcdOp(ctx context.Context, op metaclient.Op) (clientv3.
 	panic("unknown op type")
 }
 
+func (c *etcdKVImpl) getEtcdOpForTxn(ctx context.Context, op metaclient.Op) (clientv3.Op, *clientv3.Cmp, error) {
+	opts, err := c.getEtcdOptions(ctx, op)
+	if err != nil {
+		return emptyOp, nil, err
+	}
+	switch {
+	case op.IsGet():
+		return clientv3.OpGet(string(op.KeyBytes()), opts...), nil, nil
+	case op.IsPut():
+		cop := clientv3.OpPut(string(op.KeyBytes()), string(op.ValueBytes()), opts...)
+		if op.NoRevision() {
+			return cop, nil, nil
+		}
+		// make idempotent put operation
+		cmp := makeEtcdCmpFromRev(string(op.KeyBytes()), op.Revision())
+		return cop, &cmp, nil
+	case op.IsDelete():
+		cop := clientv3.OpDelete(string(op.KeyBytes()), opts...)
+		if op.NoRevision() {
+			return cop, nil, nil
+		}
+		// make idempotent delete operation
+		cmp := makeEtcdCmpFromRev(string(op.KeyBytes()), op.Revision())
+		return cop, &cmp, nil
+	case op.IsTxn():
+		panic("unexpected nested txn")
+	}
+
+	panic("unknown op type")
+}
+
 func (c *etcdKVImpl) Put(ctx context.Context, key, val string, opts ...metaclient.OpOption) (*metaclient.PutResponse, error) {
 	op, err := metaclient.OpPut(key, val, opts...)
 	if err != nil {
@@ -144,7 +175,7 @@ func (c *etcdKVImpl) Put(ctx context.Context, key, val string, opts ...metaclien
 		return nil, cerrors.ErrMetaOpFail.Wrap(err)
 	}
 
-	return makePutResp(etcdResp.Put()), nil
+	return makePutResp(etcdResp, !op.NoRevision())
 }
 
 func (c *etcdKVImpl) Get(ctx context.Context, key string, opts ...metaclient.OpOption) (*metaclient.GetResponse, error) {
@@ -163,7 +194,7 @@ func (c *etcdKVImpl) Get(ctx context.Context, key string, opts ...metaclient.OpO
 		return nil, cerrors.ErrMetaOpFail.Wrap(err)
 	}
 
-	return makeGetResp(etcdResp.Get()), nil
+	return makeGetResp(etcdResp.Get())
 }
 
 func (c *etcdKVImpl) Delete(ctx context.Context, key string, opts ...metaclient.OpOption) (*metaclient.DeleteResponse, error) {
@@ -182,7 +213,7 @@ func (c *etcdKVImpl) Delete(ctx context.Context, key string, opts ...metaclient.
 		return nil, cerrors.ErrMetaOpFail.Wrap(err)
 	}
 
-	return makeDeleteResp(etcdResp.Del()), nil
+	return makeDeleteResp(etcdResp, !op.NoRevision())
 }
 
 func (c *etcdKVImpl) Do(ctx context.Context, op metaclient.Op) (metaclient.OpResponse, error) {
@@ -198,13 +229,29 @@ func (c *etcdKVImpl) Do(ctx context.Context, op metaclient.Op) (metaclient.OpRes
 
 	switch {
 	case op.IsGet():
-		return makeGetResp(etcdResp.Get()).OpResponse(), nil
+		getRsp, err := makeGetResp(etcdResp.Get())
+		if err != nil {
+			return metaclient.OpResponse{}, err
+		}
+		return getRsp.OpResponse(), nil
 	case op.IsPut():
-		return makePutResp(etcdResp.Put()).OpResponse(), nil
+		putRsp, err := makePutResp(etcdResp, !op.NoRevision())
+		if err != nil {
+			return metaclient.OpResponse{}, err
+		}
+		return putRsp.OpResponse(), nil
 	case op.IsDelete():
-		return makeDeleteResp(etcdResp.Del()).OpResponse(), nil
+		delRsp, err := makeDeleteResp(etcdResp, !op.NoRevision())
+		if err != nil {
+			return metaclient.OpResponse{}, err
+		}
+		return delRsp.OpResponse(), nil
 	case op.IsTxn():
-		return makeTxnResp(etcdResp.Txn()).OpResponse(), nil
+		txnRsp, err := makeTxnResp(etcdResp.Txn())
+		if err != nil {
+			return metaclient.OpResponse{}, err
+		}
+		return txnRsp.OpResponse(), nil
 	default:
 		panic("Unknown op")
 	}
@@ -231,15 +278,27 @@ func (t *etcdTxn) Do(ops ...metaclient.Op) metaclient.Txn {
 		return t
 	}
 	etcdOps := make([]clientv3.Op, 0, len(ops))
+	cmps := make([]clientv3.Cmp, 0)
 	for _, op := range ops {
-		etcdOp, err := t.kv.getEtcdOp(t.ctx, op)
+		if op.IsTxn() {
+			t.Err = cerrors.ErrMetaNestedTxn
+			return t
+		}
+		// we move all revision cmp to the upper txn to achieve idempotent
+		etcdOp, cmp, err := t.kv.getEtcdOpForTxn(t.ctx, op)
 		if err != nil {
 			t.Err = err
 			return t
 		}
 		etcdOps = append(etcdOps, etcdOp)
+		if cmp != nil {
+			cmps = append(cmps, *cmp)
+		}
 	}
 
+	if len(cmps) != 0 {
+		t.Txn.If(cmps...)
+	}
 	t.Txn.Then(etcdOps...)
 	return t
 }
@@ -253,5 +312,5 @@ func (t *etcdTxn) Commit() (*metaclient.TxnResponse, error) {
 		return nil, cerrors.ErrMetaOpFail.Wrap(t.Err)
 	}
 
-	return makeTxnResp(etcdResp), nil
+	return makeTxnResp(etcdResp)
 }

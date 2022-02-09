@@ -2,6 +2,7 @@ package metaclient
 
 import "context"
 
+// Txn don't support nested txn and will return an error if check nested error when commit
 type Txn interface {
 	// Do cache Ops in the Txn
 	Do(ops ...Op) Txn
