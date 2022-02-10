@@ -346,6 +346,10 @@ func (m *masterClient) InitMasterInfoFromMeta(ctx context.Context) error {
 	return nil
 }
 
+func (m *masterClient) MasterNodeID() p2p.NodeID {
+	return m.masterID
+}
+
 func (m *masterClient) refreshMasterInfo(ctx context.Context) error {
 	metaClient := NewMetadataClient(m.masterID, m.metaKVClient)
 	masterMeta, err := metaClient.Load(ctx)

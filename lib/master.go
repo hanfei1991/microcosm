@@ -86,7 +86,7 @@ type DefaultBaseMaster struct {
 
 	// dependencies
 	messageHandlerManager p2p.MessageHandlerManager
-	messageRouter         p2p.MessageSender
+	messageSender         p2p.MessageSender
 	metaKVClient          metadata.MetaKV
 	executorClientManager client.ClientsManager
 	serverMasterClient    client.MasterClient
@@ -123,7 +123,7 @@ func NewBaseMaster(
 	impl MasterImpl,
 	id MasterID,
 	messageHandlerManager p2p.MessageHandlerManager,
-	messageRouter p2p.MessageSender,
+	messageSender p2p.MessageSender,
 	metaKVClient metadata.MetaKV,
 	executorClientManager client.ClientsManager,
 	serverMasterClient client.MasterClient,
@@ -139,7 +139,7 @@ func NewBaseMaster(
 	return &DefaultBaseMaster{
 		Impl:                  impl,
 		messageHandlerManager: messageHandlerManager,
-		messageRouter:         messageRouter,
+		messageSender:         messageSender,
 		metaKVClient:          metaKVClient,
 		executorClientManager: executorClientManager,
 		serverMasterClient:    serverMasterClient,
@@ -269,7 +269,7 @@ func (m *DefaultBaseMaster) runWorkerCheck(ctx context.Context) error {
 		case <-ticker.C:
 		}
 
-		offlinedWorkers, onlinedWorkers := m.workerManager.Tick(ctx, m.messageRouter)
+		offlinedWorkers, onlinedWorkers := m.workerManager.Tick(ctx, m.messageSender)
 		// It is logical to call `OnWorkerOnline` first and then call `OnWorkerOffline`.
 		// In case that these two events for the same worker is detected in the same tick.
 		for _, workerInfo := range onlinedWorkers {
