@@ -153,8 +153,6 @@ func (jm *JobManagerImplV2) OnWorkerDispatched(worker lib.WorkerHandle, result e
 // OnWorkerOnline implements lib.MasterImpl.OnWorkerOnline
 func (jm *JobManagerImplV2) OnWorkerOnline(worker lib.WorkerHandle) error {
 	log.L().Info("on worker online", zap.Any("id", worker.ID()))
-	jm.jobFsm.JobOnline(worker)
-
 	return jm.jobFsm.JobOnline(worker)
 }
 
