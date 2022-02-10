@@ -63,12 +63,12 @@ func main() {
 		if len(args) > 2 {
 			recorderNum, err = strconv.Atoi(args[2])
 			if err != nil {
-				fmt.Printf("the third parameter should be an interger,the format is : d dir [100000]\n")
+				fmt.Printf("the third parameter should be an interger")
 			}
 		}
-		go generateData(folder, recorderNum)
+		generateData(folder, recorderNum)
 	} else {
-		fmt.Printf("the format is : d dir [100000]\n")
+		fmt.Printf("the args should be : dir [100000]")
 	}
 
 	StartDataService(ctx)

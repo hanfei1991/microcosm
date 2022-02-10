@@ -239,9 +239,9 @@ func (s *Server) ScheduleTask(ctx context.Context, req *pb.TaskSchedulerRequest)
 		return resp2, err2
 	}
 
-	ckErr := s.apiPreCheck()
-	if ckErr != nil {
-		return nil, errors.ErrClusterResourceNotEnough.GenWithStackByArgs()
+	checkErr := s.apiPreCheck()
+	if checkErr != nil {
+		return &pb.TaskSchedulerResponse{Err: checkErr}, nil
 	}
 
 	tasks := req.GetTasks()
