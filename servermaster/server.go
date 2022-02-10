@@ -505,6 +505,10 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 					zap.String("old-leader-name", s.name()))
 				return errors.ErrEtcdLeaderChanged.GenWithStackByArgs()
 			}
+			err := s.jobManager.Poll(ctx)
+			if err != nil {
+				return err
+			}
 		}
 	}
 }

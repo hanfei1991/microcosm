@@ -26,6 +26,7 @@ func TestJobManagerSubmitJob(t *testing.T) {
 	)
 	mgr := &JobManagerImplV2{
 		BaseMaster: mockMaster.DefaultBaseMaster,
+		jobFsm:     NewJobFsm(),
 	}
 	// set master impl to JobManagerImplV2
 	mockMaster.Impl = mgr
@@ -39,8 +40,8 @@ func TestJobManagerSubmitJob(t *testing.T) {
 	require.Nil(t, resp.Err)
 	time.Sleep(time.Millisecond * 10)
 	require.Eventually(t, func() bool {
-		mgr.workerMu.Lock()
-		defer mgr.workerMu.Unlock()
-		return len(mgr.workers) == 0
+		mgr.jobFsm.jobsMu.Lock()
+		defer mgr.jobFsm.jobsMu.Unlock()
+		return len(mgr.jobFsm.onlineJobs) == 0 && len(mgr.jobFsm.waitAckJobs) == 1
 	}, time.Second*2, time.Millisecond*20)
 }
