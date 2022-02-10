@@ -39,7 +39,7 @@ func (e *errorInfo) Error() string {
 }
 
 type JobMaster struct {
-	lib.BaseMaster
+	lib.BaseJobMaster
 	syncInfo      *Config
 	syncFilesInfo map[lib.WorkerID]*workerInfo
 	counter       int64
@@ -54,23 +54,26 @@ func init() {
 	registry.GlobalWorkerRegistry().MustRegisterWorkerType(lib.CvsJobMaster, factory)
 }
 
-func NewCVSJobMaster(ctx *dcontext.Context, _workerID lib.WorkerID, masterID lib.MasterID, conf lib.WorkerConfig) *JobMaster {
+func NewCVSJobMaster(ctx *dcontext.Context, workerID lib.WorkerID, masterID lib.MasterID, conf lib.WorkerConfig) *JobMaster {
 	jm := &JobMaster{}
-	jm.workerID = _workerID
+	jm.workerID = workerID
 	jm.syncInfo = conf.(*Config)
 	jm.syncFilesInfo = make(map[lib.WorkerID]*workerInfo)
 	deps := ctx.Dependencies
-	base := lib.NewBaseMaster(
+
+	base := lib.NewBaseJobMaster(
 		ctx,
 		jm,
-		"fake-job-manager",
+		jm,
 		masterID,
+		workerID,
 		deps.MessageHandlerManager,
 		deps.MessageRouter,
 		deps.MetaKVClient,
 		deps.ExecutorClientManager,
-		deps.ServerMasterClient)
-	jm.BaseMaster = base
+		deps.ServerMasterClient,
+	)
+	jm.BaseJobMaster = base
 	log.L().Info("new cvs jobmaster ", zap.Any("id :", jm.workerID))
 	return jm
 }
@@ -117,8 +120,10 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 				jm.counter += int64(num)
 				// todo : store the sync progress into the meta store for each file
 			}
-		} else {
+		} else if status.Code == lib.WorkerStatusFinished {
 			// todo : handle error case here
+			log.L().Info("sync file finished ", zap.Any("message", worker.file))
+		} else if status.Code == lib.WorkerStatusError {
 			log.L().Info("sync file failed ", zap.Any("message", worker.file))
 		}
 	}
@@ -182,6 +187,14 @@ func (jm *JobMaster) ID() worker.RunnableID {
 
 func (jm *JobMaster) Workload() model.RescUnit {
 	return 2
+}
+
+func (jm *JobMaster) OnMasterFailover(reason lib.MasterFailoverReason) error {
+	return nil
+}
+
+func (jm *JobMaster) Status() lib.WorkerStatus {
+	return lib.WorkerStatus{Code: lib.WorkerStatusNormal}
 }
 
 func (jm *JobMaster) listSrcFiles(ctx context.Context) ([]string, error) {
