@@ -32,6 +32,15 @@ const (
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	var err error
+
+	err = log.InitLogger(&log.Config{
+		Level: "info",
+	})
+	if err != nil {
+		fmt.Printf("err: %v", err)
+		os.Exit(1)
+	}
+
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc,
 		syscall.SIGHUP,
