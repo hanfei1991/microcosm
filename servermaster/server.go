@@ -230,6 +230,20 @@ func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorR
 // - queries resource manager to allocate resource and maps tasks to executors
 // - returns scheduler response to job master
 func (s *Server) ScheduleTask(ctx context.Context, req *pb.TaskSchedulerRequest) (*pb.TaskSchedulerResponse, error) {
+	var (
+		resp2 *pb.TaskSchedulerResponse
+		err2  error
+	)
+	shouldRet := s.rpcForwardIfNeeded(ctx, req, &resp2, &err2)
+	if shouldRet {
+		return resp2, err2
+	}
+
+	ckErr := s.apiPreCheck()
+	if ckErr != nil {
+		return nil, errors.ErrClusterResourceNotEnough.GenWithStackByArgs()
+	}
+
 	tasks := req.GetTasks()
 	success, resp := s.executorManager.Allocate(tasks)
 	if !success {
