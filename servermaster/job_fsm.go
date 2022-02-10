@@ -67,7 +67,6 @@ func (fsm *JobFsm) JobOnline(worker lib.WorkerHandle) error {
 		JobMasterV2:  cfg,
 	}
 	return nil
-
 }
 
 func (fsm *JobFsm) JobOffline(worker lib.WorkerHandle) {
