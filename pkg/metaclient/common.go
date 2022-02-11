@@ -9,6 +9,7 @@ type ResponseHeader struct {
 	ClusterID string
 }
 
+// String only for debug
 func (h *ResponseHeader) String() string {
 	return fmt.Sprintf("clusterID:%s;", h.ClusterID)
 }
@@ -22,10 +23,10 @@ type PutResponse struct {
 type GetResponse struct {
 	Header *ResponseHeader
 	// kvs is the list of key-value pairs matched by the range request.
-	// kvs is empty when count is requested.
 	Kvs []*KeyValue
 }
 
+// String only for debug
 func (resp *GetResponse) String() string {
 	s := fmt.Sprintf("header:[%s];kvs:[", resp.Header)
 	for _, kv := range resp.Kvs {
@@ -156,6 +157,7 @@ type KeyValue struct {
 	Value []byte
 }
 
+// String only for debug
 func (kv *KeyValue) String() string {
 	return fmt.Sprintf("key:%s, value:%s;", string(kv.Key), string(kv.Value))
 }

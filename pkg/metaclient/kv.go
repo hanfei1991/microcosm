@@ -34,14 +34,6 @@ type KV interface {
 	// WARN: WithRange(end), WithFromKey(), WithPrefix() can't be used at the same time
 	Delete(ctx context.Context, key string, opts ...OpOption) (*DeleteResponse, error)
 
-	// Do applies a single Op on KV without a transaction.
-	// Do is useful when creating arbitrary operations to be issued at a
-	// later time and making intermediate layer for kv; the user can range over the operations, calling Do to
-	// execute them. Get/Put/Delete, on the other hand, are best suited
-	// for when the operation should be issued at the time of declaration.
-	// Same op limit with Put/Get/Delete interface
-	Do(ctx context.Context, op Op) (OpResponse, error)
-
 	// Txn creates a transaction.
 	Txn(ctx context.Context) Txn
 }

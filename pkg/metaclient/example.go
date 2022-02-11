@@ -89,31 +89,6 @@ func Test() {
 	// delete key apple, apple2
 
 	//
-	// Basic Do
-	//
-	// current data:
-	//		apple  red
-	//		apple2  green
-	//		ticdc  kv
-	//		dm	   DDL
-	getOp, err := OpGet("apple3", WithRange("zz"))
-	opRsp, err = cli.Do(ctx, getOp)
-	getRsp = opRsp.Get()
-	_ = getRsp
-	// expect len(getRsp.Kvs) == 2(ticdc, dm)
-	putOp, err := OpPut("apple3", "t3")
-	opRsp, err = cli.Do(ctx, putOp)
-	putRsp = opRsp.Put()
-	_ = putRsp
-	// expect put: apple3 | t3| 30| xxx|
-	delOp, err := OpDelete("apple3", WithRange("ti"))
-	opRsp, err = cli.Do(ctx, delOp)
-	delRsp = opRsp.Del()
-	_ = delRsp
-	_ = err
-	// expect delete: dm
-
-	//
 	// Txn, forbit nested txn
 	//
 	// current data:
@@ -121,6 +96,13 @@ func Test() {
 	//		apple2  green
 	//		ticdc  kv
 	//		dm	   DDL
+	getOp, err := OpGet("apple3", WithRange("zz"))
+	_ = getRsp
+	putOp, err := OpPut("apple3", "t3")
+	_ = putRsp
+	delOp, err := OpDelete("apple3", WithRange("ti"))
+	_ = delRsp
+	_ = err
 	txn := cli.Txn(ctx)
 	txnRsp, err = txn.Do(getOp).Do(putOp).Do(delOp).Commit()
 	_ = txnRsp
