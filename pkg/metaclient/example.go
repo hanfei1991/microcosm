@@ -26,7 +26,6 @@ func Test() {
 		getRsp *GetResponse
 		delRsp *DeleteResponse
 		txnRsp *TxnResponse
-		opRsp  OpResponse
 		err    error
 	)
 
