@@ -8,6 +8,7 @@ import (
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/errors"
+	"github.com/hanfei1991/microcosm/pkg/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
@@ -27,6 +28,7 @@ func TestJobManagerSubmitJob(t *testing.T) {
 	mgr := &JobManagerImplV2{
 		BaseMaster: mockMaster.DefaultBaseMaster,
 		jobFsm:     NewJobFsm(),
+		uuidGen:    uuid.NewGenerator(),
 	}
 	// set master impl to JobManagerImplV2
 	mockMaster.Impl = mgr
