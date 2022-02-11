@@ -5,13 +5,13 @@ import (
 
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/lib"
-	"github.com/hanfei1991/microcosm/lib/registry"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
+	"github.com/hanfei1991/microcosm/pkg/uuid"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 )
@@ -42,6 +42,7 @@ type JobManagerImplV2 struct {
 	executorClientManager client.ClientsManager
 	serverMasterClient    client.MasterClient
 	jobFsm                *JobFsm
+	uuidGen               uuid.Generator
 }
 
 func (jm *JobManagerImplV2) PauseJob(ctx context.Context, req *pb.PauseJobRequest) *pb.PauseJobResponse {
@@ -60,6 +61,7 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 	switch req.Tp {
 	case pb.JobType_Benchmark:
 		masterConfig = &model.JobMasterV2{
+			ID:     jm.uuidGen.NewString(),
 			Tp:     model.Benchmark,
 			Config: req.Config,
 		}
@@ -68,18 +70,18 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 		resp.Err = errors.ToPBError(err)
 		return resp
 	}
+
+	// TODO: data persistence for masterConfig
+
 	// CreateWorker here is to create job master actually
 	// TODO: use correct worker type and worker cost
 	id, err := jm.BaseMaster.CreateWorker(
-		registry.WorkerTypeFakeMaster, masterConfig, defaultJobMasterCost)
+		lib.WorkerTypeFakeMaster, masterConfig, defaultJobMasterCost)
 	if err != nil {
 		log.L().Error("create job master met error", zap.Error(err))
 		resp.Err = errors.ToPBError(err)
 		return resp
 	}
-
-	// TODO: data persistence for masterConfig
-	masterConfig.ID = id
 	jm.jobFsm.JobDispatched(masterConfig)
 
 	resp.JobIdStr = id
@@ -103,6 +105,7 @@ func NewJobManagerImplV2(
 		serverMasterClient:    clients.MasterClient(),
 		metaKVClient:          metaKVClient,
 		jobFsm:                NewJobFsm(),
+		uuidGen:               uuid.NewGenerator(),
 	}
 	impl.BaseMaster = lib.NewBaseMaster(
 		dctx,
@@ -132,7 +135,7 @@ func (jm *JobManagerImplV2) Tick(ctx context.Context) error {
 	return jm.jobFsm.IterPendingJobs(
 		func(job *model.JobMasterV2) (string, error) {
 			return jm.BaseMaster.CreateWorker(
-				registry.WorkerTypeFakeMaster, job, defaultJobMasterCost)
+				lib.WorkerTypeFakeMaster, job, defaultJobMasterCost)
 		})
 }
 

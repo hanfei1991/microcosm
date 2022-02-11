@@ -408,6 +408,22 @@ func (m *DefaultBaseMaster) registerHandlerForWorker(ctx context.Context, worker
 	return nil
 }
 
+// generateWorkerID assigns a new worker id.
+// When creating a job master, job manager provides a pre allocated ID, in other
+// cases, we need to generate a random WorkerID.
+func (m *DefaultBaseMaster) generateWorkerID(workerType WorkerType, config WorkerConfig) string {
+	switch workerType {
+	case WorkerTypeFakeMaster:
+		masterCfg, ok := config.(*model.JobMasterV2)
+		if !ok {
+			log.L().Warn("invalid master config, will gen random worker id")
+		}
+		return masterCfg.ID
+	default:
+	}
+	return m.uuidGen.NewString()
+}
+
 func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error) {
 	log.L().Info("CreateWorker",
 		zap.Int64("worker-type", int64(workerType)),
@@ -419,7 +435,7 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 	}
 
 	// workerID is expected to be globally unique.
-	workerID := m.uuidGen.NewString()
+	workerID := m.generateWorkerID(workerType, config)
 
 	if !m.createWorkerQuota.TryConsume() {
 		return "", derror.ErrMasterConcurrencyExceeded.GenWithStackByArgs()

@@ -6,19 +6,14 @@ import (
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 )
 
-const (
-	WorkerTypeFakeMaster = 10000
-	WorkerTypeFakeWorker = 10001
-)
-
 type FakeConfig struct{}
 
 func LoadFake(registry Registry) {
 	fakeMasterFactory := NewSimpleWorkerFactory(func(ctx *dcontext.Context, id lib.WorkerID, masterID lib.MasterID, config WorkerConfig) lib.Worker {
 		return fake.NewFakeMaster(ctx, id, masterID, config)
 	}, &FakeConfig{})
-	registry.MustRegisterWorkerType(WorkerTypeFakeMaster, fakeMasterFactory)
+	registry.MustRegisterWorkerType(lib.WorkerTypeFakeMaster, fakeMasterFactory)
 
 	fakeWorkerFactory := NewSimpleWorkerFactory(fake.NewDummyWorker, &FakeConfig{})
-	registry.MustRegisterWorkerType(WorkerTypeFakeWorker, fakeWorkerFactory)
+	registry.MustRegisterWorkerType(lib.WorkerTypeFakeWorker, fakeWorkerFactory)
 }
