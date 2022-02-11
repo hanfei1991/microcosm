@@ -39,7 +39,7 @@ func (e *errorInfo) Error() string {
 }
 
 type JobMaster struct {
-	lib.BaseJobMaster
+	lib.BaseMaster
 	syncInfo      *Config
 	syncFilesInfo map[lib.WorkerID]*workerInfo
 	counter       int64
@@ -61,19 +61,17 @@ func NewCVSJobMaster(ctx *dcontext.Context, workerID lib.WorkerID, masterID lib.
 	jm.syncFilesInfo = make(map[lib.WorkerID]*workerInfo)
 	deps := ctx.Dependencies
 
-	base := lib.NewBaseJobMaster(
+	base := lib.NewBaseMaster(
 		ctx,
 		jm,
-		jm,
 		masterID,
-		workerID,
 		deps.MessageHandlerManager,
 		deps.MessageRouter,
 		deps.MetaKVClient,
 		deps.ExecutorClientManager,
 		deps.ServerMasterClient,
 	)
-	jm.BaseJobMaster = base
+	jm.BaseMaster = base
 	log.L().Info("new cvs jobmaster ", zap.Any("id :", jm.workerID))
 	return jm
 }
