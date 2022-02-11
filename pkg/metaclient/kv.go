@@ -2,7 +2,7 @@ package metaclient
 
 import "context"
 
-// Txn don't support nested txn
+// Txn doesn't support nested txn
 type Txn interface {
 	// Do cache Ops in the Txn
 	// Same op limit with KV Put/Get/Delete interface
