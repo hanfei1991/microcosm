@@ -79,6 +79,7 @@ func NewCvsTask(ctx *dcontext.Context, _workerID lib.WorkerID, masterID lib.Mast
 
 func (task *cvsTask) InitImpl(ctx context.Context) error {
 	log.L().Info("init the task  ", zap.Any("task id :", task.ID()))
+	task.status = lib.WorkerStatusNormal
 	ctx, task.cancelFn = context.WithCancel(ctx)
 	go func() {
 		err := task.Receive(ctx)
@@ -161,7 +162,8 @@ func (task *cvsTask) Receive(ctx context.Context) error {
 			return nil
 		case task.buffer <- strPair{firstStr: strs[0], secondStr: strs[1]}:
 		}
-		time.Sleep(time.Microsecond * 10)
+		// waiting longer time to read lines slowly
+		time.Sleep(time.Millisecond * 10)
 	}
 	return nil
 }

@@ -66,7 +66,7 @@ func main() {
 				fmt.Printf("the third parameter should be an interger")
 			}
 		}
-		generateData(folder, recorderNum)
+		go generateData(folder, recorderNum)
 	} else {
 		fmt.Printf("the args should be : dir [100000]")
 	}
