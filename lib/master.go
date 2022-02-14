@@ -308,7 +308,7 @@ func (m *DefaultBaseMaster) OnError(err error) {
 func (m *DefaultBaseMaster) initMetadata(ctx context.Context) (isInit bool, epoch Epoch, err error) {
 	// TODO refine this logic to make it correct and easier to understand.
 
-	metaClient := NewMetadataClient(m.id, m.metaKVClient)
+	metaClient := NewMasterMetadataClient(m.id, m.metaKVClient)
 	masterMeta, err := metaClient.Load(ctx)
 	if err != nil {
 		if !derror.ErrMasterNotFound.Equal(err) {
@@ -341,7 +341,7 @@ func (m *DefaultBaseMaster) initMetadata(ctx context.Context) (isInit bool, epoc
 }
 
 func (m *DefaultBaseMaster) markInitializedInMetadata(ctx context.Context) error {
-	metaClient := NewMetadataClient(m.id, m.metaKVClient)
+	metaClient := NewMasterMetadataClient(m.id, m.metaKVClient)
 	masterMeta, err := metaClient.Load(ctx)
 	if err != nil {
 		return errors.Trace(err)

@@ -17,7 +17,7 @@ type MasterMetadataClient struct {
 	metaKVClient metadata.MetaKV
 }
 
-func NewMetadataClient(masterID MasterID, metaKVClient metadata.MetaKV) *MasterMetadataClient {
+func NewMasterMetadataClient(masterID MasterID, metaKVClient metadata.MetaKV) *MasterMetadataClient {
 	return &MasterMetadataClient{
 		masterID:     masterID,
 		metaKVClient: metaKVClient,
@@ -76,6 +76,21 @@ type WorkerMetadataClient struct {
 	masterID     MasterID
 	workerID     WorkerID
 	metaKVClient metadata.MetaKV
+	extTpi       interface{}
+}
+
+func NewWorkerMetadataClient(
+	masterID MasterID,
+	workerID WorkerID,
+	metaClient metadata.MetaKV,
+	extTpi interface{},
+) *WorkerMetadataClient {
+	return &WorkerMetadataClient{
+		masterID:     masterID,
+		workerID:     workerID,
+		metaKVClient: metaClient,
+		extTpi:       extTpi,
+	}
 }
 
 func (c *WorkerMetadataClient) Load(ctx context.Context) (*WorkerStatus, error) {
@@ -93,10 +108,18 @@ func (c *WorkerMetadataClient) Load(ctx context.Context) (*WorkerStatus, error) 
 		// TODO wrap the error
 		return nil, errors.Trace(err)
 	}
+
+	if err := workerMeta.fillExt(c.extTpi); err != nil {
+		return nil, errors.Trace(err)
+	}
 	return &workerMeta, nil
 }
 
 func (c *WorkerMetadataClient) Store(ctx context.Context, data *WorkerStatus) error {
+	if err := data.marshalExt(); err != nil {
+		return errors.Trace(err)
+	}
+
 	dataBytes, err := json.Marshal(data)
 	if err != nil {
 		return errors.Trace(err)
@@ -108,6 +131,14 @@ func (c *WorkerMetadataClient) Store(ctx context.Context, data *WorkerStatus) er
 	}
 
 	return nil
+}
+
+func (c *WorkerMetadataClient) MasterID() MasterID {
+	return c.masterID
+}
+
+func (c *WorkerMetadataClient) WorkerID() WorkerID {
+	return c.workerID
 }
 
 func (c *WorkerMetadataClient) workerMetaKey() string {
