@@ -1,0 +1,307 @@
+package etcdkv
+
+import (
+	"context"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	cerrors "github.com/hanfei1991/microcosm/pkg/errors"
+	"github.com/hanfei1991/microcosm/pkg/metaclient"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.etcd.io/etcd/clientv3"
+	pb "go.etcd.io/etcd/etcdserver/etcdserverpb"
+	"go.uber.org/zap"
+)
+
+const (
+	DefaultRevisionChanSize = 128
+)
+
+// etcdClientImpl is the etcd implement of Client interface
+type etcdClientImpl struct {
+	cli *etcdImpl
+}
+
+func (c *etcdClientImpl) Close() {
+	c.cli.Close()
+}
+
+func NewEtcdClientImpl(c *etcdImpl) *etcdClientImpl {
+	return &etcdClientImpl{
+		cli: c,
+	}
+}
+
+// etcdImpl is the etcd implement of KVClient interface
+type etcdImpl struct {
+	cli           *clientv3.Client
+	compactCancel context.CancelFunc
+	revCh         chan int64
+	latestRevT    int64
+	closeMu       sync.Mutex
+	wg            *sync.WaitGroup
+}
+
+func startCompactRoutine(ctx context.Context, wg *sync.WaitGroup, ch <-chan int64, cli *clientv3.Client) {
+	defer wg.Done()
+	var rev, latestRev int64
+	var compactInterval bool
+	ticker := time.NewTicker(time.Second * 5)
+	for {
+		select {
+		case <-ctx.Done():
+			log.L().Info("receive context done, return")
+			return // cancel routine normally
+		case rrev, ok := <-ch:
+			if !ok {
+				log.L().Info("receive revision from channel fail, return")
+				return
+			}
+			rev = rrev
+		case <-ticker.C:
+			compactInterval = true
+		}
+
+		if compactInterval && rev > latestRev {
+			childCtx, cancel := context.WithTimeout(ctx, time.Second*3)
+			defer cancel()
+			_, err := cli.Compact(childCtx, rev)
+			if err != nil {
+				log.L().Warn("compact revision fail", zap.Int64("revision", rev), zap.Error(err))
+			}
+			compactInterval = false
+			latestRev = rev
+		}
+	}
+}
+
+func NewEtcdImpl(config *metaclient.Config) (metaclient.KVClient, error) {
+	conf := config.Clone()
+	cli, err := clientv3.New(clientv3.Config{
+		Endpoints: conf.Endpoints,
+		// [TODO] TLS
+		// Username: conf.Auth.Username,
+		// Password: conf.Auth.Password,
+		// [TODO] LOG
+	})
+	if err != nil {
+		return nil, cerrors.ErrMetaNewClientFail.Wrap(err)
+	}
+
+	var wg sync.WaitGroup
+	// start compact routine to avoid user space expeed
+	ctx, cancel := context.WithCancel(context.Background())
+	revCh := make(chan int64, DefaultRevisionChanSize)
+	wg.Add(1)
+	go startCompactRoutine(ctx, &wg, revCh, cli)
+
+	c := &etcdImpl{
+		cli:           cli,
+		compactCancel: cancel,
+		revCh:         revCh,
+		latestRevT:    time.Now().Unix(),
+		wg:            &wg,
+	}
+	return c, nil
+}
+
+func (c *etcdImpl) getLatestRev(h *pb.ResponseHeader) {
+	now := time.Now().Unix()
+	if (now - atomic.LoadInt64(&c.latestRevT)) > 1 {
+		atomic.StoreInt64(&c.latestRevT, now)
+		c.revCh <- h.Revision
+	}
+}
+
+func (c *etcdImpl) getEtcdOptions(op metaclient.Op) []clientv3.OpOption {
+	etcdOps := make([]clientv3.OpOption, 0, 3)
+	switch {
+	case op.IsOptsWithPrefix():
+		etcdOps = append(etcdOps, clientv3.WithPrefix())
+	case op.IsOptsWithFromKey():
+		etcdOps = append(etcdOps, clientv3.WithFromKey())
+	case op.IsOptsWithRange():
+		etcdOps = append(etcdOps, clientv3.WithRange(string(op.RangeBytes())))
+	}
+
+	return etcdOps
+}
+
+func (c *etcdImpl) getEtcdOp(op metaclient.Op) clientv3.Op {
+	opts := c.getEtcdOptions(op)
+	switch {
+	case op.IsGet():
+		return clientv3.OpGet(string(op.KeyBytes()), opts...)
+	case op.IsPut():
+		return clientv3.OpPut(string(op.KeyBytes()), string(op.ValueBytes()), opts...)
+	case op.IsDelete():
+		return clientv3.OpDelete(string(op.KeyBytes()), opts...)
+	case op.IsTxn():
+		ops := op.Txn()
+		etcdOps := make([]clientv3.Op, 0, len(ops))
+		for _, sop := range ops {
+			etcdOps = append(etcdOps, c.getEtcdOp(sop))
+		}
+		return clientv3.OpTxn(nil, etcdOps, nil)
+	}
+
+	panic("unknown op type")
+}
+
+func (c *etcdImpl) Put(ctx context.Context, key, val string) (*metaclient.PutResponse, error) {
+	op := metaclient.OpPut(key, val)
+	etcdResp, err := c.cli.Do(ctx, c.getEtcdOp(op))
+	if err != nil {
+		return nil, cerrors.ErrMetaOpFail.FastGenByArgs(err)
+	}
+
+	putRsp := etcdResp.Put()
+	c.getLatestRev(putRsp.Header)
+	return makePutResp(putRsp), nil
+}
+
+func (c *etcdImpl) Get(ctx context.Context, key string, opts ...metaclient.OpOption) (*metaclient.GetResponse, error) {
+	op := metaclient.OpGet(key, opts...)
+	if err := op.CheckValidOp(); err != nil {
+		return nil, cerrors.ErrMetaOptionInvalid.Wrap(err)
+	}
+
+	etcdResp, err := c.cli.Do(ctx, c.getEtcdOp(op))
+	if err != nil {
+		return nil, cerrors.ErrMetaOpFail.FastGenByArgs(err)
+	}
+
+	getRsp := etcdResp.Get()
+	c.getLatestRev(getRsp.Header)
+	return makeGetResp(getRsp), nil
+}
+
+func (c *etcdImpl) Delete(ctx context.Context, key string, opts ...metaclient.OpOption) (*metaclient.DeleteResponse, error) {
+	op := metaclient.OpDelete(key, opts...)
+	if err := op.CheckValidOp(); err != nil {
+		return nil, cerrors.ErrMetaOptionInvalid.Wrap(err)
+	}
+
+	etcdResp, err := c.cli.Do(ctx, c.getEtcdOp(op))
+	if err != nil {
+		return nil, cerrors.ErrMetaOpFail.FastGenByArgs(err)
+	}
+
+	delRsp := etcdResp.Del()
+	c.getLatestRev(delRsp.Header)
+	return makeDeleteResp(delRsp), nil
+}
+
+func (c *etcdImpl) Do(ctx context.Context, op metaclient.Op) (metaclient.OpResponse, error) {
+	if err := op.CheckValidOp(); err != nil {
+		return metaclient.OpResponse{}, err
+	}
+
+	etcdResp, err := c.cli.Do(ctx, c.getEtcdOp(op))
+	if err != nil {
+		return metaclient.OpResponse{}, cerrors.ErrMetaOpFail.FastGenByArgs(err)
+	}
+
+	switch {
+	case op.IsGet():
+		rsp := etcdResp.Get()
+		c.getLatestRev(rsp.Header)
+		getRsp := makeGetResp(rsp)
+		return getRsp.OpResponse(), nil
+	case op.IsPut():
+		rsp := etcdResp.Put()
+		c.getLatestRev(rsp.Header)
+		putRsp := makePutResp(rsp)
+		return putRsp.OpResponse(), nil
+	case op.IsDelete():
+		rsp := etcdResp.Del()
+		c.getLatestRev(rsp.Header)
+		delRsp := makeDeleteResp(rsp)
+		return delRsp.OpResponse(), nil
+	case op.IsTxn():
+		rsp := etcdResp.Txn()
+		c.getLatestRev(rsp.Header)
+		txnRsp := makeTxnResp(rsp)
+		return txnRsp.OpResponse(), nil
+	default:
+		panic("Unknown op")
+	}
+}
+
+type etcdTxn struct {
+	clientv3.Txn
+	mu  sync.Mutex
+	kv  *etcdImpl
+	ops []clientv3.Op
+	// cache error to make chain operation work
+	Err       error
+	committed bool
+}
+
+func (c *etcdImpl) Txn(ctx context.Context) metaclient.Txn {
+	return &etcdTxn{
+		Txn: c.cli.Txn(ctx),
+		kv:  c,
+		ops: make([]clientv3.Op, 0, 3),
+	}
+}
+
+func (c *etcdImpl) Close() {
+	c.closeMu.Lock()
+	defer c.closeMu.Unlock()
+	if c.compactCancel != nil {
+		c.compactCancel()
+		c.compactCancel = nil
+		c.wg.Wait()
+		close(c.revCh)
+		c.cli.Close()
+	}
+}
+
+func (t *etcdTxn) Do(ops ...metaclient.Op) metaclient.Txn {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if t.Err != nil {
+		return t
+	}
+	if t.committed {
+		t.Err = cerrors.ErrMetaCommittedTxn
+		return t
+	}
+
+	etcdOps := make([]clientv3.Op, 0, len(ops))
+	for _, op := range ops {
+		if op.IsTxn() {
+			t.Err = cerrors.ErrMetaNestedTxn
+			return t
+		}
+		etcdOps = append(etcdOps, t.kv.getEtcdOp(op))
+	}
+
+	t.ops = append(t.ops, etcdOps...)
+	return t
+}
+
+func (t *etcdTxn) Commit() (*metaclient.TxnResponse, error) {
+	t.mu.Lock()
+	if t.Err != nil {
+		return nil, t.Err
+	}
+	if t.committed {
+		t.Err = cerrors.ErrMetaCommittedTxn
+		return nil, t.Err
+	}
+	t.committed = true
+	t.mu.Unlock()
+
+	t.Txn.Then(t.ops...)
+	etcdResp, err := t.Txn.Commit()
+	if err != nil {
+		return nil, cerrors.ErrMetaOpFail.FastGenByArgs(err)
+	}
+
+	t.kv.getLatestRev(etcdResp.Header)
+	return makeTxnResp(etcdResp), nil
+}
