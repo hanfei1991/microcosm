@@ -33,6 +33,7 @@ func (w *exampleWorker) run() {
 	w.work.mu.Lock()
 	count := w.work.tickCount
 	w.work.mu.Unlock()
+	// nolint:errcheck
 	_, _ = w.DefaultBaseWorker.MetaKVClient().Put(
 		context.TODO(), tickKey, strconv.Itoa(count))
 
