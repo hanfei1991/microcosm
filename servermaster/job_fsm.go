@@ -15,6 +15,30 @@ type jobHolder struct {
 	*model.JobMasterV2
 }
 
+// JobFsm manages state of all job masters, job master state forms a finite-state
+// machine. Note job master managed in JobFsm is in running status, which means
+// the job is not terminated or finished.
+//
+// ,-------.           ,------.             ,-------.
+// |WaitAck|           |Online|             |Pending|
+// `---+---'           `---+--'             `---+---'
+//     |                   |                    |
+//     | Master            |                    |
+//     |  .OnWorkerOnline  |                    |
+//     |------------------>|                    |
+//     |                   |                    |
+//     |                   |                    |
+//     |                   | Master             |
+//     |                   |   .OnWorkerOffline |
+//     |                   |------------------->|
+//     |                   |                    |
+//     |                   |                    |
+//     |                   | Master             |
+//     |                   |   .CreateWorker    |
+//     |<---------------------------------------|
+//     |                   |                    |
+//     |                   |                    |
+//     |                   |                    |
 type JobFsm struct {
 	jobsMu      sync.Mutex
 	pendingJobs map[string]*model.JobMasterV2
