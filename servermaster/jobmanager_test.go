@@ -42,8 +42,8 @@ func TestJobManagerSubmitJob(t *testing.T) {
 	require.Nil(t, resp.Err)
 	time.Sleep(time.Millisecond * 10)
 	require.Eventually(t, func() bool {
-		mgr.jobFsm.jobsMu.Lock()
-		defer mgr.jobFsm.jobsMu.Unlock()
-		return len(mgr.jobFsm.onlineJobs) == 0 && len(mgr.jobFsm.waitAckJobs) == 1
+		return mgr.jobFsm.OnlineJobCount() == 0 &&
+			mgr.jobFsm.WaitAckJobCount() == 0 &&
+			mgr.jobFsm.PendingJobCount() == 1
 	}, time.Second*2, time.Millisecond*20)
 }

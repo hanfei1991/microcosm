@@ -470,6 +470,10 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 	go func() {
 		defer m.createWorkerQuota.Release()
 
+		// When CreateWorker failed, we need to pass the worker id to
+		// OnWorkerDispatched, so we use a dummy WorkerHandle.
+		dispatchFailedDummyHandler := NewTombstoneWorkerHandle(
+			workerID, WorkerStatus{Code: WorkerStatusError})
 		requestCtx, cancel := context.WithTimeout(context.Background(), createWorkerTimeout)
 		defer cancel()
 		// This following API should be refined.
@@ -482,7 +486,7 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 			// TODO (zixiong) make the timeout configurable
 			time.Second*10)
 		if err != nil {
-			err1 := m.Impl.OnWorkerDispatched(nil, errors.Trace(err))
+			err1 := m.Impl.OnWorkerDispatched(dispatchFailedDummyHandler, errors.Trace(err))
 			if err1 != nil {
 				m.OnError(errors.Trace(err1))
 			}
@@ -496,7 +500,7 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 
 		err = m.executorClientManager.AddExecutor(executorID, schedule[0].Addr)
 		if err != nil {
-			err1 := m.Impl.OnWorkerDispatched(nil, errors.Trace(err))
+			err1 := m.Impl.OnWorkerDispatched(dispatchFailedDummyHandler, errors.Trace(err))
 			if err1 != nil {
 				m.OnError(errors.Trace(err1))
 			}
@@ -513,7 +517,7 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 			},
 		})
 		if err != nil {
-			err1 := m.Impl.OnWorkerDispatched(nil, errors.Trace(err))
+			err1 := m.Impl.OnWorkerDispatched(dispatchFailedDummyHandler, errors.Trace(err))
 			if err1 != nil {
 				m.OnError(errors.Trace(err1))
 			}
@@ -523,8 +527,8 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 		log.L().Info("Worker dispatched", zap.Any("response", dispatchTaskResp))
 		errCode := dispatchTaskResp.GetErrorCode()
 		if errCode != pb.DispatchTaskErrorCode_OK {
-			err1 := m.Impl.OnWorkerDispatched(
-				nil, errors.Errorf("dispatch worker failed with error code: %d", errCode))
+			err1 := m.Impl.OnWorkerDispatched(dispatchFailedDummyHandler,
+				errors.Errorf("dispatch worker failed with error code: %d", errCode))
 			if err1 != nil {
 				m.OnError(errors.Trace(err1))
 			}
