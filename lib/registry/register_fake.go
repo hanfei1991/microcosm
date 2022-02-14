@@ -13,8 +13,8 @@ func RegisterFake(registry Registry) {
 	fakeMasterFactory := NewSimpleWorkerFactory(func(ctx *dcontext.Context, id lib.WorkerID, masterID lib.MasterID, config WorkerConfig) lib.Worker {
 		return fake.NewFakeMaster(ctx, id, masterID, config)
 	}, &FakeConfig{})
-	registry.MustRegisterWorkerType(lib.WorkerTypeFakeMaster, fakeMasterFactory)
+	registry.MustRegisterWorkerType(lib.FakeJobMaster, fakeMasterFactory)
 
 	fakeWorkerFactory := NewSimpleWorkerFactory(fake.NewDummyWorker, &FakeConfig{})
-	registry.MustRegisterWorkerType(lib.WorkerTypeFakeWorker, fakeWorkerFactory)
+	registry.MustRegisterWorkerType(lib.FakeTask, fakeWorkerFactory)
 }

@@ -70,6 +70,9 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 		if err != nil {
 			break
 		}
+		// TODO: we can use job name provided from user, but we must check the
+		// job name is unique before using it.
+		config.ID = jm.uuidGen.NewString()
 		config.Ext = extConfig
 		config.Tp = lib.CvsJobMaster
 	default:
@@ -83,7 +86,7 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 	// CreateWorker here is to create job master actually
 	// TODO: use correct worker type and worker cost
 	id, err = jm.BaseMaster.CreateWorker(
-		lib.CvsJobMaster, config, defaultJobMasterCost)
+		config.Tp, config, defaultJobMasterCost)
 
 	if err != nil {
 		log.L().Error("create job master met error", zap.Error(err))
@@ -143,7 +146,7 @@ func (jm *JobManagerImplV2) Tick(ctx context.Context) error {
 	return jm.jobFsm.IterPendingJobs(
 		func(job *lib.JobMasterV2) (string, error) {
 			return jm.BaseMaster.CreateWorker(
-				lib.WorkerTypeFakeMaster, job, defaultJobMasterCost)
+				job.Tp, job, defaultJobMasterCost)
 		})
 }
 
