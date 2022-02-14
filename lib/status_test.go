@@ -124,6 +124,14 @@ func TestStatusReceiver(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	pool := workerpool.NewDefaultAsyncPool(1)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = pool.Run(ctx)
+	}()
+
 	metaClient := metadata.NewMetaMock()
 	workerMetaClient := NewWorkerMetadataClient(masterName, workerID1, metaClient, &dummyStatus{})
 	mockMsgHandlerManager := p2p.NewMockMessageHandlerManager()
@@ -138,7 +146,7 @@ func TestStatusReceiver(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	receiver := NewStatusReceiver(workerMetaClient, mockMsgHandlerManager, 1, mockClock)
+	receiver := NewStatusReceiver(workerMetaClient, mockMsgHandlerManager, 1, pool, mockClock)
 
 	err = receiver.Init(ctx)
 	require.NoError(t, err)
@@ -167,6 +175,17 @@ func TestStatusReceiver(t *testing.T) {
 
 	err = receiver.Tick(ctx)
 	require.NoError(t, err)
+
+	barrier := make(chan struct{})
+	err = pool.Go(ctx, func() {
+		close(barrier)
+	})
+	require.NoError(t, err)
+	select {
+	case <-ctx.Done():
+		require.Fail(t, "context timed out")
+	case <-barrier:
+	}
 
 	status := receiver.Status()
 	require.Equal(t, WorkerStatus{
@@ -200,6 +219,17 @@ func TestStatusReceiver(t *testing.T) {
 	err = receiver.Tick(ctx)
 	require.NoError(t, err)
 
+	barrier = make(chan struct{})
+	err = pool.Go(ctx, func() {
+		close(barrier)
+	})
+	require.NoError(t, err)
+	select {
+	case <-ctx.Done():
+		require.Fail(t, "context timed out")
+	case <-barrier:
+	}
+
 	status = receiver.Status()
 	require.Equal(t, WorkerStatus{
 		Code:         WorkerStatusNormal,
@@ -207,4 +237,7 @@ func TestStatusReceiver(t *testing.T) {
 		ExtBytes:     nil,
 		Ext:          &dummyStatus{Val: 6},
 	}, status)
+
+	cancel()
+	wg.Wait()
 }

@@ -55,12 +55,13 @@ var (
 	ErrMasterClosed                   = errors.Normalize("master has been closed explicitly: master ID %s", errors.RFCCodeText("DFLOW:ErrMasterClosed"))
 	ErrMasterConcurrencyExceeded      = errors.Normalize("master has reached concurrency quota", errors.RFCCodeText("DFLOW:ErrMasterConcurrencyExceeded"))
 
-	ErrWorkerTypeNotFound = errors.Normalize("worker type is not found: type %d", errors.RFCCodeText("DFLOW:ErrWorkerTypeNotFound"))
-	ErrWorkerNotFound     = errors.Normalize("worker is not found: worker ID %s", errors.RFCCodeText("DFLOW:ErrWorkerNotFound"))
-	ErrWorkerOffline      = errors.Normalize("worker is offline: workerID %s", errors.RFCCodeText("DFLOW:ErrWorkerOffline"))
-	ErrWorkerTimedOut     = errors.Normalize("worker heartbeat timed out: workerID %s", errors.RFCCodeText("DFLOW:ErrWorkerTimedOut"))
-	ErrWorkerSuicide      = errors.Normalize("worker has committed suicide due to master having timed out", errors.RFCCodeText("DFLOW:ErrWorkerSuicide"))
-	ErrWorkerNoMeta       = errors.Normalize("worker metadata does not exist", errors.RFCCodeText("DFLOW:ErrWorkerNoMeta"))
+	ErrWorkerTypeNotFound         = errors.Normalize("worker type is not found: type %d", errors.RFCCodeText("DFLOW:ErrWorkerTypeNotFound"))
+	ErrWorkerNotFound             = errors.Normalize("worker is not found: worker ID %s", errors.RFCCodeText("DFLOW:ErrWorkerNotFound"))
+	ErrWorkerOffline              = errors.Normalize("worker is offline: workerID %s", errors.RFCCodeText("DFLOW:ErrWorkerOffline"))
+	ErrWorkerTimedOut             = errors.Normalize("worker heartbeat timed out: workerID %s", errors.RFCCodeText("DFLOW:ErrWorkerTimedOut"))
+	ErrWorkerSuicide              = errors.Normalize("worker has committed suicide due to master having timed out", errors.RFCCodeText("DFLOW:ErrWorkerSuicide"))
+	ErrWorkerNoMeta               = errors.Normalize("worker metadata does not exist", errors.RFCCodeText("DFLOW:ErrWorkerNoMeta"))
+	ErrWorkerUpdateStatusTryAgain = errors.Normalize("worker should try again in updating the status", errors.RFCCodeText("DFLOW:ErrWorkerStatusTryAgain"))
 
 	// master etcd related errors
 	ErrMasterEtcdCreateSessionFail    = errors.Normalize("failed to create Etcd session", errors.RFCCodeText("DFLOW:ErrMasterEtcdCreateSessionFail"))

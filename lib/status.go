@@ -13,7 +13,16 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/hanfei1991/microcosm/pkg/clock"
+	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
+)
+
+type senderFSMState = int32
+
+const (
+	senderFSMIdle = senderFSMState(iota + 1)
+	senderFSMPending
+	senderFSMSending
 )
 
 // StatusSender is used for a worker to send its status to its master.
@@ -22,7 +31,12 @@ type StatusSender struct {
 	messageSender    p2p.MessageSender
 	masterClient     *masterClient
 
-	lastStatusMu     sync.Mutex
+	// The following describes the FSM state transitions.
+	//
+	// [Idle] ==SendStatus==> [Pending] ==sendStatus(pool)==> [Sending]
+	// [Sending] ==sent successfully==> [Idle]
+	// [Sending] ==need to retry==> [Pending]
+	fsmState         atomic.Int32
 	lastUnsentStatus *WorkerStatus
 
 	pool workerpool.AsyncPool
@@ -42,6 +56,7 @@ func NewStatusSender(
 		workerMetaClient: workerMetaClient,
 		messageSender:    messageSender,
 		masterClient:     masterClient,
+		fsmState:         *atomic.NewInt32(senderFSMIdle),
 		pool:             pool,
 		errCh:            make(chan error, 1),
 	}
@@ -57,20 +72,12 @@ func (s *StatusSender) Tick(ctx context.Context) error {
 	default:
 	}
 
-	s.lastStatusMu.Lock()
-	lastStatus := s.lastUnsentStatus
-	if lastStatus != nil {
-		s.lastUnsentStatus = nil
-	}
-	s.lastStatusMu.Unlock()
-
-	if lastStatus == nil {
-		return nil
+	if s.fsmState.Load() == senderFSMPending {
+		if err := s.sendStatus(ctx); err != nil {
+			return errors.Trace(err)
+		}
 	}
 
-	if err := s.SendStatus(ctx, *lastStatus); err != nil {
-		return errors.Trace(err)
-	}
 	return nil
 }
 
@@ -79,8 +86,28 @@ func (s *StatusSender) Tick(ctx context.Context) error {
 // This function is non-blocking and if any error occurred during or after network IO,
 // the subsequent Tick will return an error.
 func (s *StatusSender) SendStatus(ctx context.Context, status WorkerStatus) error {
+	if s.fsmState.Load() != senderFSMIdle {
+		return derror.ErrWorkerUpdateStatusTryAgain.GenWithStackByArgs()
+	}
+	s.lastUnsentStatus = &status
+	if old := s.fsmState.Swap(senderFSMPending); old != senderFSMIdle {
+		log.L().Panic("StatusSender: unexpected fsm state",
+			zap.Int32("old-fsm-state", old))
+	}
+	if err := s.sendStatus(ctx); err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+func (s *StatusSender) sendStatus(ctx context.Context) error {
 	err := s.pool.Go(ctx, func() {
-		if err := s.workerMetaClient.Store(ctx, &status); err != nil {
+		if !s.fsmState.CAS(senderFSMPending, senderFSMSending) {
+			return
+		}
+
+		status := s.lastUnsentStatus
+		if err := s.workerMetaClient.Store(ctx, status); err != nil {
 			s.onError(err)
 		}
 
@@ -95,9 +122,16 @@ func (s *StatusSender) SendStatus(ctx context.Context, status WorkerStatus) erro
 
 		if !ok {
 			// handle retry
-			s.lastStatusMu.Lock()
-			s.lastUnsentStatus = &status
-			s.lastStatusMu.Unlock()
+			if old := s.fsmState.Swap(senderFSMPending); old != senderFSMSending {
+				log.L().Panic("StatusSender: unexpected fsm state",
+					zap.Int32("old-fsm-state", old))
+			}
+			return
+		}
+
+		if old := s.fsmState.Swap(senderFSMIdle); old != senderFSMSending {
+			log.L().Panic("StatusSender: unexpected fsm state",
+				zap.Int32("old-fsm-state", old))
 		}
 	})
 	return errors.Trace(err)
@@ -130,8 +164,13 @@ type StatusReceiver struct {
 
 	hasPendingNotification atomic.Bool
 	lastStatusUpdated      atomic.Time
+	isLoading              atomic.Bool
+
+	errCh chan error
 
 	epoch Epoch
+
+	pool workerpool.AsyncPool
 
 	clock clock.Clock
 }
@@ -140,16 +179,20 @@ type StatusReceiver struct {
 // NOTE: the messageHandlerManager is NOT owned by the StatusReceiver,
 // and it only uses it to register a handler. It is not responsible
 // for checking errors and cleaning up.
+// NOTE: the pool is owned and managed by the caller.
 func NewStatusReceiver(
 	workerMetaClient *WorkerMetadataClient,
 	messageHandlerManager p2p.MessageHandlerManager,
 	epoch Epoch,
+	pool workerpool.AsyncPool,
 	clock clock.Clock,
 ) *StatusReceiver {
 	return &StatusReceiver{
 		workerMetaClient:      workerMetaClient,
 		messageHandlerManager: messageHandlerManager,
 		epoch:                 epoch,
+		pool:                  pool,
+		errCh:                 make(chan error, 1),
 		clock:                 clock,
 	}
 }
@@ -213,16 +256,37 @@ func (r *StatusReceiver) Tick(ctx context.Context) error {
 		return nil
 	}
 
-	r.statusMu.Lock()
-	defer r.statusMu.Unlock()
+	if r.isLoading.Swap(true) {
+		// A load is already in progress.
+		return nil
+	}
 
-	status, err := r.workerMetaClient.Load(ctx)
+	err := r.pool.Go(ctx, func() {
+		defer r.isLoading.Store(false)
+
+		status, err := r.workerMetaClient.Load(ctx)
+		if err != nil {
+			r.onError(err)
+		}
+
+		r.statusMu.Lock()
+		defer r.statusMu.Unlock()
+
+		r.statusCache = *status
+		r.lastStatusUpdated.Store(r.clock.Now())
+	})
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	r.statusCache = *status
-	r.lastStatusUpdated.Store(r.clock.Now())
-
 	return nil
+}
+
+func (r *StatusReceiver) onError(err error) {
+	select {
+	case r.errCh <- err:
+	default:
+		log.L().Warn("error is dropped because errCh is full",
+			zap.Error(err))
+	}
 }
