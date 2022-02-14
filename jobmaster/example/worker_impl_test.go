@@ -21,8 +21,10 @@ func newExampleWorker() *exampleWorker {
 func TestExampleWorker(t *testing.T) {
 	t.Parallel()
 
-	_ = log.InitLogger(&log.Config{
-		Level: "debug",
+	initLogger.Do(func() {
+		_ = log.InitLogger(&log.Config{
+			Level: "debug",
+		})
 	})
 
 	worker := newExampleWorker()
