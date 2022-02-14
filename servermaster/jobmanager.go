@@ -7,7 +7,6 @@ import (
 	"github.com/hanfei1991/microcosm/client"
 	cvs "github.com/hanfei1991/microcosm/jobmaster/cvsJob"
 	"github.com/hanfei1991/microcosm/lib"
-	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/errors"
@@ -59,23 +58,11 @@ func (jm *JobManagerImplV2) CancelJob(ctx context.Context, req *pb.CancelJobRequ
 func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *pb.SubmitJobResponse {
 	log.L().Logger.Info("submit job", zap.String("config", string(req.Config)))
 	resp := &pb.SubmitJobResponse{}
-	//var masterConfig *model.JobMasterV2
-	//switch req.Tp {
-	//case pb.JobType_Benchmark:
-	//	masterConfig = &model.JobMasterV2{
-	//		ID:     jm.uuidGen.NewString(),
-	//		Tp:     model.Benchmark,
-	//		Config: req.Config,
 	var (
-		config *model.JobMasterV2
+		config *lib.JobMasterV2 = &lib.JobMasterV2{}
 		id     lib.WorkerID
 		err    error
 	)
-	// CreateWorker here is to create job master actually
-	// TODO: use correct worker cost
-	config = &model.JobMasterV2{
-		ID: jm.uuidGen.NewString(),
-	}
 	switch req.Tp {
 	case pb.JobType_CVSDemo:
 		extConfig := &cvs.Config{}
@@ -84,6 +71,7 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 			break
 		}
 		config.Ext = extConfig
+		config.Tp = lib.CvsJobMaster
 	default:
 		err := errors.ErrBuildJobFailed.GenWithStack("unknown job type", req.Tp)
 		resp.Err = errors.ToPBError(err)
@@ -153,7 +141,7 @@ func (jm *JobManagerImplV2) InitImpl(ctx context.Context) error {
 // Tick implements lib.MasterImpl.Tick
 func (jm *JobManagerImplV2) Tick(ctx context.Context) error {
 	return jm.jobFsm.IterPendingJobs(
-		func(job *model.JobMasterV2) (string, error) {
+		func(job *lib.JobMasterV2) (string, error) {
 			return jm.BaseMaster.CreateWorker(
 				lib.WorkerTypeFakeMaster, job, defaultJobMasterCost)
 		})

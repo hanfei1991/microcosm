@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/hanfei1991/microcosm/lib"
-	"github.com/hanfei1991/microcosm/model"
 	"github.com/stretchr/testify/require"
 )
 
@@ -14,9 +13,9 @@ func TestJobFsmStateTrans(t *testing.T) {
 	fsm := NewJobFsm()
 
 	id := "fsm-test-job-master-1"
-	job := &model.JobMasterV2{
-		ID:     id,
-		Config: []byte("test-config"),
+	job := &lib.JobMasterV2{
+		ID:  id,
+		Ext: "simple config",
 	}
 	worker := lib.NewTombstoneWorkerHandle(id, lib.WorkerStatus{Code: lib.WorkerStatusNormal})
 
@@ -36,8 +35,8 @@ func TestJobFsmStateTrans(t *testing.T) {
 	require.Equal(t, 1, fsm.PendingJobCount())
 
 	// Tick, process pending jobs, Pending -> WaitAck
-	dispatchedJobs := make([]*model.JobMasterV2, 0)
-	err = fsm.IterPendingJobs(func(job *model.JobMasterV2) (string, error) {
+	dispatchedJobs := make([]*lib.JobMasterV2, 0)
+	err = fsm.IterPendingJobs(func(job *lib.JobMasterV2) (string, error) {
 		dispatchedJobs = append(dispatchedJobs, job)
 		return id, nil
 	})

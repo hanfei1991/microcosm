@@ -440,7 +440,7 @@ func (m *DefaultBaseMaster) registerHandlerForWorker(ctx context.Context, worker
 func (m *DefaultBaseMaster) generateWorkerID(workerType WorkerType, config WorkerConfig) string {
 	switch workerType {
 	case WorkerTypeFakeMaster:
-		masterCfg, ok := config.(*model.JobMasterV2)
+		masterCfg, ok := config.(*JobMasterV2)
 		if !ok {
 			log.L().Warn("invalid master config, will gen random worker id")
 		}

@@ -4,7 +4,6 @@ import (
 	"sync"
 
 	"github.com/hanfei1991/microcosm/lib"
-	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
@@ -12,7 +11,7 @@ import (
 
 type jobHolder struct {
 	lib.WorkerHandle
-	*model.JobMasterV2
+	*lib.JobMasterV2
 }
 
 // JobFsm manages state of all job masters, job master state forms a finite-state
@@ -49,8 +48,8 @@ type JobFsm struct {
 	JobStats
 
 	jobsMu      sync.RWMutex
-	pendingJobs map[string]*model.JobMasterV2
-	waitAckJobs map[string]*model.JobMasterV2
+	pendingJobs map[string]*lib.JobMasterV2
+	waitAckJobs map[string]*lib.JobMasterV2
 	onlineJobs  map[lib.WorkerID]*jobHolder
 }
 
@@ -63,19 +62,19 @@ type JobStats interface {
 
 func NewJobFsm() *JobFsm {
 	return &JobFsm{
-		pendingJobs: make(map[string]*model.JobMasterV2),
-		waitAckJobs: make(map[string]*model.JobMasterV2),
+		pendingJobs: make(map[string]*lib.JobMasterV2),
+		waitAckJobs: make(map[string]*lib.JobMasterV2),
 		onlineJobs:  make(map[lib.WorkerID]*jobHolder),
 	}
 }
 
-func (fsm *JobFsm) JobDispatched(job *model.JobMasterV2) {
+func (fsm *JobFsm) JobDispatched(job *lib.JobMasterV2) {
 	fsm.jobsMu.Lock()
 	defer fsm.jobsMu.Unlock()
 	fsm.waitAckJobs[job.ID] = job
 }
 
-func (fsm *JobFsm) IterPendingJobs(dispatchJobFn func(job *model.JobMasterV2) (string, error)) error {
+func (fsm *JobFsm) IterPendingJobs(dispatchJobFn func(job *lib.JobMasterV2) (string, error)) error {
 	fsm.jobsMu.Lock()
 	defer fsm.jobsMu.Unlock()
 
