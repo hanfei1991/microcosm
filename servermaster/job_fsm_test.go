@@ -19,17 +19,35 @@ func TestJobFsmStateTrans(t *testing.T) {
 		Config: []byte("test-config"),
 	}
 	worker := lib.NewTombstoneWorkerHandle(id, lib.WorkerStatus{Code: lib.WorkerStatusNormal})
+
+	// create new job, enter into WaitAckack job queue
 	fsm.JobDispatched(job)
+	require.Equal(t, 1, fsm.WaitAckJobCount())
+
+	// OnWorkerOnline, WaitAck -> Online
 	err := fsm.JobOnline(worker)
 	require.Nil(t, err)
+	require.Equal(t, 0, fsm.WaitAckJobCount())
+	require.Equal(t, 1, fsm.OnlineJobCount())
+
+	// OnWorkerOffline, Online -> Pending
 	fsm.JobOffline(worker)
+	require.Equal(t, 0, fsm.OnlineJobCount())
+	require.Equal(t, 1, fsm.PendingJobCount())
+
+	// Tick, process pending jobs, Pending -> WaitAck
 	dispatchedJobs := make([]*model.JobMasterV2, 0)
-	newID := "fsm-test-job-master-2"
 	err = fsm.IterPendingJobs(func(job *model.JobMasterV2) (string, error) {
 		dispatchedJobs = append(dispatchedJobs, job)
-		return newID, nil
+		return id, nil
 	})
 	require.Nil(t, err)
-	require.Len(t, dispatchedJobs, 1)
-	require.Contains(t, fsm.waitAckJobs, newID)
+	require.Equal(t, 0, fsm.PendingJobCount())
+	require.Equal(t, 1, fsm.WaitAckJobCount())
+
+	// Dispatch job meets error, WaitAck -> Pending
+	err = fsm.JobDispatchFailed(worker)
+	require.Nil(t, err)
+	require.Equal(t, 1, fsm.PendingJobCount())
+	require.Equal(t, 0, fsm.WaitAckJobCount())
 }

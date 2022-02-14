@@ -148,7 +148,7 @@ func (jm *JobManagerImplV2) OnMasterRecovered(ctx context.Context) error {
 func (jm *JobManagerImplV2) OnWorkerDispatched(worker lib.WorkerHandle, result error) error {
 	if result != nil {
 		log.L().Warn("dispatch worker met error", zap.Error(result))
-		return nil
+		return jm.jobFsm.JobDispatchFailed(worker)
 	}
 	return nil
 }
