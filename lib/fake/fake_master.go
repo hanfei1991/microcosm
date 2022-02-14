@@ -65,7 +65,7 @@ OUT:
 				}
 			}
 
-			workerID, err := m.CreateWorker(lib.WorkerTypeFakeWorker, &Config{}, 1)
+			workerID, err := m.CreateWorker(lib.FakeTask, &Config{}, 1)
 			if err != nil {
 				return errors.Trace(err)
 			}
