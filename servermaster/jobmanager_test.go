@@ -33,7 +33,7 @@ func TestJobManagerSubmitJob(t *testing.T) {
 	require.Nil(t, err)
 	req := &pb.SubmitJobRequest{
 		Tp:     pb.JobType_Benchmark,
-		Config: []byte(""),
+		Config: []byte("{\"srcHost\":\"0.0.0.0:1234\", \"dstHost\":\"0.0.0.0:1234\", \"srcDir\":\"data\", \"dstDir\":\"data1\"}"),
 	}
 	resp := mgr.SubmitJob(ctx, req)
 	require.Nil(t, resp.Err)
