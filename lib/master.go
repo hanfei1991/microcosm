@@ -285,12 +285,38 @@ func (m *DefaultBaseMaster) runWorkerCheck(ctx context.Context) error {
 		for _, workerInfo := range offlinedWorkers {
 			log.L().Info("worker is offline", zap.Any("worker-info", workerInfo))
 			tombstoneHandle := NewTombstoneWorkerHandle(workerInfo.ID, workerInfo.status)
-			err := m.Impl.OnWorkerOffline(tombstoneHandle, derror.ErrWorkerOffline.GenWithStackByArgs(workerInfo.ID))
+			err := m.unregisterMessageHandler(ctx, workerInfo.ID)
+			if err != nil {
+				return err
+			}
+			err = m.Impl.OnWorkerOffline(tombstoneHandle, derror.ErrWorkerOffline.GenWithStackByArgs(workerInfo.ID))
 			if err != nil {
 				return errors.Trace(err)
 			}
 		}
 	}
+}
+
+func (m *DefaultBaseMaster) unregisterMessageHandler(ctx context.Context, workerID WorkerID) error {
+	topic := HeartbeatPingTopic(m.id, workerID)
+	removed, err := m.messageHandlerManager.UnregisterHandler(ctx, topic)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if !removed {
+		log.L().Warn("heartbeat message handler is not removed", zap.String("topic", topic))
+	}
+
+	topic = StatusUpdateTopic(m.id, workerID)
+	removed, err = m.messageHandlerManager.UnregisterHandler(ctx, topic)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if !removed {
+		log.L().Warn("status update message handler is not removed", zap.String("topic", topic))
+	}
+
+	return nil
 }
 
 func (m *DefaultBaseMaster) OnError(err error) {
