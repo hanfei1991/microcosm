@@ -96,13 +96,13 @@ func (fsm *JobFsm) JobOnline(worker lib.WorkerHandle) error {
 	fsm.jobsMu.Lock()
 	defer fsm.jobsMu.Unlock()
 
-	cfg, ok := fsm.waitAckJobs[worker.ID()]
+	job, ok := fsm.waitAckJobs[worker.ID()]
 	if !ok {
 		return errors.ErrWorkerNotFound.GenWithStackByArgs(worker.ID())
 	}
 	fsm.onlineJobs[worker.ID()] = &jobHolder{
 		WorkerHandle:  worker,
-		MasterMetaExt: cfg,
+		MasterMetaExt: job,
 	}
 	delete(fsm.waitAckJobs, worker.ID())
 	return nil
@@ -125,11 +125,11 @@ func (fsm *JobFsm) JobDispatchFailed(worker lib.WorkerHandle) error {
 	fsm.jobsMu.Lock()
 	defer fsm.jobsMu.Unlock()
 
-	cfg, ok := fsm.waitAckJobs[worker.ID()]
+	job, ok := fsm.waitAckJobs[worker.ID()]
 	if !ok {
 		return errors.ErrWorkerNotFound.GenWithStackByArgs(worker.ID())
 	}
-	fsm.pendingJobs[worker.ID()] = cfg
+	fsm.pendingJobs[worker.ID()] = job
 	delete(fsm.waitAckJobs, worker.ID())
 	return nil
 }
