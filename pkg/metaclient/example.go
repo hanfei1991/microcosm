@@ -16,7 +16,8 @@ import (
 // nolint:deadcode, ineffassign
 func Test() {
 	endpoint := "http://127.0.0.1:3769"
-	cli := NewMockKVClient(endpoint)
+	clusterID := "mockCluster"
+	cli, _ := NewMockKVClient(endpoint, clusterID)
 	defer cli.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
