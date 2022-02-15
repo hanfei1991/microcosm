@@ -38,6 +38,7 @@ func openFileAndReadString(path string) (content []byte, err error) {
 func validJobType(job string) (pb.JobType, error) {
 	tp, ok := pb.JobType_value[job]
 	if !ok {
+		// TODO: print valid job types
 		return 0, errors.ErrInvalidJobType.GenWithStackByArgs(job)
 	}
 	return pb.JobType(tp), nil
