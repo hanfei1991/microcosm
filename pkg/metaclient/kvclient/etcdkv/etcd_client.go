@@ -9,21 +9,19 @@ import (
 	"go.etcd.io/etcd/clientv3"
 )
 
-const (
-	DefaultRevisionChanSize = 128
-)
-
-// etcdClientImpl is the etcd implement of Client interface
-type etcdClientImpl struct {
+// etcdClientCloser is the etcd implement of Closer interface
+// we use etcdClientCloser to split the KV and Closer interface
+// so we can make some intermediate layer for KV interface, like prefix layer for namespace isolation
+type etcdClientCloser struct {
 	cli *etcdImpl
 }
 
-func (c *etcdClientImpl) Close() {
-	c.cli.Close()
+func (c *etcdClientCloser) Close() error {
+	return c.cli.Close()
 }
 
-func NewEtcdClientImpl(c *etcdImpl) *etcdClientImpl {
-	return &etcdClientImpl{
+func NewEtcdClientCloser(c *etcdImpl) *etcdClientCloser {
+	return &etcdClientCloser{
 		cli: c,
 	}
 }
@@ -86,9 +84,9 @@ func (c *etcdImpl) getEtcdOp(op metaclient.Op) clientv3.Op {
 			etcdOps = append(etcdOps, c.getEtcdOp(sop))
 		}
 		return clientv3.OpTxn(nil, etcdOps, nil)
-	default:
-		panic("unknown op type")
 	}
+
+	panic("unknown op type")
 }
 
 func (c *etcdImpl) Put(ctx context.Context, key, val string) (*metaclient.PutResponse, error) {
@@ -182,13 +180,16 @@ func (c *etcdImpl) Txn(ctx context.Context) metaclient.Txn {
 	}
 }
 
-func (c *etcdImpl) Close() {
+func (c *etcdImpl) Close() error {
 	c.closeMu.Lock()
 	defer c.closeMu.Unlock()
 	if c.cli != nil {
-		c.cli.Close()
+		err := c.cli.Close()
 		c.cli = nil
+		return err
 	}
+
+	return nil
 }
 
 func (t *etcdTxn) Do(ops ...metaclient.Op) metaclient.Txn {
@@ -199,14 +200,14 @@ func (t *etcdTxn) Do(ops ...metaclient.Op) metaclient.Txn {
 		return t
 	}
 	if t.committed {
-		t.Err = cerrors.ErrMetaCommittedTxn
+		t.Err = cerrors.ErrMetaCommittedTxn.GenWithStackByArgs()
 		return t
 	}
 
 	etcdOps := make([]clientv3.Op, 0, len(ops))
 	for _, op := range ops {
 		if op.IsTxn() {
-			t.Err = cerrors.ErrMetaNestedTxn
+			t.Err = cerrors.ErrMetaNestedTxn.GenWithStackByArgs()
 			return t
 		}
 		etcdOps = append(etcdOps, t.kv.getEtcdOp(op))
@@ -223,7 +224,7 @@ func (t *etcdTxn) Commit() (*metaclient.TxnResponse, error) {
 		return nil, t.Err
 	}
 	if t.committed {
-		t.Err = cerrors.ErrMetaCommittedTxn
+		t.Err = cerrors.ErrMetaCommittedTxn.GenWithStackByArgs()
 		t.mu.Unlock()
 		return nil, t.Err
 	}

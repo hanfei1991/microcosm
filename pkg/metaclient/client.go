@@ -6,11 +6,11 @@ const (
 	TypeKVClient ClientType = iota /* KV client style，like etcd/consul/TiKV/redis or even SQL backend*/
 )
 
-type Client interface {
-	Close()
+type Closer interface {
+	Close() error
 }
 
 type KVClient interface {
-	Client
+	Closer
 	KV
 }

@@ -131,7 +131,7 @@ func (op Op) CheckValidOp() error {
 	if op.IsOptsWithFromKey() && !(op.IsOptsWithPrefix() || op.IsOptsWithRange()) {
 		return nil
 	}
-	return cerrors.ErrMetaOptionConflict
+	return cerrors.ErrMetaOptionConflict.GenWithStackByArgs()
 }
 
 // OpGet returns "get" operation based on given key and operation options.
