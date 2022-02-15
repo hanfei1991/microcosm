@@ -17,6 +17,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 )
 
+// nolint: unused
 func mockWorker(workerID lib.WorkerID, masterID lib.MasterID) *dumpWorker {
 	ret := &dumpWorker{}
 	ret.DefaultBaseWorker = lib.MockBaseWorker(workerID, masterID, ret)
@@ -51,6 +52,7 @@ func mockWorker(workerID lib.WorkerID, masterID lib.MasterID) *dumpWorker {
 	return ret
 }
 
+// nolint: unused
 func putMasterMeta(ctx context.Context, t *testing.T, metaclient metadata.MetaKV, metaData *lib.MasterMetaKVData) {
 	masterKey := adapter.MasterInfoKey.Encode("master-id")
 	masterInfoBytes, err := json.Marshal(metaData)
