@@ -64,7 +64,7 @@ func NewJobFsm() *JobFsm {
 	return &JobFsm{
 		pendingJobs: make(map[lib.MasterID]*lib.JobMasterV2),
 		waitAckJobs: make(map[lib.MasterID]*lib.JobMasterV2),
-		onlineJobs:  make(map[lib.WorkerID]*jobHolder),
+		onlineJobs:  make(map[lib.MasterID]*jobHolder),
 	}
 }
 
