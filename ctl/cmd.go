@@ -6,11 +6,8 @@ import (
 	"io/ioutil"
 	"os"
 
-	"github.com/google/uuid"
-	"github.com/hanfei1991/microcosm/client"
-	"github.com/hanfei1991/microcosm/lib"
-	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
+	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -18,12 +15,13 @@ import (
 
 func NewRunFake() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "run-fake [--executor-addr addr] [--executor-id id]",
+		Use:   "submit-job",
 		Short: "Run a fake workload to a specific executor",
 		RunE:  runFakeFunc,
 	}
 	cmd.Flags().StringP("executor-addr", "", "", "the targeted executor address")
 	cmd.Flags().StringP("executor-id", "", "", "the targeted executor id")
+	cmd.Flags().StringP("job-type", "", "", "job type")
 	cmd.Flags().StringP("job-config", "", "", "config file for the demo job")
 	return cmd
 }
@@ -37,15 +35,23 @@ func openFileAndReadString(path string) (content []byte, err error) {
 	return ioutil.ReadAll(fp)
 }
 
+func validJobType(job string) (pb.JobType, error) {
+	tp, ok := pb.JobType_value[job]
+	if !ok {
+		// TODO: print valid job types
+		return 0, errors.ErrInvalidJobType.GenWithStackByArgs(job)
+	}
+	return pb.JobType(tp), nil
+}
+
 func runFakeFunc(cmd *cobra.Command, _ []string) error {
-	execAddr, err := cmd.Flags().GetString("executor-addr")
+	tp, err := cmd.Flags().GetString("job-type")
 	if err != nil {
-		fmt.Print("error in parse `--executor-addr`")
+		fmt.Print("error in parse `--job-type`")
 		return err
 	}
-	execID, err := cmd.Flags().GetString("executor-id")
+	jobType, err := validJobType(tp)
 	if err != nil {
-		fmt.Print("error in parse `--executor-id`")
 		return err
 	}
 	path, err := cmd.Flags().GetString("job-config")
@@ -58,25 +64,16 @@ func runFakeFunc(cmd *cobra.Command, _ []string) error {
 		fmt.Print("error in parse job-config")
 		return err
 	}
-	err = cltManager.AddExecutor(model.ExecutorID(execID), execAddr)
-	if err != nil {
-		return err
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
 	defer cancel()
 
-	log.L().Info("sending request to executor", zap.String("address", execAddr))
-	resp, err := cltManager.ExecutorClient(model.ExecutorID(execID)).Send(ctx, &client.ExecutorRequest{
-		Cmd: client.CmdDispatchTask,
-		Req: &pb.DispatchTaskRequest{
-			TaskTypeId: int64(lib.CvsJobMaster),
-			TaskConfig: jobConfig,
-			MasterId:   uuid.New().String(), //  use a unique ID to force Init the master each time,
-			WorkerId:   uuid.New().String(),
-		},
+	resp, err := cltManager.MasterClient().SubmitJob(ctx, &pb.SubmitJobRequest{
+		Tp:     jobType,
+		Config: jobConfig,
+		User:   "hanfei",
 	})
 	if err != nil {
-		log.L().Error("failed to dispatch master", zap.Error(err))
+		log.L().Error("failed to submit job", zap.Error(err))
 		os.Exit(1)
 	}
 	log.L().Info("resp", zap.Any("resp", resp))
