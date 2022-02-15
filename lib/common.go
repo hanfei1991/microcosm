@@ -35,10 +35,14 @@ const (
 
 const (
 	JobManager = WorkerType(iota + 1)
+	// job master
 	CvsJobMaster
+	FakeJobMaster
 	DmJobMaster
 	CdcJobMaster
+	// task
 	CvsTask
+	FakeTask
 	DmTask
 	CdcTask
 )
