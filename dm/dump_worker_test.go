@@ -13,15 +13,22 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/hanfei1991/microcosm/lib"
+	"github.com/hanfei1991/microcosm/lib/registry"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
+	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 )
 
+var (
+	masterID = "master-id"
+	workerID = "worker-id"
+	nodeID   = "node-id"
+)
+
 // nolint: unused
-func mockWorker(workerID lib.WorkerID, masterID lib.MasterID) *dumpWorker {
-	ret := &dumpWorker{}
-	ret.DefaultBaseWorker = lib.MockBaseWorker(workerID, masterID, ret)
+func mockWorkerConfig() []byte {
 	cfg := &config.SubTaskConfig{
+		SourceID: "source-id",
 		From: config.DBConfig{
 			Host:     "127.0.0.1",
 			Port:     3306,
@@ -48,13 +55,19 @@ func mockWorker(workerID lib.WorkerID, masterID lib.MasterID) *dumpWorker {
 	}
 	cfg.From.Adjust()
 	cfg.To.Adjust()
-	ret.cfg = cfg
-	return ret
+
+	value, _ := cfg.Toml()
+	return []byte(value)
 }
 
 // nolint: unused
-func putMasterMeta(ctx context.Context, t *testing.T, metaclient metadata.MetaKV, metaData *lib.MasterMetaKVData) {
-	masterKey := adapter.MasterInfoKey.Encode("master-id")
+func putMasterMeta(
+	ctx context.Context,
+	t *testing.T,
+	metaclient metadata.MetaKV,
+	metaData *lib.MasterMetaKVData,
+) {
+	masterKey := adapter.MasterInfoKey.Encode(masterID)
 	masterInfoBytes, err := json.Marshal(metaData)
 	require.NoError(t, err)
 	_, err = metaclient.Put(ctx, masterKey, string(masterInfoBytes))
@@ -69,16 +82,21 @@ func TestDumpWorker(t *testing.T) {
 	require.NoError(t, log.InitLogger(&log.Config{Level: "debug"}))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	worker := mockWorker("worker-id", "master-id")
+	workerWrapped, err := registry.GlobalWorkerRegistry().CreateWorker(
+		dcontext.Background(), WorkerDMDump, workerID, masterID, mockWorkerConfig())
+	require.NoError(t, err)
+
+	worker := workerWrapped.(*dumpWorker)
+	worker.DefaultBaseWorker = lib.MockBaseWorker(workerID, masterID, worker)
 
 	putMasterMeta(context.Background(), t, worker.MetaKVClient(), &lib.MasterMetaKVData{
-		ID:          "master-id",
-		NodeID:      "mode-id",
+		ID:          masterID,
+		NodeID:      nodeID,
 		Epoch:       1,
 		Initialized: true,
 	})
 
-	err := worker.Init(ctx)
+	err = worker.Init(ctx)
 	require.NoError(t, err)
 	err = worker.Tick(ctx)
 	require.NoError(t, err)

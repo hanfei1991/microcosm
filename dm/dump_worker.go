@@ -22,6 +22,13 @@ type dumpWorker struct {
 	unitHolder *unitHolder
 }
 
+func newDumpWorker(cfg lib.WorkerConfig) lib.Worker {
+	subtaskCfg := cfg.(*config.SubTaskConfig)
+	return &dumpWorker{
+		cfg: subtaskCfg,
+	}
+}
+
 func (d *dumpWorker) InitImpl(ctx context.Context) error {
 	d.unitHolder = newUnitHolder(dumpling.NewDumpling(d.cfg))
 	return errors.Trace(d.unitHolder.init(ctx))
