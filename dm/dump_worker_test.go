@@ -19,6 +19,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 )
 
+// nolint: unused
 var (
 	masterID = "master-id"
 	workerID = "worker-id"
