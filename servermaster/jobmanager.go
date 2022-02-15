@@ -64,7 +64,7 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 	// CreateWorker here is to create job master actually
 	// TODO: use correct worker cost
 	switch req.Tp {
-	case pb.JobType_Benchmark:
+	case pb.JobType_CVSDemo:
 		config := &cvs.Config{}
 		err = json.Unmarshal(req.Config, config)
 		if err != nil {

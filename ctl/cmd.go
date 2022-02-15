@@ -48,7 +48,7 @@ func runFakeFunc(cmd *cobra.Command, _ []string) error {
 	defer cancel()
 
 	resp, err := cltManager.MasterClient().SubmitJob(ctx, &pb.SubmitJobRequest{
-		Tp:     pb.JobType_Benchmark,
+		Tp:     pb.JobType_CVSDemo, // TODO: Support different job types.
 		Config: jobConfig,
 		User:   "hanfei",
 	})

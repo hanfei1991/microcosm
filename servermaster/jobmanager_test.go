@@ -32,7 +32,7 @@ func TestJobManagerSubmitJob(t *testing.T) {
 	err := mockMaster.Init(ctx)
 	require.Nil(t, err)
 	req := &pb.SubmitJobRequest{
-		Tp:     pb.JobType_Benchmark,
+		Tp:     pb.JobType_CVSDemo,
 		Config: []byte("{\"srcHost\":\"0.0.0.0:1234\", \"dstHost\":\"0.0.0.0:1234\", \"srcDir\":\"data\", \"dstDir\":\"data1\"}"),
 	}
 	resp := mgr.SubmitJob(ctx, req)
