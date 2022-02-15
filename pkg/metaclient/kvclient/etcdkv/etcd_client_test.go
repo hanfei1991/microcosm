@@ -252,6 +252,7 @@ func (suite *SuiteTestEtcd) TestTxn() {
 	txn.Do(metaclient.OpGet("", metaclient.WithFromKey()))
 	rsp, err := txn.Commit()
 	require.Error(t, err)
+	log.Printf("err:%v", err)
 	require.Nil(t, rsp)
 
 	txn = cli.Txn(ctx)

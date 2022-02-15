@@ -52,7 +52,7 @@ type Op struct {
 
 var EmptyOp Op = Op{}
 
-// accessors/mutors
+// accessors/mutators
 
 // IsTxn returns true if the "Op" type is transaction.
 func (op Op) IsTxn() bool { return op.T == tTxn }

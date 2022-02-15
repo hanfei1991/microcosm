@@ -3,15 +3,10 @@ package etcdkv
 import (
 	"context"
 	"sync"
-	"sync/atomic"
-	"time"
 
 	cerrors "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/metaclient"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.etcd.io/etcd/clientv3"
-	pb "go.etcd.io/etcd/etcdserver/etcdserverpb"
-	"go.uber.org/zap"
 )
 
 const (
@@ -34,46 +29,12 @@ func NewEtcdClientImpl(c *etcdImpl) *etcdClientImpl {
 }
 
 // etcdImpl is the etcd implement of KVClient interface
+// Since we always get the latest data, we will set etcd-server with autocompact parameters
+// -auto-compaction-mode: revision
+// -auto-compaction-retention: 100
 type etcdImpl struct {
-	cli           *clientv3.Client
-	compactCancel context.CancelFunc
-	revCh         chan int64
-	latestRevT    int64
-	closeMu       sync.Mutex
-	wg            *sync.WaitGroup
-}
-
-func startCompactRoutine(ctx context.Context, wg *sync.WaitGroup, ch <-chan int64, cli *clientv3.Client) {
-	defer wg.Done()
-	var rev, latestRev int64
-	var compactInterval bool
-	ticker := time.NewTicker(time.Second * 5)
-	for {
-		select {
-		case <-ctx.Done():
-			log.L().Info("receive context done, return")
-			return // cancel routine normally
-		case rrev, ok := <-ch:
-			if !ok {
-				log.L().Info("receive revision from channel fail, return")
-				return
-			}
-			rev = rrev
-		case <-ticker.C:
-			compactInterval = true
-		}
-
-		if compactInterval && rev > latestRev {
-			childCtx, cancel := context.WithTimeout(ctx, time.Second*3)
-			defer cancel()
-			_, err := cli.Compact(childCtx, rev)
-			if err != nil {
-				log.L().Warn("compact revision fail", zap.Int64("revision", rev), zap.Error(err))
-			}
-			compactInterval = false
-			latestRev = rev
-		}
-	}
+	cli     *clientv3.Client
+	closeMu sync.Mutex
 }
 
 func NewEtcdImpl(config *metaclient.Config) (metaclient.KVClient, error) {
@@ -89,40 +50,24 @@ func NewEtcdImpl(config *metaclient.Config) (metaclient.KVClient, error) {
 		return nil, cerrors.ErrMetaNewClientFail.Wrap(err)
 	}
 
-	var wg sync.WaitGroup
-	// start compact routine to avoid user space expeed
-	ctx, cancel := context.WithCancel(context.Background())
-	revCh := make(chan int64, DefaultRevisionChanSize)
-	wg.Add(1)
-	go startCompactRoutine(ctx, &wg, revCh, cli)
-
 	c := &etcdImpl{
-		cli:           cli,
-		compactCancel: cancel,
-		revCh:         revCh,
-		latestRevT:    time.Now().Unix(),
-		wg:            &wg,
+		cli: cli,
 	}
 	return c, nil
 }
 
-func (c *etcdImpl) getLatestRev(h *pb.ResponseHeader) {
-	now := time.Now().Unix()
-	if (now - atomic.LoadInt64(&c.latestRevT)) > 1 {
-		atomic.StoreInt64(&c.latestRevT, now)
-		c.revCh <- h.Revision
-	}
-}
-
 func (c *etcdImpl) getEtcdOptions(op metaclient.Op) []clientv3.OpOption {
-	etcdOps := make([]clientv3.OpOption, 0, 3)
+	etcdOps := make([]clientv3.OpOption, 0, 1)
 	switch {
 	case op.IsOptsWithPrefix():
 		etcdOps = append(etcdOps, clientv3.WithPrefix())
+		break
 	case op.IsOptsWithFromKey():
 		etcdOps = append(etcdOps, clientv3.WithFromKey())
+		break
 	case op.IsOptsWithRange():
 		etcdOps = append(etcdOps, clientv3.WithRange(string(op.RangeBytes())))
+		break
 	}
 
 	return etcdOps
@@ -144,20 +89,19 @@ func (c *etcdImpl) getEtcdOp(op metaclient.Op) clientv3.Op {
 			etcdOps = append(etcdOps, c.getEtcdOp(sop))
 		}
 		return clientv3.OpTxn(nil, etcdOps, nil)
+	default:
+		panic("unknown op type")
 	}
-
-	panic("unknown op type")
 }
 
 func (c *etcdImpl) Put(ctx context.Context, key, val string) (*metaclient.PutResponse, error) {
 	op := metaclient.OpPut(key, val)
 	etcdResp, err := c.cli.Do(ctx, c.getEtcdOp(op))
 	if err != nil {
-		return nil, cerrors.ErrMetaOpFail.FastGenByArgs(err)
+		return nil, cerrors.ErrMetaOpFail.GenWithStackByArgs(err)
 	}
 
 	putRsp := etcdResp.Put()
-	c.getLatestRev(putRsp.Header)
 	return makePutResp(putRsp), nil
 }
 
@@ -169,11 +113,10 @@ func (c *etcdImpl) Get(ctx context.Context, key string, opts ...metaclient.OpOpt
 
 	etcdResp, err := c.cli.Do(ctx, c.getEtcdOp(op))
 	if err != nil {
-		return nil, cerrors.ErrMetaOpFail.FastGenByArgs(err)
+		return nil, cerrors.ErrMetaOpFail.GenWithStackByArgs(err)
 	}
 
 	getRsp := etcdResp.Get()
-	c.getLatestRev(getRsp.Header)
 	return makeGetResp(getRsp), nil
 }
 
@@ -185,11 +128,10 @@ func (c *etcdImpl) Delete(ctx context.Context, key string, opts ...metaclient.Op
 
 	etcdResp, err := c.cli.Do(ctx, c.getEtcdOp(op))
 	if err != nil {
-		return nil, cerrors.ErrMetaOpFail.FastGenByArgs(err)
+		return nil, cerrors.ErrMetaOpFail.GenWithStackByArgs(err)
 	}
 
 	delRsp := etcdResp.Del()
-	c.getLatestRev(delRsp.Header)
 	return makeDeleteResp(delRsp), nil
 }
 
@@ -200,28 +142,24 @@ func (c *etcdImpl) Do(ctx context.Context, op metaclient.Op) (metaclient.OpRespo
 
 	etcdResp, err := c.cli.Do(ctx, c.getEtcdOp(op))
 	if err != nil {
-		return metaclient.OpResponse{}, cerrors.ErrMetaOpFail.FastGenByArgs(err)
+		return metaclient.OpResponse{}, cerrors.ErrMetaOpFail.GenWithStackByArgs(err)
 	}
 
 	switch {
 	case op.IsGet():
 		rsp := etcdResp.Get()
-		c.getLatestRev(rsp.Header)
 		getRsp := makeGetResp(rsp)
 		return getRsp.OpResponse(), nil
 	case op.IsPut():
 		rsp := etcdResp.Put()
-		c.getLatestRev(rsp.Header)
 		putRsp := makePutResp(rsp)
 		return putRsp.OpResponse(), nil
 	case op.IsDelete():
 		rsp := etcdResp.Del()
-		c.getLatestRev(rsp.Header)
 		delRsp := makeDeleteResp(rsp)
 		return delRsp.OpResponse(), nil
 	case op.IsTxn():
 		rsp := etcdResp.Txn()
-		c.getLatestRev(rsp.Header)
 		txnRsp := makeTxnResp(rsp)
 		return txnRsp.OpResponse(), nil
 	default:
@@ -250,12 +188,9 @@ func (c *etcdImpl) Txn(ctx context.Context) metaclient.Txn {
 func (c *etcdImpl) Close() {
 	c.closeMu.Lock()
 	defer c.closeMu.Unlock()
-	if c.compactCancel != nil {
-		c.compactCancel()
-		c.compactCancel = nil
-		c.wg.Wait()
-		close(c.revCh)
+	if c.cli != nil {
 		c.cli.Close()
+		c.cli = nil
 	}
 }
 
@@ -287,10 +222,12 @@ func (t *etcdTxn) Do(ops ...metaclient.Op) metaclient.Txn {
 func (t *etcdTxn) Commit() (*metaclient.TxnResponse, error) {
 	t.mu.Lock()
 	if t.Err != nil {
+		t.mu.Unlock()
 		return nil, t.Err
 	}
 	if t.committed {
 		t.Err = cerrors.ErrMetaCommittedTxn
+		t.mu.Unlock()
 		return nil, t.Err
 	}
 	t.committed = true
@@ -299,9 +236,8 @@ func (t *etcdTxn) Commit() (*metaclient.TxnResponse, error) {
 	t.Txn.Then(t.ops...)
 	etcdResp, err := t.Txn.Commit()
 	if err != nil {
-		return nil, cerrors.ErrMetaOpFail.FastGenByArgs(err)
+		return nil, cerrors.ErrMetaOpFail.GenWithStackByArgs(err)
 	}
 
-	t.kv.getLatestRev(etcdResp.Header)
 	return makeTxnResp(etcdResp), nil
 }
