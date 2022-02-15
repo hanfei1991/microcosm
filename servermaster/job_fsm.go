@@ -48,9 +48,9 @@ type JobFsm struct {
 	JobStats
 
 	jobsMu      sync.RWMutex
-	pendingJobs map[string]*lib.JobMasterV2
-	waitAckJobs map[string]*lib.JobMasterV2
-	onlineJobs  map[lib.WorkerID]*jobHolder
+	pendingJobs map[lib.MasterID]*lib.JobMasterV2
+	waitAckJobs map[lib.MasterID]*lib.JobMasterV2
+	onlineJobs  map[lib.MasterID]*jobHolder
 }
 
 // JobStats defines a statistics interface for JobFsm
@@ -62,8 +62,8 @@ type JobStats interface {
 
 func NewJobFsm() *JobFsm {
 	return &JobFsm{
-		pendingJobs: make(map[string]*lib.JobMasterV2),
-		waitAckJobs: make(map[string]*lib.JobMasterV2),
+		pendingJobs: make(map[lib.MasterID]*lib.JobMasterV2),
+		waitAckJobs: make(map[lib.MasterID]*lib.JobMasterV2),
 		onlineJobs:  make(map[lib.WorkerID]*jobHolder),
 	}
 }

@@ -59,24 +59,29 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 	log.L().Logger.Info("submit job", zap.String("config", string(req.Config)))
 	resp := &pb.SubmitJobResponse{}
 	var (
-		config *lib.JobMasterV2 = &lib.JobMasterV2{}
-		id     lib.WorkerID
-		err    error
+		id  lib.WorkerID
+		err error
 	)
+	config := &lib.JobMasterV2{
+		// TODO: we can use job name provided from user, but we must check the
+		// job name is unique before using it.
+		ID: jm.uuidGen.NewString(),
+	}
 	switch req.Tp {
 	case pb.JobType_CVSDemo:
 		extConfig := &cvs.Config{}
 		err = json.Unmarshal(req.Config, extConfig)
 		if err != nil {
-			break
+			err := errors.ErrBuildJobFailed.GenWithStack("failed to decode config: %s", req.Config)
+			resp.Err = errors.ToPBError(err)
+			return resp
 		}
-		// TODO: we can use job name provided from user, but we must check the
-		// job name is unique before using it.
-		config.ID = jm.uuidGen.NewString()
 		config.Ext = extConfig
 		config.Tp = lib.CvsJobMaster
+	case pb.JobType_FakeJob:
+		config.Tp = lib.FakeJobMaster
 	default:
-		err := errors.ErrBuildJobFailed.GenWithStack("unknown job type", req.Tp)
+		err := errors.ErrBuildJobFailed.GenWithStack("unknown job type: %s", req.Tp)
 		resp.Err = errors.ToPBError(err)
 		return resp
 	}
