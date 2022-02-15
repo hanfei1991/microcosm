@@ -178,7 +178,7 @@ type StatusReceiver struct {
 // NewStatusReceiver returns a new StatusReceiver
 // NOTE: the messageHandlerManager is NOT owned by the StatusReceiver,
 // and it only uses it to register a handler. It is not responsible
-// for checking errors and cleaning up.
+// for checking errors.
 // NOTE: the pool is owned and managed by the caller.
 func NewStatusReceiver(
 	workerMetaClient *WorkerMetadataClient,
@@ -279,6 +279,19 @@ func (r *StatusReceiver) Tick(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
+	return nil
+}
+
+func (r *StatusReceiver) Close(ctx context.Context) error {
+	topic := StatusUpdateTopic(r.workerMetaClient.MasterID(), r.workerMetaClient.WorkerID())
+	ok, err := r.messageHandlerManager.UnregisterHandler(ctx, topic)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if !ok {
+		log.L().Warn("message handler for topic does not exist",
+			zap.String("topic", topic))
+	}
 	return nil
 }
 

@@ -15,6 +15,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/workerpool"
 	"go.uber.org/zap"
 )
 
@@ -34,9 +35,6 @@ type WorkerImpl interface {
 	// Tick is called on a fixed interval.
 	Tick(ctx context.Context) error
 
-	// Status returns a short worker status to be periodically sent to the master.
-	Status() WorkerStatus
-
 	// Workload returns the current workload of the worker.
 	Workload() model.RescUnit
 
@@ -45,6 +43,11 @@ type WorkerImpl interface {
 
 	// CloseImpl tells the WorkerImpl to quit running StatusWorker and release resources.
 	CloseImpl(ctx context.Context) error
+
+	// GetWorkerStatusExtTypeInfo returns an empty object that described the actual type
+	// of the `Ext` field in WorkerStatus.
+	// The returned type's kind must be Array, Chan, Map, Ptr, or Slice.
+	GetWorkerStatusExtTypeInfo() interface{}
 }
 
 type BaseWorker interface {
@@ -54,6 +57,7 @@ type BaseWorker interface {
 	Close(ctx context.Context) error
 	ID() runtime.RunnableID
 	MetaKVClient() metadata.MetaKV
+	UpdateStatus(ctx context.Context, status WorkerStatus) error
 }
 
 type DefaultBaseWorker struct {
@@ -66,8 +70,13 @@ type DefaultBaseWorker struct {
 	masterClient *masterClient
 	masterID     MasterID
 
+	workerMetaClient *WorkerMetadataClient
+	statusSender *StatusSender
+
 	id            WorkerID
 	timeoutConfig TimeoutConfig
+
+	pool workerpool.AsyncPool
 
 	wg    sync.WaitGroup
 	errCh chan error
@@ -106,6 +115,16 @@ func (w *DefaultBaseWorker) Workload() model.RescUnit {
 }
 
 func (w *DefaultBaseWorker) Init(ctx context.Context) error {
+	// TODO refine this part
+	w.wg.Add(1)
+	go func() {
+		defer w.wg.Done()
+		err := w.pool.Run(context.TODO())
+		log.L().Info("workerpool exited",
+			zap.String("worker-id", w.id),
+			zap.Error(err))
+	}()
+
 	w.masterClient = newMasterClient(
 		w.masterID,
 		w.id,
@@ -118,6 +137,10 @@ func (w *DefaultBaseWorker) Init(ctx context.Context) error {
 				Code: MasterTimedOut,
 			}))
 		})
+
+	w.workerMetaClient = NewWorkerMetadataClient(w.masterID, w.id, w.metaKVClient, w.Impl.GetWorkerStatusExtTypeInfo())
+
+	w.statusSender = NewStatusSender(w.masterClient, w.workerMetaClient, w.messageSender, w.pool)
 
 	if err := w.initMessageHandlers(ctx); err != nil {
 		return errors.Trace(err)
@@ -184,20 +207,20 @@ func (w *DefaultBaseWorker) MetaKVClient() metadata.MetaKV {
 	return w.metaKVClient
 }
 
+func (w *DefaultBaseWorker) UpdateStatus(ctx context.Context, status WorkerStatus) error {
+	err := w.statusSender.SendStatus(ctx, status)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
 func (w *DefaultBaseWorker) startBackgroundTasks() {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	w.cancelMu.Lock()
 	w.cancelBgTasks = cancel
 	w.cancelMu.Unlock()
-
-	w.wg.Add(1)
-	go func() {
-		defer w.wg.Done()
-		if err := w.runStatusWorker(ctx); err != nil {
-			w.onError(err)
-		}
-	}()
 
 	w.wg.Add(1)
 	go func() {
@@ -226,22 +249,6 @@ func (w *DefaultBaseWorker) runHeartbeatWorker(ctx context.Context) error {
 			if err := w.masterClient.SendHeartBeat(ctx, w.clock); err != nil {
 				return errors.Trace(err)
 			}
-		}
-	}
-}
-
-func (w *DefaultBaseWorker) runStatusWorker(ctx context.Context) error {
-	ticker := w.clock.Ticker(w.timeoutConfig.workerReportStatusInterval)
-	for {
-		select {
-		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
-		case <-ticker.C:
-		}
-
-		status := w.Impl.Status()
-		if err := w.masterClient.SendStatus(ctx, status); err != nil {
-			return errors.Trace(err)
 		}
 	}
 }
