@@ -23,7 +23,6 @@ type workerConstructor func(config lib.WorkerConfig) lib.Worker
 
 type unitWorkerFactory struct {
 	constructor workerConstructor
-	configTpi   interface{}
 }
 
 func (u unitWorkerFactory) NewWorker(ctx *context.Context, workerID lib.WorkerID, masterID lib.MasterID, config registry.WorkerConfig) (lib.Worker, error) {
