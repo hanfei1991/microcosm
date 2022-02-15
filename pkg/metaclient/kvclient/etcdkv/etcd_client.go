@@ -61,13 +61,10 @@ func (c *etcdImpl) getEtcdOptions(op metaclient.Op) []clientv3.OpOption {
 	switch {
 	case op.IsOptsWithPrefix():
 		etcdOps = append(etcdOps, clientv3.WithPrefix())
-		break
 	case op.IsOptsWithFromKey():
 		etcdOps = append(etcdOps, clientv3.WithFromKey())
-		break
 	case op.IsOptsWithRange():
 		etcdOps = append(etcdOps, clientv3.WithRange(string(op.RangeBytes())))
-		break
 	}
 
 	return etcdOps
