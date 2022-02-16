@@ -51,8 +51,6 @@ func (d *dumpWorker) Status() lib.WorkerStatus {
 			ErrorMessage: unit.JoinProcessErrors(result.Errors),
 		}
 	}
-	// should I keep the status unchanged for second call, or runtime will not
-	// call Status again when it's the terminated status?
 	return lib.WorkerStatus{Code: lib.WorkerStatusFinished}
 }
 
