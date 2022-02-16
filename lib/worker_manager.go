@@ -21,9 +21,6 @@ type workerManager interface {
 	IsInitialized(ctx context.Context) (bool, error)
 	Tick(ctx context.Context, sender p2p.MessageSender) (offlinedWorkers []*WorkerInfo, onlinedWorkers []*WorkerInfo)
 	HandleHeartbeat(msg *HeartbeatPingMessage, fromNode p2p.NodeID) error
-
-	// UpdateStatus(msg *StatusUpdateMessage)
-
 	GetWorkerInfo(id WorkerID) (*WorkerInfo, bool)
 	PutWorkerInfo(info *WorkerInfo) bool
 	AddWorker(id WorkerID, exeuctorNodeID p2p.NodeID) error
@@ -170,25 +167,6 @@ func (m *workerManagerImpl) HandleHeartbeat(msg *HeartbeatPingMessage, fromNode 
 	workerInfo.hasPendingHeartbeat = true
 	return nil
 }
-
-/*
-func (m *workerManagerImpl) UpdateStatus(msg *StatusUpdateMessage) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	info, ok := m.getWorkerInfo(msg.WorkerID)
-	if !ok {
-		log.L().Info("received status update for non-existing worker",
-			zap.String("master-id", m.masterID),
-			zap.Any("msg", msg))
-		return
-	}
-	info.status = msg.Status
-	log.L().Debug("worker status updated",
-		zap.String("master-id", m.masterID),
-		zap.Any("msg", msg))
-}
- */
 
 func (m *workerManagerImpl) GetStatus(id WorkerID) (*WorkerStatus, bool) {
 	m.mu.Lock()
