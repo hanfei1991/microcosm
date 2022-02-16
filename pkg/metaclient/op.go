@@ -118,6 +118,7 @@ func IsOptsWithFromKey(opts []OpOption) bool {
 }
 
 func (op Op) CheckValidOp() error {
+	// [TODO] forbit WithPrefix() + ""
 	if !(op.IsOptsWithRange() || op.IsOptsWithPrefix() || op.IsOptsWithFromKey()) {
 		return nil
 	}
