@@ -2,12 +2,16 @@ package lib
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
-	"github.com/hanfei1991/microcosm/pkg/clock"
-	"github.com/hanfei1991/microcosm/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/workerpool"
 	"github.com/stretchr/testify/require"
+
+	"github.com/hanfei1991/microcosm/pkg/clock"
+	"github.com/hanfei1991/microcosm/pkg/metadata"
+	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
 func TestHeartBeatPingPongAfterCreateWorker(t *testing.T) {
@@ -17,12 +21,31 @@ func TestHeartBeatPingPongAfterCreateWorker(t *testing.T) {
 	defer cancel()
 
 	msgSender := p2p.NewMockMessageSender()
+	msgHandlerManager := p2p.NewMockMessageHandlerManager()
+	mockMeta := metadata.NewMetaMock()
+	pool := workerpool.NewDefaultAsyncPool(1)
 
-	manager := newWorkerManager(masterName, false, 1).(*workerManagerImpl)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = pool.Run(ctx)
+	}()
+
+	manager := newWorkerManager(
+		masterName,
+		false,
+		1,
+		msgSender,
+		msgHandlerManager,
+		mockMeta,
+		pool,
+		&dummyStatus{},
+		).(*workerManagerImpl)
 	manager.clock = clock.NewMock()
 	manager.clock.(*clock.Mock).Set(time.Now())
 
-	err := manager.AddWorker(workerID1, executorNodeID1, WorkerStatusCreated)
+	err := manager.OnWorkerCreated(ctx, workerID1, executorNodeID1)
 	require.NoError(t, err)
 
 	sendTime := clock.MonoNow()
@@ -47,6 +70,9 @@ func TestHeartBeatPingPongAfterCreateWorker(t *testing.T) {
 		ToWorkerID: workerID1,
 		Epoch:      1,
 	}, msg)
+
+	cancel()
+	wg.Wait()
 }
 
 func TestHeartBeatPingPongAfterFailover(t *testing.T) {
@@ -56,8 +82,26 @@ func TestHeartBeatPingPongAfterFailover(t *testing.T) {
 	defer cancel()
 
 	msgSender := p2p.NewMockMessageSender()
+	msgHandlerManager := p2p.NewMockMessageHandlerManager()
+	mockMeta := metadata.NewMetaMock()
+	pool := workerpool.NewDefaultAsyncPool(1)
 
-	manager := newWorkerManager(masterName, true, 1).(*workerManagerImpl)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = pool.Run(ctx)
+	}()
+
+	manager := newWorkerManager(
+		masterName,
+		true,
+		1,
+		msgSender,
+		msgHandlerManager,
+		mockMeta,
+		pool,
+		&dummyStatus{}).(*workerManagerImpl)
 	manager.clock = clock.NewMock()
 	manager.clock.(*clock.Mock).Set(time.Now())
 
@@ -83,6 +127,9 @@ func TestHeartBeatPingPongAfterFailover(t *testing.T) {
 		ToWorkerID: workerID1,
 		Epoch:      1,
 	}, msg)
+
+	cancel()
+	wg.Wait()
 }
 
 func TestMultiplePendingHeartbeats(t *testing.T) {
@@ -92,16 +139,34 @@ func TestMultiplePendingHeartbeats(t *testing.T) {
 	defer cancel()
 
 	msgSender := p2p.NewMockMessageSender()
+	msgHandlerManager := p2p.NewMockMessageHandlerManager()
+	mockMeta := metadata.NewMetaMock()
+	pool := workerpool.NewDefaultAsyncPool(1)
 
-	manager := newWorkerManager(masterName, true, 1).(*workerManagerImpl)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = pool.Run(ctx)
+	}()
+
+	manager := newWorkerManager(
+		masterName,
+		true,
+		1,
+		msgSender,
+		msgHandlerManager,
+		mockMeta,
+		pool,
+		&dummyStatus{}).(*workerManagerImpl)
 	manager.clock = clock.NewMock()
 	manager.clock.(*clock.Mock).Set(time.Now())
 
-	err := manager.AddWorker(workerID1, executorNodeID1, WorkerStatusCreated)
+	err := manager.addWorker(workerID1, executorNodeID1)
 	require.NoError(t, err)
-	err = manager.AddWorker(workerID2, executorNodeID2, WorkerStatusCreated)
+	err = manager.addWorker(workerID2, executorNodeID2)
 	require.NoError(t, err)
-	err = manager.AddWorker(workerID3, executorNodeID3, WorkerStatusCreated)
+	err = manager.addWorker(workerID3, executorNodeID3)
 	require.NoError(t, err)
 
 	offlined, onlined := manager.Tick(ctx, msgSender)
@@ -179,6 +244,9 @@ func TestMultiplePendingHeartbeats(t *testing.T) {
 		ToWorkerID: workerID3,
 		Epoch:      1,
 	}, msg)
+
+	cancel()
+	wg.Wait()
 }
 
 func TestWorkerManagerInitialization(t *testing.T) {
@@ -187,7 +255,27 @@ func TestWorkerManagerInitialization(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.TODO(), 10*time.Second)
 	defer cancel()
 
-	manager := newWorkerManager(masterName, true, 1).(*workerManagerImpl)
+	msgSender := p2p.NewMockMessageSender()
+	msgHandlerManager := p2p.NewMockMessageHandlerManager()
+	mockMeta := metadata.NewMetaMock()
+	pool := workerpool.NewDefaultAsyncPool(1)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = pool.Run(ctx)
+	}()
+
+	manager := newWorkerManager(
+		masterName,
+		true,
+		1,
+		msgSender,
+		msgHandlerManager,
+		mockMeta,
+		pool,
+		&dummyStatus{}).(*workerManagerImpl)
 	manager.clock = clock.NewMock()
 	manager.clock.(*clock.Mock).Set(time.Now())
 
@@ -215,27 +303,70 @@ func TestWorkerManagerInitialization(t *testing.T) {
 	ok, err = manager.IsInitialized(ctx)
 	require.NoError(t, err)
 	require.True(t, ok)
+
+	cancel()
+	wg.Wait()
 }
 
 func TestUpdateStatus(t *testing.T) {
 	t.Parallel()
 
-	manager := newWorkerManager(masterName, true, 1)
-	err := manager.AddWorker(workerID1, executorNodeID1, WorkerStatusInit)
+	ctx, cancel := context.WithTimeout(context.TODO(), 10*time.Second)
+	defer cancel()
+
+	msgSender := p2p.NewMockMessageSender()
+	msgHandlerManager := p2p.NewMockMessageHandlerManager()
+	mockMeta := metadata.NewMetaMock()
+	pool := workerpool.NewDefaultAsyncPool(1)
+
+	workerMetaClient := NewWorkerMetadataClient(masterName, mockMeta, &dummyStatus{})
+	err := workerMetaClient.Store(ctx, workerID1,
+		&WorkerStatus{
+			Code:         WorkerStatusInit,
+			ErrorMessage: "fake",
+			Ext:          "fake ext",
+		})
 	require.NoError(t, err)
 
-	info, ok := manager.GetWorkerInfo(workerID1)
-	require.True(t, ok)
-	require.Equal(t, WorkerStatusInit, info.status.Code)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = pool.Run(ctx)
+	}()
 
-	manager.UpdateStatus(&StatusUpdateMessage{
-		WorkerID: workerID1,
-		Status: WorkerStatus{
+	manager := newWorkerManager(
+		masterName,
+		true,
+		1,
+		msgSender,
+		msgHandlerManager,
+		mockMeta,
+		pool,
+		&dummyStatus{},
+		).(*workerManagerImpl)
+
+	err = manager.addWorker(workerID1, executorNodeID1)
+	require.NoError(t, err)
+
+	status, ok := manager.GetStatus(workerID1)
+	require.True(t, ok)
+	require.Equal(t, WorkerStatusInit, status.Code)
+
+	err = workerMetaClient.Store(ctx, workerID1,
+		&WorkerStatus{
 			Code:         WorkerStatusError,
 			ErrorMessage: "fake",
 			Ext:          "fake ext",
-		},
-	})
+		})
+	require.NoError(t, err)
+
+	err = msgHandlerManager.InvokeHandler(
+		t,
+		workerStatusUpdatedTopic(masterName, workerID1),
+		executorNodeID1,
+		&workerStatusUpdatedMessage{Epoch: 1})
+	require.NoError(t, err)
 
 	handle := manager.GetWorkerHandle(workerID1)
 	require.NotNil(t, handle)
@@ -245,6 +376,9 @@ func TestUpdateStatus(t *testing.T) {
 		ErrorMessage: "fake",
 		Ext:          "fake ext",
 	}, handle.Status())
+
+	wg.Wait()
+	cancel()
 }
 
 func TestWorkerTimedOut(t *testing.T) {
@@ -254,12 +388,31 @@ func TestWorkerTimedOut(t *testing.T) {
 	defer cancel()
 
 	msgSender := p2p.NewMockMessageSender()
+	msgHandlerManager := p2p.NewMockMessageHandlerManager()
+	mockMeta := metadata.NewMetaMock()
+	pool := workerpool.NewDefaultAsyncPool(1)
 
-	manager := newWorkerManager(masterName, true, 1).(*workerManagerImpl)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = pool.Run(ctx)
+	}()
+
+	manager := newWorkerManager(
+		masterName,
+		true,
+		1,
+		msgSender,
+		msgHandlerManager,
+		mockMeta,
+		pool,
+		&dummyStatus{},
+		).(*workerManagerImpl)
 	manager.clock = clock.NewMock()
 	manager.clock.(*clock.Mock).Set(time.Now())
 
-	err := manager.AddWorker(workerID1, executorNodeID1, WorkerStatusInit)
+	err := manager.addWorker(workerID1, executorNodeID1)
 	require.NoError(t, err)
 
 	offlined, onlined := manager.Tick(ctx, msgSender)
@@ -280,6 +433,9 @@ func TestWorkerTimedOut(t *testing.T) {
 	require.Equal(t, &WorkerStatus{
 		Code: WorkerStatusError,
 	}, handle.Status())
+
+	cancel()
+	wg.Wait()
 }
 
 func TestWorkerTimedOutWithPendingHeartbeat(t *testing.T) {
@@ -289,12 +445,30 @@ func TestWorkerTimedOutWithPendingHeartbeat(t *testing.T) {
 	defer cancel()
 
 	msgSender := p2p.NewMockMessageSender()
+	msgHandlerManager := p2p.NewMockMessageHandlerManager()
+	mockMeta := metadata.NewMetaMock()
+	pool := workerpool.NewDefaultAsyncPool(1)
 
-	manager := newWorkerManager(masterName, true, 1).(*workerManagerImpl)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = pool.Run(ctx)
+	}()
+
+	manager := newWorkerManager(
+		masterName,
+		true,
+		1,
+		msgSender,
+		msgHandlerManager,
+		mockMeta,
+		pool,
+		&dummyStatus{}).(*workerManagerImpl)
 	manager.clock = clock.NewMock()
 	manager.clock.(*clock.Mock).Set(time.Now())
 
-	err := manager.AddWorker(workerID1, executorNodeID1, WorkerStatusInit)
+	err := manager.addWorker(workerID1, executorNodeID1)
 	require.NoError(t, err)
 
 	offlined, onlined := manager.Tick(ctx, msgSender)
@@ -331,4 +505,7 @@ func TestWorkerTimedOutWithPendingHeartbeat(t *testing.T) {
 	require.Equal(t, &WorkerStatus{
 		Code: WorkerStatusError,
 	}, handle.Status())
+
+	cancel()
+	wg.Wait()
 }

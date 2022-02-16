@@ -138,9 +138,9 @@ func (w *DefaultBaseWorker) Init(ctx context.Context) error {
 			}))
 		})
 
-	w.workerMetaClient = NewWorkerMetadataClient(w.masterID, w.id, w.metaKVClient, w.Impl.GetWorkerStatusExtTypeInfo())
+	w.workerMetaClient = NewWorkerMetadataClient(w.masterID, w.metaKVClient, w.Impl.GetWorkerStatusExtTypeInfo())
 
-	w.statusSender = NewStatusSender(w.masterClient, w.workerMetaClient, w.messageSender, w.pool)
+	w.statusSender = NewStatusSender(w.id, w.masterClient, w.workerMetaClient, w.messageSender, w.pool)
 
 	if err := w.initMessageHandlers(ctx); err != nil {
 		return errors.Trace(err)

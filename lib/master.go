@@ -171,7 +171,15 @@ func (m *DefaultBaseMaster) Init(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 	m.currentEpoch.Store(epoch)
-	m.workerManager = newWorkerManager(m.id, !isInit, epoch)
+	m.workerManager = newWorkerManager(
+		m.id,
+		!isInit,
+		epoch,
+		m.messageSender,
+		m.messageHandlerManager,
+		m.metaKVClient,
+		m.pool,
+		m.Impl.GetWorkerStatusExtTypeInfo())
 
 	m.startBackgroundTasks()
 
@@ -284,7 +292,14 @@ func (m *DefaultBaseMaster) runWorkerCheck(ctx context.Context) error {
 
 		for _, workerInfo := range offlinedWorkers {
 			log.L().Info("worker is offline", zap.Any("worker-info", workerInfo))
-			tombstoneHandle := NewTombstoneWorkerHandle(workerInfo.ID, workerInfo.status)
+			status, ok := m.workerManager.GetStatus(workerInfo.ID)
+			if !ok {
+				log.L().Panic(
+					"offlined worker has no status found",
+					zap.Any("worker-info", workerInfo),
+				)
+			}
+			tombstoneHandle := NewTombstoneWorkerHandle(workerInfo.ID, *status)
 			err := m.unregisterMessageHandler(ctx, workerInfo.ID)
 			if err != nil {
 				return err
@@ -409,28 +424,6 @@ func (m *DefaultBaseMaster) registerHandlerForWorker(ctx context.Context, worker
 		log.L().Panic("duplicate handler",
 			zap.String("topic", topic))
 	}
-
-	topic = StatusUpdateTopic(m.id, workerID)
-	ok, err = m.messageHandlerManager.RegisterHandler(
-		ctx,
-		topic,
-		&StatusUpdateMessage{},
-		func(sender p2p.NodeID, value p2p.MessageValue) error {
-			statusUpdateMessage := value.(*StatusUpdateMessage)
-			if err := statusUpdateMessage.Status.fillExt(m.Impl.GetWorkerStatusExtTypeInfo()); err != nil {
-				m.OnError(err)
-				return nil
-			}
-			m.workerManager.UpdateStatus(statusUpdateMessage)
-			return nil
-		})
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if !ok {
-		log.L().Panic("duplicate handler",
-			zap.String("topic", topic))
-	}
 	return nil
 }
 
@@ -535,7 +528,8 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 			return
 		}
 
-		if err := m.workerManager.AddWorker(workerID, p2p.NodeID(executorID), WorkerStatusCreated); err != nil {
+		// TODO figure out what context to use here
+		if err := m.workerManager.OnWorkerCreated(context.TODO(), workerID, p2p.NodeID(executorID)); err != nil {
 			m.OnError(errors.Trace(err))
 		}
 		handle := m.workerManager.GetWorkerHandle(workerID)

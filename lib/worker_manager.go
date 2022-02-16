@@ -8,11 +8,13 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/pkg/workerpool"
 	"go.uber.org/zap"
 
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
+	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
@@ -21,12 +23,13 @@ type workerManager interface {
 	IsInitialized(ctx context.Context) (bool, error)
 	Tick(ctx context.Context, sender p2p.MessageSender) (offlinedWorkers []*WorkerInfo, onlinedWorkers []*WorkerInfo)
 	HandleHeartbeat(msg *HeartbeatPingMessage, fromNode p2p.NodeID) error
+	OnWorkerCreated(ctx context.Context, id WorkerID, exeuctorNodeID p2p.NodeID) error
 	GetWorkerInfo(id WorkerID) (*WorkerInfo, bool)
 	PutWorkerInfo(info *WorkerInfo) bool
-	AddWorker(id WorkerID, exeuctorNodeID p2p.NodeID) error
 	MessageSender() p2p.MessageSender
 	GetWorkerHandle(id WorkerID) WorkerHandle
 	GetWorkers() map[WorkerID]WorkerHandle
+	GetStatus(id WorkerID) (*WorkerStatus, bool)
 }
 
 type workerManagerImpl struct {
@@ -42,13 +45,27 @@ type workerManagerImpl struct {
 	masterID      MasterID
 	timeoutConfig TimeoutConfig
 
+	extTpi interface{}
+
 	// to help unit testing
 	clock clock.Clock
 
-	messageSender p2p.MessageSender
+	messageSender        p2p.MessageSender
+	messageHandleManager p2p.MessageHandlerManager
+	metaClient           metadata.MetaKV
+	pool                 workerpool.AsyncPool
 }
 
-func newWorkerManager(id MasterID, needWait bool, curEpoch Epoch) workerManager {
+func newWorkerManager(
+	id MasterID,
+	needWait bool,
+	curEpoch Epoch,
+	messageSender p2p.MessageSender,
+	messageHandleManager p2p.MessageHandlerManager,
+	metaClient metadata.MetaKV,
+	pool workerpool.AsyncPool,
+	extTpi interface{},
+) workerManager {
 	return &workerManagerImpl{
 		initialized:     !needWait,
 		workerInfos:     make(map[WorkerID]*WorkerInfo),
@@ -59,7 +76,14 @@ func newWorkerManager(id MasterID, needWait bool, curEpoch Epoch) workerManager 
 		masterID:      id,
 		timeoutConfig: defaultTimeoutConfig,
 
+		extTpi: extTpi,
+
 		clock: clock.New(),
+
+		messageSender: messageSender,
+		messageHandleManager: messageHandleManager,
+		metaClient: metaClient,
+		pool: pool,
 	}
 }
 
@@ -211,35 +235,65 @@ func (m *workerManagerImpl) putWorkerInfo(info *WorkerInfo) bool {
 	return !exists
 }
 
-func (m *workerManagerImpl) AddWorker(id WorkerID, exeuctorNodeID p2p.NodeID) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+func (m *workerManagerImpl) addWorker(id WorkerID, executorNodeID p2p.NodeID) error {
+	if _, exists := m.workerInfos[id]; exists {
+		// TODO determine whether it is appropriate to panic here.
+		log.L().Panic("duplicate worker ID",
+			zap.String("worker-id", id))
+	}
 
-	return m.addWorker(id, exeuctorNodeID)
-}
-
-// addWorker must be called with `m.mu` taken.
-func (m *workerManagerImpl) addWorker(id WorkerID, exeuctorNodeID p2p.NodeID) error {
-	ok := m.putWorkerInfo(&WorkerInfo{
+	m.workerInfos[id] = &WorkerInfo{
 		ID:                       id,
-		NodeID:                   exeuctorNodeID,
+		NodeID:                   executorNodeID,
 		lastHeartbeatReceiveTime: m.clock.Now(),
 		// TODO fix workload
 		workload:    10, // 10 is the initial workload for now.
 		justOnlined: true,
+	}
+
+	workerMetaClient := NewWorkerMetadataClient(m.masterID, m.metaClient, m.extTpi)
+	receiver := NewStatusReceiver(
+		id,
+		workerMetaClient,
+		m.messageHandleManager,
+		m.masterEpoch,
+		m.pool,
+		m.clock,
+	)
+	m.statusReceivers[id] = receiver
+
+	// TODO refine AsyncPool or refactor this function to avoid
+	// possible deadlocking when the pool's pending queue is full.
+	//
+	// TODO figure out what context to use here.
+	err := m.pool.Go(context.TODO(), func() {
+		if err := receiver.Init(context.TODO()); err != nil {
+			// TODO handle the error
+			log.L().Warn("failed to init StatusReceiver",
+				zap.String("master-id", m.masterID),
+				zap.String("worker-id", id))
+		}
 	})
-	if !ok {
-		// The worker with the ID already exists, so we just update the statusCode.
-		info, ok := m.getWorkerInfo(id)
-		if !ok {
-			log.L().Panic("unreachable", zap.Any("worker-id", id))
-		}
-		if info.NodeID != exeuctorNodeID {
-			// We expect the worker ID to be globally unique, and the worker ID should
-			// change if a worker is recreated. So two workers with the same name on
-			// different executors are NOT POSSIBLE.
-			log.L().Panic("unreachable", zap.Any("worker-id", id))
-		}
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+func (m *workerManagerImpl) OnWorkerCreated(ctx context.Context, id WorkerID, executorID p2p.NodeID) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	workerMetaClient := NewWorkerMetadataClient(m.masterID, m.metaClient, m.extTpi)
+	err := workerMetaClient.Store(ctx, id, &WorkerStatus{
+		Code:         WorkerStatusCreated,
+	})
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	if err := m.addWorker(id, executorID); err != nil {
+		return errors.Trace(err)
 	}
 	return nil
 }

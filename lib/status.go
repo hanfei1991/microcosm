@@ -27,6 +27,8 @@ const (
 
 // StatusSender is used for a worker to send its status to its master.
 type StatusSender struct {
+	workerID WorkerID
+
 	workerMetaClient *WorkerMetadataClient
 	messageSender    p2p.MessageSender
 	masterClient     *masterClient
@@ -47,12 +49,14 @@ type StatusSender struct {
 // NewStatusSender returns a new StatusSender.
 // NOTE: the pool is owned by the caller.
 func NewStatusSender(
+	workerID WorkerID,
 	masterClient *masterClient,
 	workerMetaClient *WorkerMetadataClient,
 	messageSender p2p.MessageSender,
 	pool workerpool.AsyncPool,
 ) *StatusSender {
 	return &StatusSender{
+		workerID:         workerID,
 		workerMetaClient: workerMetaClient,
 		messageSender:    messageSender,
 		masterClient:     masterClient,
@@ -107,7 +111,7 @@ func (s *StatusSender) sendStatus(ctx context.Context) error {
 		}
 
 		status := s.lastUnsentStatus
-		if err := s.workerMetaClient.Store(ctx, status); err != nil {
+		if err := s.workerMetaClient.Store(ctx, s.workerID, status); err != nil {
 			s.onError(err)
 		}
 
@@ -156,6 +160,8 @@ type workerStatusUpdatedMessage struct {
 
 // StatusReceiver is used by a master to receive the latest status update from **a** worker.
 type StatusReceiver struct {
+	workerID WorkerID
+
 	workerMetaClient      *WorkerMetadataClient
 	messageHandlerManager p2p.MessageHandlerManager
 
@@ -181,6 +187,7 @@ type StatusReceiver struct {
 // for checking errors.
 // NOTE: the pool is owned and managed by the caller.
 func NewStatusReceiver(
+	workerID WorkerID,
 	workerMetaClient *WorkerMetadataClient,
 	messageHandlerManager p2p.MessageHandlerManager,
 	epoch Epoch,
@@ -188,6 +195,7 @@ func NewStatusReceiver(
 	clock clock.Clock,
 ) *StatusReceiver {
 	return &StatusReceiver{
+		workerID:              workerID,
 		workerMetaClient:      workerMetaClient,
 		messageHandlerManager: messageHandlerManager,
 		epoch:                 epoch,
@@ -200,7 +208,7 @@ func NewStatusReceiver(
 // Init should be called to initialize a StatusReceiver.
 // NOTE: this function can be blocked by IO to the metastore.
 func (r *StatusReceiver) Init(ctx context.Context) error {
-	topic := StatusUpdateTopic(r.workerMetaClient.MasterID(), r.workerMetaClient.WorkerID())
+	topic := StatusUpdateTopic(r.workerMetaClient.MasterID(), r.workerID)
 	ok, err := r.messageHandlerManager.RegisterHandler(
 		ctx,
 		topic,
@@ -224,7 +232,7 @@ func (r *StatusReceiver) Init(ctx context.Context) error {
 		log.L().Panic("duplicate handlers", zap.String("topic", topic))
 	}
 
-	initStatus, err := r.workerMetaClient.Load(ctx)
+	initStatus, err := r.workerMetaClient.Load(ctx, r.workerID)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -264,7 +272,7 @@ func (r *StatusReceiver) Tick(ctx context.Context) error {
 	err := r.pool.Go(ctx, func() {
 		defer r.isLoading.Store(false)
 
-		status, err := r.workerMetaClient.Load(ctx)
+		status, err := r.workerMetaClient.Load(ctx, r.workerID)
 		if err != nil {
 			r.onError(err)
 		}
@@ -283,7 +291,7 @@ func (r *StatusReceiver) Tick(ctx context.Context) error {
 }
 
 func (r *StatusReceiver) Close(ctx context.Context) error {
-	topic := StatusUpdateTopic(r.workerMetaClient.MasterID(), r.workerMetaClient.WorkerID())
+	topic := StatusUpdateTopic(r.workerMetaClient.MasterID(), r.workerID)
 	ok, err := r.messageHandlerManager.UnregisterHandler(ctx, topic)
 	if err != nil {
 		return errors.Trace(err)
