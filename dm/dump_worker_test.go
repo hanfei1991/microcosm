@@ -48,7 +48,7 @@ func mockWorkerConfig() []byte {
 		Mode:       config.ModeAll,
 		Flavor:     "mysql",
 		LoaderConfig: config.LoaderConfig{
-			Dir: "/tmp/dftest",
+			Dir: "/tmp/dftest.db_ut",
 		},
 		BAList: &filter.Rules{
 			DoDBs: []string{"test"},
