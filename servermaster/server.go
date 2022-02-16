@@ -498,7 +498,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		return
 	}
 	dctx.Environ.MasterMetaExt = masterMetaExtBytes
-	s.jobManager, err = NewJobManagerImplV2(dctx, "", s.name(),
+	s.jobManager, err = NewJobManagerImplV2(dctx, "", lib.JobManagerUUID,
 		s.msgService.MakeHandlerManager(), p2p.NewMessageSender(s.p2pMsgRouter),
 		clients, metadata.NewMetaEtcd(s.etcdClient))
 	if err != nil {
