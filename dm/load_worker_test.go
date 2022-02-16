@@ -15,7 +15,8 @@ import (
 )
 
 func TestLoadWorker(t *testing.T) {
-	// only support manually prepare environment and test
+	// This test requires a TiDB running on port 4000 and dump files placed in
+	// /tmp/dftest.db_ut . TestDumpWorker can generate the dump files.
 	t.SkipNow()
 	t.Parallel()
 
