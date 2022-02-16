@@ -165,7 +165,7 @@ func (jm *JobManagerImplV2) OnMasterRecovered(ctx context.Context) error {
 	}
 	for _, job := range jobs {
 		jm.jobFsm.JobDispatched(job.MasterMetaExt)
-		if err := jm.BaseMaster.RecoverWorker(ctx, job.ID); err != nil {
+		if err := jm.BaseMaster.RegisterWorker(ctx, job.ID); err != nil {
 			return err
 		}
 		// TODO: support check job that is not active in WaitAck queue and recreate it.
