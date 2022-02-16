@@ -9,9 +9,16 @@ import (
 	"go.etcd.io/etcd/clientv3"
 )
 
+// We will make follow abstracts and implement for KVClient
+//				NewEtcdKVClient(KVClient)
+//					/			\
+//				prefixKV	 etcdClientCloser
+//					|			|
+//					KV		   Closer
+//					\			/
+//					   etcdIml(KVClient)
+
 // etcdClientCloser is the etcd implement of Closer interface
-// we use etcdClientCloser to split the KV and Closer interface
-// so we can make some intermediate layer for KV interface, like prefix layer for namespace isolation
 type etcdClientCloser struct {
 	cli *etcdImpl
 }
@@ -164,6 +171,7 @@ func (c *etcdImpl) Do(ctx context.Context, op metaclient.Op) (metaclient.OpRespo
 
 type etcdTxn struct {
 	clientv3.Txn
+
 	mu  sync.Mutex
 	kv  *etcdImpl
 	ops []clientv3.Op

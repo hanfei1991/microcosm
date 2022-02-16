@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/metaclient"
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/require"
@@ -76,6 +77,148 @@ func clearKeySpace(ctx context.Context, cli metaclient.KVClient) {
 	cli.Delete(ctx, "", metaclient.WithFromKey())
 }
 
+type kv struct {
+	key   string
+	value string
+}
+
+type prepare struct {
+	kvs []kv
+}
+
+type optype int
+
+const (
+	tNone optype = iota
+	tGet
+	tPut
+	tDel
+	tTxn
+)
+
+type query struct {
+	key  string
+	opts []metaclient.OpOption
+	err  error
+	// for txn: we only use expected
+	expected []kv
+}
+
+type action struct {
+	t optype
+	// do action
+	do   kv
+	opts []metaclient.OpOption
+	// query action
+	q query
+}
+
+type txnAction struct {
+	acts []action
+	// return error
+	err error
+}
+
+func prepareData(ctx context.Context, t *testing.T, cli metaclient.KVClient, p prepare) {
+	clearKeySpace(ctx, cli)
+	if p.kvs != nil {
+		for _, kv := range p.kvs {
+			prsp, perr := cli.Put(ctx, kv.key, kv.value)
+			require.Nil(t, perr)
+			require.NotNil(t, prsp)
+		}
+	}
+}
+
+func testAction(ctx context.Context, t *testing.T, cli metaclient.KVClient, acts []action) {
+	for _, act := range acts {
+		switch act.t {
+		case tGet:
+			rsp, err := cli.Get(ctx, act.do.key, act.opts...)
+			require.Nil(t, err)
+			require.NotNil(t, rsp)
+		case tPut:
+			rsp, err := cli.Put(ctx, act.do.key, act.do.value)
+			require.Nil(t, err)
+			require.NotNil(t, rsp)
+		case tDel:
+			rsp, err := cli.Delete(ctx, act.do.key, act.opts...)
+			require.Nil(t, err)
+			require.NotNil(t, rsp)
+		case tTxn:
+			require.FailNow(t, "unexpected txn action")
+		case tNone:
+			// do nothing
+		default:
+			require.FailNow(t, "unexpected action type")
+		}
+
+		rsp, err := cli.Get(ctx, act.q.key, act.q.opts...)
+		if act.q.err != nil {
+			require.Error(t, err)
+			continue
+		}
+		require.Nil(t, err)
+		require.NotNil(t, rsp)
+		expected := act.q.expected
+		require.Len(t, rsp.Kvs, len(expected))
+		for i, kv := range rsp.Kvs {
+			require.Equal(t, string(kv.Key), expected[i].key)
+			require.Equal(t, string(kv.Value), expected[i].value)
+		}
+	}
+}
+
+func testTxnAction(ctx context.Context, t *testing.T, cli metaclient.KVClient, txns []txnAction) {
+	for _, txn := range txns {
+		ops := make([]metaclient.Op, 0, len(txn.acts))
+		for _, act := range txn.acts {
+			switch act.t {
+			case tGet:
+				ops = append(ops, metaclient.OpGet(act.do.key, act.opts...))
+			case tPut:
+				ops = append(ops, metaclient.OpPut(act.do.key, act.do.value))
+			case tDel:
+				ops = append(ops, metaclient.OpDelete(act.do.key, act.opts...))
+			default:
+				require.FailNow(t, "unexpected action type")
+			}
+		}
+		tx := cli.Txn(ctx)
+		tx.Do(ops...)
+		rsp, err := tx.Commit()
+		// test txn rsp
+		if txn.err != nil {
+			require.Error(t, err)
+			continue
+		}
+		require.Nil(t, err)
+		require.Len(t, rsp.Responses, len(txn.acts))
+		for i, r := range rsp.Responses {
+			act := txn.acts[i]
+			switch act.t {
+			case tGet:
+				rr := r.GetResponseGet()
+				require.NotNil(t, rr)
+				expected := act.q.expected
+				require.Len(t, rr.Kvs, len(expected))
+				for i, kv := range rr.Kvs {
+					require.Equal(t, string(kv.Key), expected[i].key)
+					require.Equal(t, string(kv.Value), expected[i].value)
+				}
+			case tPut:
+				rr := r.GetResponsePut()
+				require.NotNil(t, rr)
+			case tDel:
+				rr := r.GetResponseDelete()
+				require.NotNil(t, rr)
+			default:
+				require.FailNow(t, "unexpected action type")
+			}
+		}
+	}
+}
+
 func (suite *SuiteTestEtcd) TestBasicKV() {
 	conf := &metaclient.Config{
 		Endpoints: []string{suite.endpoints},
@@ -85,54 +228,60 @@ func (suite *SuiteTestEtcd) TestBasicKV() {
 	require.Nil(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	// get a non-existed key
-	grsp, gerr := cli.Get(ctx, "hello")
-	require.Nil(t, gerr)
-	cluster := grsp.Header.ClusterID
-	require.NotEmpty(t, cluster)
-	require.Len(t, grsp.Kvs, 0)
 
-	// put a key and get it back
-	prsp, perr := cli.Put(ctx, "hello", "world")
-	require.Nil(t, perr)
-	require.Equal(t, cluster, prsp.Header.ClusterID)
-	grsp, gerr = cli.Get(ctx, "hello")
-	require.Nil(t, gerr)
-	require.Len(t, grsp.Kvs, 1)
-	require.Equal(t, "world", string(grsp.Kvs[0].Value))
+	input := prepare{
+		kvs: []kv{},
+	}
+	actions := []action{
+		{
+			t: tNone,
+			q: query{
+				key:      "hello",
+				opts:     []metaclient.OpOption{},
+				expected: []kv{},
+			},
+		},
+		{
+			t:    tPut,
+			do:   kv{"hello", "world"},
+			opts: []metaclient.OpOption{},
+			q: query{
+				key:  "hello",
+				opts: []metaclient.OpOption{},
+				expected: []kv{
+					{"hello", "world"},
+				},
+			},
+		},
+		{
+			t:    tDel,
+			do:   kv{"hello", ""},
+			opts: []metaclient.OpOption{},
+			q: query{
+				key:      "hello",
+				opts:     []metaclient.OpOption{},
+				expected: []kv{},
+			},
+		},
+		{
+			t:    tPut,
+			do:   kv{"hello", "new world"},
+			opts: []metaclient.OpOption{},
+			q: query{
+				key:  "hello",
+				opts: []metaclient.OpOption{},
+				expected: []kv{
+					{"hello", "new world"},
+				},
+			},
+		},
+	}
 
-	// delete a key, get it back, put the same key and get it back
-	drsp, derr := cli.Delete(ctx, "hello")
-	require.Nil(t, derr)
-	require.Equal(t, cluster, drsp.Header.ClusterID)
-	grsp, gerr = cli.Get(ctx, "hello")
-	require.Nil(t, gerr)
-	require.Len(t, grsp.Kvs, 0)
-	prsp, perr = cli.Put(ctx, "hello", "world again")
-	require.Nil(t, perr)
-	require.Equal(t, cluster, prsp.Header.ClusterID)
-	grsp, gerr = cli.Get(ctx, "hello")
-	require.Nil(t, gerr)
-	require.Len(t, grsp.Kvs, 1)
-	require.Equal(t, "world again", string(grsp.Kvs[0].Value))
-	clearKeySpace(ctx, cli)
+	// prepare data and test query
+	prepareData(ctx, t, cli, input)
+	testAction(ctx, t, cli, actions)
+
 	cli.Close()
-	// [TODO] using failpoint to test basic kv timeout and cancel
-}
-
-func prepareDataForRangeTest(ctx context.Context, t *testing.T, cli metaclient.KVClient) {
-	prsp, perr := cli.Put(ctx, "hello1", "world1")
-	require.Nil(t, perr)
-	cluster := prsp.Header.ClusterID
-	require.NotEmpty(t, cluster)
-	prsp, perr = cli.Put(ctx, "hello2", "world2")
-	require.Nil(t, perr)
-	prsp, perr = cli.Put(ctx, "interesting", "world")
-	require.Nil(t, perr)
-	prsp, perr = cli.Put(ctx, "dataflow", "engine")
-	require.Nil(t, perr)
-	prsp, perr = cli.Put(ctx, "TiDB", "component")
-	require.Nil(t, perr)
 }
 
 func (suite *SuiteTestEtcd) TestKeyRangeOption() {
@@ -146,88 +295,107 @@ func (suite *SuiteTestEtcd) TestKeyRangeOption() {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
+	input := prepare{
+		kvs: []kv{
+			{"hello1", "world1"},
+			{"hello2", "world2"},
+			{"interesting", "world"},
+			{"dataflow", "engine"},
+			{"TiDB", "component"},
+		},
+	}
+	actions := []action{
+		{
+			t: tNone,
+			q: query{
+				key:  "hello",
+				opts: []metaclient.OpOption{metaclient.WithRange("s")},
+				expected: []kv{
+					{"hello1", "world1"},
+					{"hello2", "world2"},
+					{"interesting", "world"},
+				},
+			},
+		},
+		{
+			t: tNone,
+			q: query{
+				key:      "hello2",
+				opts:     []metaclient.OpOption{metaclient.WithRange("Z")},
+				expected: []kv{},
+			},
+		},
+		{
+			t: tNone,
+			q: query{
+				key:  "hello",
+				opts: []metaclient.OpOption{metaclient.WithPrefix()},
+				expected: []kv{
+					{"hello1", "world1"},
+					{"hello2", "world2"},
+				},
+			},
+		},
+		{
+			t: tNone,
+			q: query{
+				key:  "Hello",
+				opts: []metaclient.OpOption{metaclient.WithFromKey()},
+				expected: []kv{
+					{"TiDB", "component"},
+					{"dataflow", "engine"},
+					{"hello1", "world1"},
+					{"hello2", "world2"},
+					{"interesting", "world"},
+				},
+			},
+		},
+		{
+			t:    tDel,
+			do:   kv{"hello", ""},
+			opts: []metaclient.OpOption{metaclient.WithPrefix()},
+			q: query{
+				key:  "",
+				opts: []metaclient.OpOption{metaclient.WithFromKey()},
+				expected: []kv{
+					{"TiDB", "component"},
+					{"dataflow", "engine"},
+					{"interesting", "world"},
+				},
+			},
+		},
+		{
+			t:    tDel,
+			do:   kv{"AZ", ""},
+			opts: []metaclient.OpOption{metaclient.WithRange("Titan")},
+			q: query{
+				key:  "",
+				opts: []metaclient.OpOption{metaclient.WithFromKey()},
+				expected: []kv{
+					{"dataflow", "engine"},
+					{"interesting", "world"},
+				},
+			},
+		},
+		{
+			t:    tDel,
+			do:   kv{"egg", ""},
+			opts: []metaclient.OpOption{metaclient.WithFromKey()},
+			q: query{
+				key:  "",
+				opts: []metaclient.OpOption{metaclient.WithFromKey()},
+				expected: []kv{
+					{"dataflow", "engine"},
+				},
+			},
+		},
+	}
+
 	// test get key range(WithRange/WithPrefix/WithFromKey)
-	prepareDataForRangeTest(ctx, t, cli)
-	defer clearKeySpace(ctx, cli)
+	prepareData(ctx, t, cli, input)
+	testAction(ctx, t, cli, actions)
 
-	grsp, gerr := cli.Get(ctx, "hello", metaclient.WithRange("s"))
-	require.Nil(t, gerr)
-	require.Len(t, grsp.Kvs, 3) // hello1, hello2, interesting
-	require.Equal(t, string(grsp.Kvs[0].Key), "hello1")
-	require.Equal(t, string(grsp.Kvs[0].Value), "world1")
-	require.Equal(t, string(grsp.Kvs[1].Key), "hello2")
-	require.Equal(t, string(grsp.Kvs[1].Value), "world2")
-	require.Equal(t, string(grsp.Kvs[2].Key), "interesting")
-	require.Equal(t, string(grsp.Kvs[2].Value), "world")
-
-	grsp, gerr = cli.Get(ctx, "hello2", metaclient.WithRange("Z"))
-	require.Nil(t, gerr)
-	require.Len(t, grsp.Kvs, 0)
-
-	grsp, gerr = cli.Get(ctx, "hello", metaclient.WithPrefix())
-	require.Nil(t, gerr)
-	require.Len(t, grsp.Kvs, 2)
-	require.Equal(t, string(grsp.Kvs[0].Key), "hello1")
-	require.Equal(t, string(grsp.Kvs[0].Value), "world1")
-	require.Equal(t, string(grsp.Kvs[1].Key), "hello2")
-	require.Equal(t, string(grsp.Kvs[1].Value), "world2")
-
-	grsp, gerr = cli.Get(ctx, "Hello", metaclient.WithFromKey())
-	require.Nil(t, gerr)
-	require.Len(t, grsp.Kvs, 5) // TiDB, dataflow, hello1, hello2, interesting
-	require.Equal(t, string(grsp.Kvs[0].Key), "TiDB")
-	require.Equal(t, string(grsp.Kvs[0].Value), "component")
-	require.Equal(t, string(grsp.Kvs[1].Key), "dataflow")
-	require.Equal(t, string(grsp.Kvs[1].Value), "engine")
-	require.Equal(t, string(grsp.Kvs[2].Key), "hello1")
-	require.Equal(t, string(grsp.Kvs[2].Value), "world1")
-	require.Equal(t, string(grsp.Kvs[3].Key), "hello2")
-	require.Equal(t, string(grsp.Kvs[3].Value), "world2")
-	require.Equal(t, string(grsp.Kvs[4].Key), "interesting")
-	require.Equal(t, string(grsp.Kvs[4].Value), "world")
-
-	_, derr := cli.Delete(ctx, "hello", metaclient.WithPrefix())
-	require.Nil(t, derr)
-	grsp, gerr = cli.Get(ctx, "", metaclient.WithFromKey())
-	require.Nil(t, gerr)
-	require.Len(t, grsp.Kvs, 3) // TiDB, dataflow, hello1, hello2, interesting
-	require.Equal(t, string(grsp.Kvs[0].Key), "TiDB")
-	require.Equal(t, string(grsp.Kvs[0].Value), "component")
-	require.Equal(t, string(grsp.Kvs[1].Key), "dataflow")
-	require.Equal(t, string(grsp.Kvs[1].Value), "engine")
-	require.Equal(t, string(grsp.Kvs[2].Key), "interesting")
-	require.Equal(t, string(grsp.Kvs[2].Value), "world")
-
-	_, derr = cli.Delete(ctx, "AZ", metaclient.WithRange("Titan"))
-	require.Nil(t, derr)
-	grsp, gerr = cli.Get(ctx, "", metaclient.WithFromKey())
-	require.Nil(t, gerr)
-	require.Len(t, grsp.Kvs, 2) // TiDB, dataflow, hello1, hello2, interesting
-	require.Equal(t, string(grsp.Kvs[0].Key), "dataflow")
-	require.Equal(t, string(grsp.Kvs[0].Value), "engine")
-	require.Equal(t, string(grsp.Kvs[1].Key), "interesting")
-	require.Equal(t, string(grsp.Kvs[1].Value), "world")
-
-	_, derr = cli.Delete(ctx, "egg", metaclient.WithFromKey())
-	require.Nil(t, derr)
-	grsp, gerr = cli.Get(ctx, "", metaclient.WithFromKey())
-	require.Nil(t, gerr)
-	require.Len(t, grsp.Kvs, 1)
-}
-
-func prepareDataForTxnTest(ctx context.Context, t *testing.T, cli metaclient.KVClient) {
-	prsp, perr := cli.Put(ctx, "hello1", "world1")
-	require.Nil(t, perr)
-	cluster := prsp.Header.ClusterID
-	require.NotEmpty(t, cluster)
-	prsp, perr = cli.Put(ctx, "hello2", "world2")
-	require.Nil(t, perr)
-	prsp, perr = cli.Put(ctx, "interesting", "world")
-	require.Nil(t, perr)
-	prsp, perr = cli.Put(ctx, "dataflow", "engine")
-	require.Nil(t, perr)
-	prsp, perr = cli.Put(ctx, "TiDB", "component")
-	require.Nil(t, perr)
+	cli.Close()
 }
 
 func (suite *SuiteTestEtcd) TestTxn() {
@@ -241,66 +409,123 @@ func (suite *SuiteTestEtcd) TestTxn() {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	prepareDataForTxnTest(ctx, t, cli)
-	defer clearKeySpace(ctx, cli)
+	input := prepare{
+		kvs: []kv{
+			{"hello1", "world1"},
+			{"hello2", "world2"},
+			{"interesting", "world"},
+			{"dataflow", "engine"},
+			{"TiDB", "component"},
+		},
+	}
+	txns := []txnAction{
+		{
+			// etcd forbits same key op intersect(put/delete) in txn to avoid quadratic blowup??
+			err: errors.ErrMetaOpFail, // [TODO] check the detail error
+			acts: []action{
+				{
+					t:    tGet,
+					do:   kv{"hello", ""},
+					opts: []metaclient.OpOption{},
+				},
+				{
+					t:    tGet,
+					do:   kv{"hello", ""},
+					opts: []metaclient.OpOption{metaclient.WithPrefix()},
+				},
+				{
+					t:    tPut,
+					do:   kv{"hello", "world"},
+					opts: []metaclient.OpOption{},
+				},
+				{
+					t:    tDel,
+					do:   kv{"hello", ""},
+					opts: []metaclient.OpOption{},
+				},
+				{
+					t:    tGet,
+					do:   kv{"hello", ""},
+					opts: []metaclient.OpOption{metaclient.WithFromKey()},
+				},
+			},
+		},
+		{
+			acts: []action{
+				{
+					t:    tGet,
+					do:   kv{"hello", ""},
+					opts: []metaclient.OpOption{},
+					q: query{
+						expected: []kv{},
+					},
+				},
+				{
+					t:    tGet,
+					do:   kv{"hell", ""},
+					opts: []metaclient.OpOption{metaclient.WithPrefix()},
+					q: query{
+						expected: []kv{
+							{"hello1", "world1"},
+							{"hello2", "world2"},
+						},
+					},
+				},
+				{
+					t:    tPut,
+					do:   kv{"hello3", "world3"},
+					opts: []metaclient.OpOption{},
+					q: query{
+						expected: []kv{},
+					},
+				},
+				{
+					t:    tPut,
+					do:   kv{"dataflow2", "engine2"},
+					opts: []metaclient.OpOption{},
+					q: query{
+						expected: []kv{},
+					},
+				},
+				{
+					t:    tDel,
+					do:   kv{"dataflow3", ""},
+					opts: []metaclient.OpOption{},
+					q: query{
+						expected: []kv{},
+					},
+				},
+				{
+					t:    tDel,
+					do:   kv{"int", ""},
+					opts: []metaclient.OpOption{metaclient.WithPrefix()},
+					q: query{
+						expected: []kv{},
+					},
+				},
+				{
+					t:    tGet,
+					do:   kv{"", ""},
+					opts: []metaclient.OpOption{metaclient.WithFromKey()},
+					q: query{
+						expected: []kv{
+							{"TiDB", "component"},
+							{"dataflow", "engine"},
+							{"dataflow2", "engine2"},
+							{"hello1", "world1"},
+							{"hello2", "world2"},
+							{"hello3", "world3"},
+						},
+					},
+				},
+			},
+		},
+	}
 
-	// etcd forbits same key op intersect(put/delete) in txn to avoid quadratic blowup??
-	txn := cli.Txn(ctx)
-	txn = txn.Do(metaclient.OpGet("hello"), metaclient.OpGet("hello", metaclient.WithPrefix()))
-	txn.Do(metaclient.OpPut("hello", "world"))
-	txn.Do(metaclient.OpDelete("hello"))
-	txn.Do(metaclient.OpGet("", metaclient.WithFromKey()))
-	rsp, err := txn.Commit()
-	require.Error(t, err)
-	log.Printf("err:%v", err)
-	require.Nil(t, rsp)
+	prepareData(ctx, t, cli, input)
+	testTxnAction(ctx, t, cli, txns)
 
-	txn = cli.Txn(ctx)
-	txn = txn.Do(metaclient.OpGet("hello"), metaclient.OpGet("hell", metaclient.WithPrefix()))
-	txn.Do(metaclient.OpPut("hello3", "world3"), metaclient.OpPut("dataflow2", "engine2"))
-	txn = txn.Do(metaclient.OpDelete("dataflow3")).Do(metaclient.OpDelete("inte", metaclient.WithPrefix()))
-	txn.Do(metaclient.OpGet("", metaclient.WithFromKey()))
-	rsp, err = txn.Commit()
-	require.Nil(t, err)
-	require.NotNil(t, rsp)
-	require.Len(t, rsp.Responses, 7)
-
-	getRsp := rsp.Responses[0].GetResponseGet()
-	require.NotNil(t, getRsp)
-	require.Len(t, getRsp.Kvs, 0)
-	getRsp = rsp.Responses[1].GetResponseGet()
-	require.NotNil(t, getRsp)
-	require.Len(t, getRsp.Kvs, 2)
-	require.Equal(t, "hello1", string(getRsp.Kvs[0].Key))
-	require.Equal(t, "world1", string(getRsp.Kvs[0].Value))
-	require.Equal(t, "hello2", string(getRsp.Kvs[1].Key))
-	require.Equal(t, "world2", string(getRsp.Kvs[1].Value))
-
-	putRsp := rsp.Responses[2].GetResponsePut()
-	require.NotNil(t, putRsp)
-	putRsp = rsp.Responses[3].GetResponsePut()
-	require.NotNil(t, putRsp)
-
-	delRsp := rsp.Responses[4].GetResponseDelete()
-	require.NotNil(t, delRsp)
-	delRsp = rsp.Responses[5].GetResponseDelete()
-	require.NotNil(t, delRsp)
-
-	grsp := rsp.Responses[6].GetResponseGet()
-	require.NotNil(t, grsp)
-	require.Len(t, grsp.Kvs, 6)
-	require.Equal(t, string(grsp.Kvs[0].Key), "TiDB")
-	require.Equal(t, string(grsp.Kvs[0].Value), "component")
-	require.Equal(t, string(grsp.Kvs[1].Key), "dataflow")
-	require.Equal(t, string(grsp.Kvs[1].Value), "engine")
-	require.Equal(t, string(grsp.Kvs[2].Key), "dataflow2")
-	require.Equal(t, string(grsp.Kvs[2].Value), "engine2")
-	require.Equal(t, string(grsp.Kvs[3].Key), "hello1")
-	require.Equal(t, string(grsp.Kvs[3].Value), "world1")
-	require.Equal(t, string(grsp.Kvs[4].Key), "hello2")
-	require.Equal(t, string(grsp.Kvs[4].Value), "world2")
-	require.Equal(t, string(grsp.Kvs[5].Key), "hello3")
-	require.Equal(t, string(grsp.Kvs[5].Value), "world3")
+	cli.Close()
 }
 
 // In order for 'go test' to run this suite, we need to create

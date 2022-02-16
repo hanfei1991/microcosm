@@ -22,10 +22,6 @@ func makePutResp(etcdResp *clientv3.PutResponse) *metaclient.PutResponse {
 func makeGetResp(etcdResp *clientv3.GetResponse) *metaclient.GetResponse {
 	kvs := make([]*metaclient.KeyValue, 0, len(etcdResp.Kvs))
 	for _, kv := range etcdResp.Kvs {
-		if kv.Version == 0 {
-			// This key has been deleted, don't return to user
-			continue
-		}
 		kvs = append(kvs, &metaclient.KeyValue{
 			Key:   kv.Key,
 			Value: kv.Value,
