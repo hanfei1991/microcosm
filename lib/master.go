@@ -214,6 +214,10 @@ func (m *DefaultBaseMaster) Poll(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
+	if err := m.workerManager.CheckStatusUpdate(ctx); err != nil {
+		return errors.Trace(err)
+	}
+
 	if err := m.Impl.Tick(ctx); err != nil {
 		return errors.Trace(err)
 	}

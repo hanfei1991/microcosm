@@ -6,6 +6,8 @@ import (
 	"sync"
 	"time"
 
+	"go.uber.org/atomic"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/pkg/workerpool"
@@ -30,6 +32,7 @@ type workerManager interface {
 	GetWorkerHandle(id WorkerID) WorkerHandle
 	GetWorkers() map[WorkerID]WorkerHandle
 	GetStatus(id WorkerID) (*WorkerStatus, bool)
+	CheckStatusUpdate(ctx context.Context) error
 }
 
 type workerManagerImpl struct {
@@ -80,10 +83,10 @@ func newWorkerManager(
 
 		clock: clock.New(),
 
-		messageSender: messageSender,
+		messageSender:        messageSender,
 		messageHandleManager: messageHandleManager,
-		metaClient: metaClient,
-		pool: pool,
+		metaClient:           metaClient,
+		pool:                 pool,
 	}
 }
 
@@ -107,6 +110,18 @@ func (m *workerManagerImpl) IsInitialized(ctx context.Context) (bool, error) {
 	return false, nil
 }
 
+func (m *workerManagerImpl) CheckStatusUpdate(ctx context.Context) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for _, receiver := range m.statusReceivers {
+		if err := receiver.Tick(ctx); err != nil {
+			return errors.Trace(err)
+		}
+	}
+	return nil
+}
+
 func (m *workerManagerImpl) Tick(
 	ctx context.Context,
 	sender p2p.MessageSender,
@@ -114,19 +129,23 @@ func (m *workerManagerImpl) Tick(
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	// TODO gracefully handle all errors that could occur in this function
 	// respond to worker heartbeats
 	for workerID, workerInfo := range m.workerInfos {
 		// `justOnlined` indicates that the online event has not been notified,
 		// and `hasPendingHeartbeat` indicates that we have received a heartbeat and
 		// has not sent the Pong yet.
-		if workerInfo.justOnlined && workerInfo.hasPendingHeartbeat {
+		if workerInfo.justOnlined && workerInfo.hasPendingHeartbeat && workerInfo.statusInitialized.Load() {
 			workerInfo.justOnlined = false
 			onlinedWorkers = append(onlinedWorkers, workerInfo)
 		}
 
 		if workerInfo.hasTimedOut(m.clock, &m.timeoutConfig) {
 			offlinedWorkers = append(offlinedWorkers, workerInfo)
+			status := m.statusReceivers[workerID].Status()
+			m.tombstones[workerID] = &status
 			delete(m.workerInfos, workerID)
+			delete(m.statusReceivers, workerID)
 		}
 
 		if !workerInfo.hasPendingHeartbeat {
@@ -271,6 +290,18 @@ func (m *workerManagerImpl) addWorker(id WorkerID, executorNodeID p2p.NodeID) er
 			// TODO handle the error
 			log.L().Warn("failed to init StatusReceiver",
 				zap.String("master-id", m.masterID),
+				zap.String("worker-id", id),
+				zap.Error(err))
+		}
+		info, ok := m.GetWorkerInfo(id)
+		if !ok {
+			log.L().Warn("worker has been removed",
+				zap.String("master-id", m.masterID),
+				zap.String("worker-id", id))
+		}
+		if old := info.statusInitialized.Swap(true); old {
+			log.L().Panic("worker is initialized twice. Report a bug",
+				zap.String("master-id", m.masterID),
 				zap.String("worker-id", id))
 		}
 	})
@@ -286,7 +317,7 @@ func (m *workerManagerImpl) OnWorkerCreated(ctx context.Context, id WorkerID, ex
 
 	workerMetaClient := NewWorkerMetadataClient(m.masterID, m.metaClient, m.extTpi)
 	err := workerMetaClient.Store(ctx, id, &WorkerStatus{
-		Code:         WorkerStatusCreated,
+		Code: WorkerStatusCreated,
 	})
 	if err != nil {
 		return errors.Trace(err)
@@ -337,6 +368,10 @@ type WorkerInfo struct {
 	lastHeartbeatSendTime    clock.MonotonicTime
 	hasPendingHeartbeat      bool
 	justOnlined              bool
+
+	// marks whether the status has been asynchronously
+	// loaded from the metastore.
+	statusInitialized atomic.Bool
 
 	workload model.RescUnit
 }

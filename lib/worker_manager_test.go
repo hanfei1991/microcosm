@@ -41,7 +41,7 @@ func TestHeartBeatPingPongAfterCreateWorker(t *testing.T) {
 		mockMeta,
 		pool,
 		&dummyStatus{},
-		).(*workerManagerImpl)
+	).(*workerManagerImpl)
 	manager.clock = clock.NewMock()
 	manager.clock.(*clock.Mock).Set(time.Now())
 
@@ -324,7 +324,7 @@ func TestUpdateStatus(t *testing.T) {
 		&WorkerStatus{
 			Code:         WorkerStatusInit,
 			ErrorMessage: "fake",
-			Ext:          "fake ext",
+			Ext:          &dummyStatus{Val: 7},
 		})
 	require.NoError(t, err)
 
@@ -344,10 +344,18 @@ func TestUpdateStatus(t *testing.T) {
 		mockMeta,
 		pool,
 		&dummyStatus{},
-		).(*workerManagerImpl)
+	).(*workerManagerImpl)
 
 	err = manager.addWorker(workerID1, executorNodeID1)
 	require.NoError(t, err)
+
+	require.Eventually(t, func() bool {
+		info, ok := manager.GetWorkerInfo(workerID1)
+		if !ok {
+			return false
+		}
+		return info.statusInitialized.Load()
+	}, time.Second, time.Millisecond*10)
 
 	status, ok := manager.GetStatus(workerID1)
 	require.True(t, ok)
@@ -357,7 +365,7 @@ func TestUpdateStatus(t *testing.T) {
 		&WorkerStatus{
 			Code:         WorkerStatusError,
 			ErrorMessage: "fake",
-			Ext:          "fake ext",
+			Ext:          &dummyStatus{Val: 7},
 		})
 	require.NoError(t, err)
 
@@ -368,17 +376,23 @@ func TestUpdateStatus(t *testing.T) {
 		&workerStatusUpdatedMessage{Epoch: 1})
 	require.NoError(t, err)
 
+	require.Eventually(t, func() bool {
+		err := manager.CheckStatusUpdate(ctx)
+		require.NoError(t, err)
+		return manager.GetWorkerHandle(workerID1).Status().Code == WorkerStatusError
+	}, time.Second, 10*time.Millisecond)
+
 	handle := manager.GetWorkerHandle(workerID1)
 	require.NotNil(t, handle)
 	require.False(t, handle.IsTombStone())
 	require.Equal(t, &WorkerStatus{
 		Code:         WorkerStatusError,
 		ErrorMessage: "fake",
-		Ext:          "fake ext",
+		Ext:          &dummyStatus{Val: 7},
 	}, handle.Status())
 
-	wg.Wait()
 	cancel()
+	wg.Wait()
 }
 
 func TestWorkerTimedOut(t *testing.T) {
@@ -408,19 +422,28 @@ func TestWorkerTimedOut(t *testing.T) {
 		mockMeta,
 		pool,
 		&dummyStatus{},
-		).(*workerManagerImpl)
+	).(*workerManagerImpl)
 	manager.clock = clock.NewMock()
 	manager.clock.(*clock.Mock).Set(time.Now())
 
 	err := manager.addWorker(workerID1, executorNodeID1)
 	require.NoError(t, err)
 
-	offlined, onlined := manager.Tick(ctx, msgSender)
-	require.Empty(t, offlined)
-	require.Empty(t, onlined)
+	err = manager.HandleHeartbeat(&HeartbeatPingMessage{
+		SendTime:     manager.clock.Mono(),
+		FromWorkerID: workerID1,
+		Epoch:        1,
+	}, executorNodeID1)
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool {
+		offlined, onlined := manager.Tick(ctx, msgSender)
+		require.Empty(t, offlined)
+		return len(onlined) == 1
+	}, time.Second, 10*time.Millisecond)
 
 	manager.clock.(*clock.Mock).Add(defaultTimeoutConfig.workerTimeoutDuration * 2)
-	offlined, onlined = manager.Tick(ctx, msgSender)
+	offlined, onlined := manager.Tick(ctx, msgSender)
 	require.Len(t, offlined, 1)
 	require.Empty(t, onlined)
 	require.Len(t, manager.tombstones, 1)
@@ -430,9 +453,6 @@ func TestWorkerTimedOut(t *testing.T) {
 	require.Contains(t, workers, workerID1)
 	handle := workers[workerID1]
 	require.True(t, handle.IsTombStone())
-	require.Equal(t, &WorkerStatus{
-		Code: WorkerStatusError,
-	}, handle.Status())
 
 	cancel()
 	wg.Wait()
@@ -487,9 +507,11 @@ func TestWorkerTimedOutWithPendingHeartbeat(t *testing.T) {
 	require.True(t, info.hasPendingHeartbeat)
 
 	msgSender.SetBlocked(true)
-	offlined, onlined = manager.Tick(ctx, msgSender)
-	require.Len(t, onlined, 1)
-	require.Empty(t, offlined)
+	require.Eventually(t, func() bool {
+		offlined, onlined := manager.Tick(ctx, msgSender)
+		require.Empty(t, offlined)
+		return len(onlined) == 1
+	}, time.Second, 10*time.Millisecond)
 
 	manager.clock.(*clock.Mock).Add(defaultTimeoutConfig.workerTimeoutDuration * 2)
 	offlined, onlined = manager.Tick(ctx, msgSender)
@@ -502,9 +524,6 @@ func TestWorkerTimedOutWithPendingHeartbeat(t *testing.T) {
 	require.Contains(t, workers, workerID1)
 	handle := workers[workerID1]
 	require.True(t, handle.IsTombStone())
-	require.Equal(t, &WorkerStatus{
-		Code: WorkerStatusError,
-	}, handle.Status())
 
 	cancel()
 	wg.Wait()

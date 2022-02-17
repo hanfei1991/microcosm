@@ -14,7 +14,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/workerpool"
 	"go.uber.org/zap"
 )
@@ -71,7 +70,7 @@ type DefaultBaseWorker struct {
 	masterID     MasterID
 
 	workerMetaClient *WorkerMetadataClient
-	statusSender *StatusSender
+	statusSender     *StatusSender
 
 	id            WorkerID
 	timeoutConfig TimeoutConfig
@@ -83,6 +82,7 @@ type DefaultBaseWorker struct {
 
 	cancelMu      sync.Mutex
 	cancelBgTasks context.CancelFunc
+	cancelPool    context.CancelFunc
 
 	clock clock.Clock
 }
@@ -105,6 +105,8 @@ func NewBaseWorker(
 		id:            workerID,
 		timeoutConfig: defaultTimeoutConfig,
 
+		pool: workerpool.NewDefaultAsyncPool(1),
+
 		errCh: make(chan error, 1),
 		clock: clock.New(),
 	}
@@ -116,10 +118,15 @@ func (w *DefaultBaseWorker) Workload() model.RescUnit {
 
 func (w *DefaultBaseWorker) Init(ctx context.Context) error {
 	// TODO refine this part
+	poolCtx, cancelPool := context.WithCancel(context.TODO())
+	w.cancelMu.Lock()
+	w.cancelPool = cancelPool
+	w.cancelMu.Unlock()
+
 	w.wg.Add(1)
 	go func() {
 		defer w.wg.Done()
-		err := w.pool.Run(context.TODO())
+		err := w.pool.Run(poolCtx)
 		log.L().Info("workerpool exited",
 			zap.String("worker-id", w.id),
 			zap.Error(err))
@@ -154,6 +161,12 @@ func (w *DefaultBaseWorker) Init(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
+	if err := w.UpdateStatus(ctx, WorkerStatus{
+		Code: WorkerStatusInit,
+	}); err != nil {
+		return errors.Trace(err)
+	}
+
 	w.startBackgroundTasks()
 	return nil
 }
@@ -171,6 +184,10 @@ func (w *DefaultBaseWorker) Poll(ctx context.Context) error {
 	default:
 	}
 
+	if err := w.statusSender.Tick(ctx); err != nil {
+		return errors.Trace(err)
+	}
+
 	if err := w.Impl.Tick(ctx); err != nil {
 		return errors.Trace(err)
 	}
@@ -180,6 +197,7 @@ func (w *DefaultBaseWorker) Poll(ctx context.Context) error {
 func (w *DefaultBaseWorker) Close(ctx context.Context) error {
 	w.cancelMu.Lock()
 	w.cancelBgTasks()
+	w.cancelPool()
 	w.cancelMu.Unlock()
 
 	closeCtx, cancel := context.WithTimeout(context.Background(), time.Second*3)
@@ -460,32 +478,6 @@ func (m *masterClient) SendHeartBeat(ctx context.Context, clock clock.Clock) err
 	}
 	if !ok {
 		log.L().Warn("sending heartbeat ping encountered ErrPeerMessageSendTryAgain")
-	}
-	return nil
-}
-
-func (m *masterClient) SendStatus(ctx context.Context, status WorkerStatus) error {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	statusUpdateMessage := &StatusUpdateMessage{
-		WorkerID: m.workerID,
-		Status:   status,
-	}
-
-	if err := statusUpdateMessage.Status.marshalExt(); err != nil {
-		return errors.Trace(err)
-	}
-
-	ok, err := m.messageSender.SendToNode(ctx, m.masterNode, StatusUpdateTopic(m.masterID, m.workerID), statusUpdateMessage)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if !ok {
-		if cerror.ErrPeerMessageSendTryAgain.Equal(err) {
-			log.L().Warn("sending status update encountered ErrPeerMessageSendTryAgain")
-			return nil
-		}
 	}
 	return nil
 }

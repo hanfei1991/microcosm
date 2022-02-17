@@ -208,7 +208,7 @@ func NewStatusReceiver(
 // Init should be called to initialize a StatusReceiver.
 // NOTE: this function can be blocked by IO to the metastore.
 func (r *StatusReceiver) Init(ctx context.Context) error {
-	topic := StatusUpdateTopic(r.workerMetaClient.MasterID(), r.workerID)
+	topic := workerStatusUpdatedTopic(r.workerMetaClient.MasterID(), r.workerID)
 	ok, err := r.messageHandlerManager.RegisterHandler(
 		ctx,
 		topic,
@@ -223,6 +223,7 @@ func (r *StatusReceiver) Init(ctx context.Context) error {
 				return nil
 			}
 			r.hasPendingNotification.Store(true)
+			log.L().Info("notification stored")
 			return nil
 		})
 	if err != nil {
@@ -256,6 +257,9 @@ func (r *StatusReceiver) Status() WorkerStatus {
 
 // Tick should be called periodically to drive the logic internal to StatusReceiver.
 func (r *StatusReceiver) Tick(ctx context.Context) error {
+	if r.hasPendingNotification.Load() {
+		log.L().Info("has pending notification")
+	}
 	// TODO make the time interval configurable
 	needFetchStatus := r.hasPendingNotification.Swap(false) ||
 		r.clock.Since(r.lastStatusUpdated.Load()) > time.Second*10
@@ -275,6 +279,7 @@ func (r *StatusReceiver) Tick(ctx context.Context) error {
 		status, err := r.workerMetaClient.Load(ctx, r.workerID)
 		if err != nil {
 			r.onError(err)
+			return
 		}
 
 		r.statusMu.Lock()
