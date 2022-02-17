@@ -173,6 +173,9 @@ type mockTxn struct {
 }
 
 func (txn *mockTxn) Do(ops ...Op) Txn {
+	txn.m.Lock()
+	defer txn.m.Unlock()
+
 	txn.ops = append(txn.ops, ops...)
 	return txn
 }
@@ -561,6 +564,9 @@ type KVClientMock interface {
 // Implement KVClientMock inteface
 
 func (m *kvclientMock) ExpectPut(key, value string) *PutExpect {
+	m.Lock()
+	defer m.Unlock()
+
 	e := &PutExpect{
 		key:   key,
 		value: value,
@@ -570,6 +576,9 @@ func (m *kvclientMock) ExpectPut(key, value string) *PutExpect {
 }
 
 func (m *kvclientMock) ExpectGet(key string) *GetExpect {
+	m.Lock()
+	defer m.Unlock()
+
 	e := &GetExpect{
 		key: key,
 	}
@@ -578,6 +587,9 @@ func (m *kvclientMock) ExpectGet(key string) *GetExpect {
 }
 
 func (m *kvclientMock) ExpectDelete(key string) *DeleteExpect {
+	m.Lock()
+	defer m.Unlock()
+
 	e := &DeleteExpect{
 		key: key,
 	}
@@ -586,6 +598,9 @@ func (m *kvclientMock) ExpectDelete(key string) *DeleteExpect {
 }
 
 func (m *kvclientMock) ExpectTxn() *TxnExpect {
+	m.Lock()
+	defer m.Unlock()
+
 	e := &TxnExpect{
 		ops: make([]Op, 0, DefaultOpSize),
 	}
@@ -594,6 +609,9 @@ func (m *kvclientMock) ExpectTxn() *TxnExpect {
 }
 
 func (m *kvclientMock) ExpectClose() *CloseExpect {
+	m.Lock()
+	defer m.Unlock()
+
 	e := &CloseExpect{}
 	m.expects = append(m.expects, e)
 	return e
