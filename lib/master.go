@@ -77,6 +77,9 @@ type BaseMaster interface {
 	GetWorkers() map[WorkerID]WorkerHandle
 	Close(ctx context.Context) error
 	OnError(err error)
+	// RegisterWorker registers worker handler only, the worker is expected to be running
+	RegisterWorker(ctx context.Context, workerID WorkerID) error
+	// CreateWorker registers worker handler and dispatches worker to executor
 	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error)
 	GetWorkerStatusExtTypeInfo() interface{}
 }
@@ -110,6 +113,7 @@ type DefaultBaseMaster struct {
 	advertiseAddr string
 	nodeID        p2p.NodeID
 	timeoutConfig TimeoutConfig
+	masterMetaExt *MasterMetaExt
 
 	// components for easier unit testing
 	uuidGen uuid.Generator
@@ -131,10 +135,16 @@ func NewBaseMaster(
 	var (
 		nodeID        p2p.NodeID
 		advertiseAddr string
+		masterMetaExt = &MasterMetaExt{}
 	)
 	if ctx != nil {
 		nodeID = ctx.Environ.NodeID
 		advertiseAddr = ctx.Environ.Addr
+		metaBytes := ctx.Environ.MasterMetaExt
+		err := masterMetaExt.Unmarshal(metaBytes)
+		if err != nil {
+			log.L().Warn("invalid master meta", zap.ByteString("data", metaBytes), zap.Error(err))
+		}
 	}
 	return &DefaultBaseMaster{
 		Impl:                  impl,
@@ -148,6 +158,7 @@ func NewBaseMaster(
 		clock:                 clock.New(),
 
 		timeoutConfig: defaultTimeoutConfig,
+		masterMetaExt: masterMetaExt,
 
 		errCh:   make(chan error, 1),
 		closeCh: make(chan struct{}),
@@ -378,6 +389,7 @@ func (m *DefaultBaseMaster) initMetadata(ctx context.Context) (isInit bool, epoc
 	masterMeta.Addr = m.advertiseAddr
 	masterMeta.NodeID = m.nodeID
 	masterMeta.Epoch = epoch
+	masterMeta.MasterMetaExt = m.masterMetaExt
 
 	if err := metaClient.Store(ctx, masterMeta); err != nil {
 		return false, 0, errors.Trace(err)
@@ -437,7 +449,7 @@ func (m *DefaultBaseMaster) registerHandlerForWorker(ctx context.Context, worker
 func (m *DefaultBaseMaster) generateWorkerID(workerType WorkerType, config WorkerConfig) string {
 	switch workerType {
 	case CvsJobMaster, FakeJobMaster:
-		masterCfg, ok := config.(*JobMasterV2)
+		masterCfg, ok := config.(*MasterMetaExt)
 		if !ok {
 			log.L().Warn("invalid master config, will gen random worker id")
 		}
@@ -445,6 +457,12 @@ func (m *DefaultBaseMaster) generateWorkerID(workerType WorkerType, config Worke
 	default:
 	}
 	return m.uuidGen.NewString()
+}
+
+func (m *DefaultBaseMaster) RegisterWorker(ctx context.Context, workerID WorkerID) error {
+	registerHandlerCtx, cancelRegisterHandler := context.WithTimeout(ctx, time.Second*1)
+	defer cancelRegisterHandler()
+	return m.registerHandlerForWorker(registerHandlerCtx, workerID)
 }
 
 func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error) {
@@ -464,8 +482,29 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 		return "", derror.ErrMasterConcurrencyExceeded.GenWithStackByArgs()
 	}
 
+	// register worker haneler before dispatching worker to executor.
+	// Because dispatchTask could fail, we must ensure register handler happens
+	// before unregister handler, in case of zombie handler.
+	if err := m.RegisterWorker(context.TODO(), workerID); err != nil {
+		return "", errors.Trace(err)
+	}
+
 	go func() {
-		defer m.createWorkerQuota.Release()
+		// TODO make the timeout configurable
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		needUnregisterWorkerHandler := false
+		defer func() {
+			m.createWorkerQuota.Release()
+			if needUnregisterWorkerHandler {
+				ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+				defer cancel()
+				if err := m.unregisterMessageHandler(ctx, workerID); err != nil {
+					m.OnError(errors.Trace(err))
+				}
+			}
+		}()
 
 		// When CreateWorker failed, we need to pass the worker id to
 		// OnWorkerDispatched, so we use a dummy WorkerHandle.
@@ -483,6 +522,7 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 			// TODO (zixiong) make the timeout configurable
 			time.Second*10)
 		if err != nil {
+			needUnregisterWorkerHandler = true
 			err1 := m.Impl.OnWorkerDispatched(dispatchFailedDummyHandler, errors.Trace(err))
 			if err1 != nil {
 				m.OnError(errors.Trace(err1))
@@ -491,12 +531,13 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 		}
 		schedule := resp.GetSchedule()
 		if len(schedule) != 1 {
-			panic("unreachable")
+			log.L().Panic("unexpected schedule result", zap.Any("schedule", schedule))
 		}
 		executorID := model.ExecutorID(schedule[0].ExecutorId)
 
 		err = m.executorClientManager.AddExecutor(executorID, schedule[0].Addr)
 		if err != nil {
+			needUnregisterWorkerHandler = true
 			err1 := m.Impl.OnWorkerDispatched(dispatchFailedDummyHandler, errors.Trace(err))
 			if err1 != nil {
 				m.OnError(errors.Trace(err1))
@@ -514,6 +555,7 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 			},
 		})
 		if err != nil {
+			needUnregisterWorkerHandler = true
 			err1 := m.Impl.OnWorkerDispatched(dispatchFailedDummyHandler, errors.Trace(err))
 			if err1 != nil {
 				m.OnError(errors.Trace(err1))
@@ -524,6 +566,7 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 		log.L().Info("Worker dispatched", zap.Any("response", dispatchTaskResp))
 		errCode := dispatchTaskResp.GetErrorCode()
 		if errCode != pb.DispatchTaskErrorCode_OK {
+			needUnregisterWorkerHandler = true
 			err1 := m.Impl.OnWorkerDispatched(dispatchFailedDummyHandler,
 				errors.Errorf("dispatch worker failed with error code: %d", errCode))
 			if err1 != nil {
@@ -532,8 +575,8 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 			return
 		}
 
-		// TODO figure out what context to use here
-		if err := m.workerManager.OnWorkerCreated(context.TODO(), workerID, p2p.NodeID(executorID)); err != nil {
+		if err := m.workerManager.OnWorkerCreated(ctx, workerID, p2p.NodeID(executorID)); err != nil {
+			needUnregisterWorkerHandler = true
 			m.OnError(errors.Trace(err))
 		}
 		handle := m.workerManager.GetWorkerHandle(workerID)
@@ -543,12 +586,6 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 		}
 	}()
 
-	registerHandlerCtx, cancelRegisterHandler := context.WithTimeout(context.TODO(), time.Second*1)
-	defer cancelRegisterHandler()
-
-	if err := m.registerHandlerForWorker(registerHandlerCtx, workerID); err != nil {
-		return "", errors.Trace(err)
-	}
 	return workerID, nil
 }
 

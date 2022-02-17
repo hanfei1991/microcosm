@@ -15,6 +15,7 @@ import (
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/clock"
+	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
@@ -87,6 +88,33 @@ func MockBaseMasterCreateWorker(
 		ErrorCode: 1,
 	}}, nil)
 
+	master.uuidGen.(*uuid.MockGenerator).Push(workerID)
+}
+
+func MockBaseMasterCreateWorkerMetScheduleTaskError(
+	t *testing.T,
+	master *DefaultBaseMaster,
+	workerType WorkerType,
+	config WorkerConfig,
+	cost model.RescUnit,
+	masterID MasterID,
+	workerID WorkerID,
+	executorID model.ExecutorID,
+) {
+	master.uuidGen = uuid.NewMock()
+
+	expectedSchedulerReq := &pb.TaskSchedulerRequest{Tasks: []*pb.ScheduleTask{{
+		Task: &pb.TaskRequest{
+			Id: 0,
+		},
+		Cost: int64(cost),
+	}}}
+	master.serverMasterClient.(*client.MockServerMasterClient).On(
+		"ScheduleTask",
+		mock.Anything,
+		expectedSchedulerReq,
+		mock.Anything).Return(
+		&pb.TaskSchedulerResponse{}, errors.ErrClusterResourceNotEnough.FastGenByArgs())
 	master.uuidGen.(*uuid.MockGenerator).Push(workerID)
 }
 
