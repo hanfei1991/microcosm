@@ -9,7 +9,9 @@ import (
 	"math/rand"
 	"net"
 	"os"
+	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -165,6 +167,7 @@ type DataRWServer struct {
 	ctx           context.Context
 	mu            sync.Mutex
 	fileWriterMap map[string]*bufio.Writer
+	ready         chan struct{}
 }
 
 func NewDataRWServer(ctx context.Context) *DataRWServer {
@@ -193,6 +196,32 @@ func (*DataRWServer) ListFiles(ctx context.Context, folder *pb.ListFilesReq) (*p
 		}
 	}
 	return &pb.ListFilesResponse{FileNames: files}, nil
+}
+
+func (s *DataRWServer) IsReady(ctx context.Context, req *pb.IsReadyRequest) (*pb.IsReadyResponse, error) {
+	select {
+	case <-s.ready:
+		return &pb.IsReadyResponse{Ready: true}, nil
+	default:
+		return &pb.IsReadyResponse{Ready: false}, nil
+	}
+}
+
+func (s *DataRWServer) CheckDir(ctx context.Context, req *pb.CheckDirRequest) (*pb.CheckDirResponse, error) {
+	dir := req.Dir
+	for path := range s.fileWriterMap {
+		name := filepath.Base(path)
+		destPath := filepath.Join(dir, name)
+		cmd := exec.Command("diff", path, destPath)
+		stdout, err := cmd.Output()
+		if err != nil {
+			return &pb.CheckDirResponse{ErrMsg: err.Error(), ErrFileName: destPath}, nil
+		}
+		if len(stdout) > 0 {
+			return &pb.CheckDirResponse{ErrMsg: err.Error(), ErrFileName: destPath}, nil
+		}
+	}
+	return &pb.CheckDirResponse{}, nil
 }
 
 func (s *DataRWServer) ReadLines(req *pb.ReadLinesRequest, stream pb.DataRWService_ReadLinesServer) error {

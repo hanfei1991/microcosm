@@ -2,6 +2,7 @@ package cvs
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/hanfei1991/microcosm/executor/worker"
 
@@ -50,14 +51,19 @@ func RegisterWorker() {
 	constructor := func(ctx *dcontext.Context, id lib.WorkerID, masterID lib.MasterID, config lib.WorkerConfig) lib.Worker {
 		return NewCVSJobMaster(ctx, id, masterID, config)
 	}
-	factory := registry.NewSimpleWorkerFactory(constructor, &Config{})
+	factory := registry.NewSimpleWorkerFactory(constructor, &lib.MasterMetaExt{})
 	registry.GlobalWorkerRegistry().MustRegisterWorkerType(lib.CvsJobMaster, factory)
 }
 
 func NewCVSJobMaster(ctx *dcontext.Context, workerID lib.WorkerID, _ lib.MasterID, conf lib.WorkerConfig) *JobMaster {
 	jm := &JobMaster{}
 	jm.workerID = workerID
-	jm.syncInfo = conf.(*Config)
+	jm.syncInfo = &Config{}
+	configBytes := conf.(*lib.MasterMetaExt).Config
+	err := json.Unmarshal(configBytes, jm.syncInfo)
+	if err != nil {
+		log.L().Panic(err.Error())
+	}
 	jm.syncFilesInfo = make(map[lib.WorkerID]*workerInfo)
 	deps := ctx.Dependencies
 
@@ -78,6 +84,7 @@ func NewCVSJobMaster(ctx *dcontext.Context, workerID lib.WorkerID, _ lib.MasterI
 
 func (jm *JobMaster) InitImpl(ctx context.Context) error {
 	if jm.syncInfo.DstHost == jm.syncInfo.SrcHost && jm.syncInfo.SrcDir == jm.syncInfo.DstDir {
+		log.L().Error("config file failed", zap.Any("config", *jm.syncInfo))
 		return &errorInfo{info: "bad configure file ,make sure the source address is not the same as the destination"}
 	}
 	log.L().Info("initializing the cvs jobmaster  ", zap.Any("id :", jm.workerID))
