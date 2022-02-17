@@ -275,6 +275,16 @@ func (r *Rows) AddRows(kvs ...*KeyValue) *Rows {
 	return r
 }
 
+func (r *Rows) String() string {
+	msg := "["
+	for _, row := range r.rows {
+		msg += fmt.Sprintf("{%s, %s},", string(row.Key), string(row.Value))
+	}
+	msg += "]"
+
+	return msg
+}
+
 // TxnRows is the result for a single Txn.Commit() response
 // Use for TxnExpect.WillReturnResult
 type TxnRows struct {
@@ -290,6 +300,16 @@ func NewTxnRows() *TxnRows {
 func (t *TxnRows) AddRows(rows ...*Rows) *TxnRows {
 	t.rowss = append(t.rowss, rows...)
 	return t
+}
+
+func (t *TxnRows) String() string {
+	msg := "["
+	for _, rows := range t.rowss {
+		msg += fmt.Sprintf("[%s],", rows.String())
+	}
+	msg += "]"
+
+	return msg
 }
 
 // an expectation interface
@@ -403,8 +423,7 @@ func (e *GetExpect) String() string {
 		msg += fmt.Sprintf(", which should return error: %s", e.err)
 	}
 
-	// [TODO]
-	msg += fmt.Sprintf(", which should return result:%s", "TODO")
+	msg += fmt.Sprintf(", which should return result:%s", e.result)
 	return msg
 }
 
@@ -472,8 +491,13 @@ func (e *TxnExpect) String() string {
 		msg += fmt.Sprintf(", which should return error: %s", e.err)
 	}
 
-	// [TODO]
-	msg += fmt.Sprintf(", which should with ops and result:%s", "TODO")
+	ost := "["
+	for _, op := range e.ops {
+		ost += fmt.Sprintf("{t:%d, key:%s, value:%s},", op.T, op.KeyBytes(), op.ValueBytes())
+	}
+	ost += "]"
+
+	msg += fmt.Sprintf(", which should with ops:%s and result:%s", ost, e.result)
 	return msg
 }
 

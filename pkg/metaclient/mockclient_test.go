@@ -27,8 +27,10 @@ type kv struct {
 
 type actUnit struct {
 	a action
-	e expect
-	r result
+	// for txn
+	ta []action
+	e  expect
+	r  result
 }
 
 type action struct {
@@ -40,6 +42,9 @@ type expect struct {
 	action
 	err error
 	res []kv
+	// for txn
+	dos  []action
+	ress [][]kv
 }
 
 type result struct {
@@ -47,9 +52,42 @@ type result struct {
 	err error
 }
 
+func checkTxnEqual(acts []action, expected [][]kv, actual *TxnResponse) bool {
+	// empty return
+	if len(expected) == 0 {
+		// check if all Op response is empty
+		for i, r := range actual.Responses {
+			act := acts[i]
+			if act.t == aGet {
+				rr := r.GetResponseGet()
+				if len(rr.Kvs) != 0 {
+					return false
+				}
+			}
+		}
+		return true
+	}
+
+	if len(expected) != len(actual.Responses) {
+		return false
+	}
+
+	for i, r := range actual.Responses {
+		act := acts[i]
+		if act.t == aGet {
+			rr := r.GetResponseGet()
+			if !checkEqual(expected[i], rr.Kvs) {
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
 func checkEqual(expected []kv, actual []*KeyValue) bool {
 	// empty return
-	if expected == nil && len(actual) == 0 {
+	if len(expected) == 0 && len(actual) == 0 {
 		return true
 	}
 
@@ -112,10 +150,32 @@ func makeExpect(t *testing.T, mock KVClientMock, exp expect) {
 		if exp.err != nil {
 			eg.WillReturnError(exp.err)
 		}
+	case aTxn:
+		eg := mock.ExpectTxn()
+		require.NotNil(t, eg)
+		for _, a := range exp.dos {
+			switch a.t {
+			case aGet:
+				eg.WillDo(OpGet(a.do.key))
+			case aPut:
+				eg.WillDo(OpPut(a.do.key, a.do.value))
+			case aDel:
+				eg.WillDo(OpDelete(a.do.key))
+			default:
+				// do nothing
+			}
+		}
+		if exp.err != nil {
+			eg.WillReturnError(exp.err)
+		} else if exp.ress != nil {
+			tr := NewTxnRows()
+			for _, res := range exp.ress {
+				tr.AddRows(makeRows(res))
+			}
+			eg.WillReturnResult(tr)
+		}
 	case aNone:
 		// do nothing
-	case aTxn:
-		// [TODO]
 	}
 }
 
@@ -163,15 +223,35 @@ func testActions(t *testing.T, cli KVClient, mock KVClientMock, units []actUnit)
 			} else {
 				require.Nil(t, err)
 			}
+		case aTxn:
+			txn := cli.Txn(ctx)
+			for _, a := range unit.ta {
+				switch a.t {
+				case aGet:
+					txn.Do(OpGet(a.do.key))
+				case aPut:
+					txn.Do(OpPut(a.do.key, a.do.value))
+				case aDel:
+					txn.Do(OpDelete(a.do.key))
+				default:
+					// do nothing
+				}
+			}
+			rsp, err := txn.Commit()
+			if res.err != nil {
+				require.Error(t, err)
+				require.Regexp(t, res.err.Error(), err.Error())
+			} else {
+				require.True(t, checkTxnEqual(unit.ta, exp.ress, rsp))
+			}
 		case aNone:
 			// do nothing
-		case aTxn:
-			// [TODO]
 		}
 	}
 }
 
 func TestNormalMockKVClient(t *testing.T) {
+	t.Parallel()
 	cli, mock := NewMockKVClient("127.0.0.1:123", "test")
 
 	normalUnits := []actUnit{
@@ -290,6 +370,88 @@ func TestNormalMockKVClient(t *testing.T) {
 				err: fmt.Errorf("inject error for Delete*"),
 			},
 		},
+		// normal txn with expected error
+		{
+			a: action{
+				t: aTxn,
+			},
+			ta: []action{
+				{
+					t:  aGet,
+					do: kv{key: "txn2", value: "world"},
+				},
+				{
+					t:  aPut,
+					do: kv{key: "txn3", value: "world"},
+				},
+			},
+			e: expect{
+				action: action{
+					t: aTxn,
+				},
+				dos: []action{
+					{
+						t:  aGet,
+						do: kv{key: "txn2", value: "world"},
+					},
+					{
+						t:  aPut,
+						do: kv{key: "txn3", value: "world"},
+					},
+				},
+				ress: [][]kv{
+					{
+						{"txn4", "world"},
+						{"txn5", "world"},
+					},
+					{},
+				},
+				err: cerrors.ErrMetaOpFail.GenWithStackByArgs("inject error for Txn"),
+			},
+			r: result{
+				err: fmt.Errorf("inject error for Txn*"),
+			},
+		},
+		// normal txn with expected result
+		{
+			a: action{
+				t: aTxn,
+			},
+			ta: []action{
+				{
+					t:  aGet,
+					do: kv{key: "txn4", value: "world"},
+				},
+				{
+					t:  aPut,
+					do: kv{key: "txn5", value: "world"},
+				},
+			},
+			e: expect{
+				action: action{
+					t:  aTxn,
+					do: kv{key: "delete2", value: "world"},
+				},
+				dos: []action{
+					{
+						t:  aGet,
+						do: kv{key: "txn4", value: "world"},
+					},
+					{
+						t:  aPut,
+						do: kv{key: "txn5", value: "world"},
+					},
+				},
+				ress: [][]kv{
+					{
+						{"txn6", "world"},
+						{"txn7", "world"},
+					},
+					{},
+				},
+			},
+			r: result{},
+		},
 		// normal Close with normal result
 		{
 			a: action{
@@ -322,6 +484,7 @@ func TestNormalMockKVClient(t *testing.T) {
 }
 
 func TestAbnormalMockKVClient(t *testing.T) {
+	t.Parallel()
 	cli, mock := NewMockKVClient("127.0.0.1:123", "test")
 
 	abnormalUnits := []actUnit{
@@ -394,6 +557,129 @@ func TestAbnormalMockKVClient(t *testing.T) {
 				action: action{
 					t: aNone,
 				},
+			},
+		},
+		// txn with exceed expect
+		{
+			a: action{
+				t: aTxn,
+			},
+			ta: []action{
+				{
+					t:  aPut,
+					do: kv{key: "txn7", value: "world"},
+				},
+			},
+			e: expect{
+				action: action{
+					t: aNone,
+				},
+			},
+			r: result{
+				err: fmt.Errorf("exceed total expectation size*"),
+			},
+		},
+		// txn with wrong expectation
+		{
+			a: action{
+				t: aTxn,
+			},
+			ta: []action{
+				{
+					t:  aPut,
+					do: kv{key: "txn7", value: "world"},
+				},
+			},
+			e: expect{
+				action: action{
+					t:  aPut,
+					do: kv{key: "get1", value: "world"},
+				},
+			},
+			r: result{
+				err: fmt.Errorf("call to Txn is not expected, next expectation*"),
+			},
+		},
+		// consume last put expectation
+		{
+			a: action{
+				t:  aPut,
+				do: kv{key: "get1", value: "world"},
+			},
+			e: expect{
+				action: action{
+					t: aNone,
+				},
+			},
+		},
+		// Txn with unmatch expectation, Op unmatch
+		{
+			a: action{
+				t: aTxn,
+			},
+			ta: []action{
+				{
+					t:  aGet,
+					do: kv{key: "txn7", value: "world"},
+				},
+			},
+			e: expect{
+				action: action{
+					t: aTxn,
+				},
+				dos: []action{
+					{
+						t:  aGet,
+						do: kv{key: "txn8", value: "world"},
+					},
+				},
+			},
+			r: result{
+				err: fmt.Errorf("Txn expectation is unmatch, next expectation is*"),
+			},
+		},
+		// consume last txn expectation
+		{
+			a: action{
+				t: aTxn,
+			},
+			ta: []action{
+				{
+					t:  aGet,
+					do: kv{key: "txn8", value: "world"},
+				},
+			},
+			e: expect{
+				action: action{
+					t: aNone,
+				},
+			},
+		},
+		// Txn with unmatch expectation, Op size and result size unmatch
+		{
+			a: action{
+				t: aTxn,
+			},
+			ta: []action{
+				{
+					t:  aGet,
+					do: kv{key: "txn9", value: "world"},
+				},
+			},
+			e: expect{
+				action: action{
+					t: aTxn,
+				},
+				dos: []action{
+					{
+						t:  aGet,
+						do: kv{key: "txn10", value: "world"},
+					},
+				},
+				ress: [][]kv{},
+			},
+			r: result{
+				err: fmt.Errorf("Txn expectation is unmatch, next expectation is*"),
 			},
 		},
 	}
