@@ -54,6 +54,7 @@ var (
 	ErrDuplicateWorkerID              = errors.Normalize("duplicate worker ID encountered: %s, report a bug", errors.RFCCodeText("DFLOW:ErrDuplicateWorkerID"))
 	ErrMasterClosed                   = errors.Normalize("master has been closed explicitly: master ID %s", errors.RFCCodeText("DFLOW:ErrMasterClosed"))
 	ErrMasterConcurrencyExceeded      = errors.Normalize("master has reached concurrency quota", errors.RFCCodeText("DFLOW:ErrMasterConcurrencyExceeded"))
+	ErrMasterInvalidMeta              = errors.Normalize("invalid master meta data: %s", errors.RFCCodeText("DFLOW:ErrMasterInvalidMeta"))
 
 	ErrWorkerTypeNotFound         = errors.Normalize("worker type is not found: type %d", errors.RFCCodeText("DFLOW:ErrWorkerTypeNotFound"))
 	ErrWorkerNotFound             = errors.Normalize("worker is not found: worker ID %s", errors.RFCCodeText("DFLOW:ErrWorkerNotFound"))
@@ -87,10 +88,11 @@ var (
 
 	// meta related errors
 	ErrMetaNewClientFail   = errors.Normalize("create meta client fail", errors.RFCCodeText("DFLOW:ErrMetaNewClientFail"))
-	ErrMetaOpFail          = errors.Normalize("meta operation fail:%s", errors.RFCCodeText("DFLOW:ErrMetaOpFail"))
+	ErrMetaOpFail          = errors.Normalize("meta operation fail:%v", errors.RFCCodeText("DFLOW:ErrMetaOpFail"))
 	ErrMetaOptionInvalid   = errors.Normalize("meta option invalid", errors.RFCCodeText("DFLOW:ErrMetaOptionInvalid"))
 	ErrMetaOptionConflict  = errors.Normalize("WithRange/WithPrefix/WithFromKey, more than one option are used", errors.RFCCodeText("DFLOW:ErrMetaOptionConflict"))
 	ErrMetaEmptyKey        = errors.Normalize("meta empty key", errors.RFCCodeText("DFLOW:ErrMetaEmptyKey"))
 	ErrMetaRevisionUnmatch = errors.Normalize("meta revision unmatch", errors.RFCCodeText("DFLOW:ErrMetaRevisionUnmatch"))
 	ErrMetaNestedTxn       = errors.Normalize("meta unsupported nested txn", errors.RFCCodeText("DFLOW:ErrMetaNestedTxn"))
+	ErrMetaCommittedTxn    = errors.Normalize("meta already committed txn", errors.RFCCodeText("DFLOW:ErrMetaCommittedTxn"))
 )

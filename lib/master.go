@@ -77,6 +77,9 @@ type BaseMaster interface {
 	GetWorkers() map[WorkerID]WorkerHandle
 	Close(ctx context.Context) error
 	OnError(err error)
+	// RegisterWorker registers worker handler only, the worker is expected to be running
+	RegisterWorker(ctx context.Context, workerID WorkerID) error
+	// CreateWorker registers worker handler and dispatches worker to executor
 	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error)
 	GetWorkerStatusExtTypeInfo() interface{}
 }
@@ -443,20 +446,37 @@ func (m *DefaultBaseMaster) registerHandlerForWorker(ctx context.Context, worker
 	return nil
 }
 
-// generateWorkerID assigns a new worker id.
-// When creating a job master, job manager provides a pre allocated ID, in other
-// cases, we need to generate a random WorkerID.
-func (m *DefaultBaseMaster) generateWorkerID(workerType WorkerType, config WorkerConfig) string {
+// prepareWorkerConfig extracts information from WorkerConfig into detail fields.
+// - If workerType is master type, the config is a `*MasterMetaExt` struct and
+//   contains pre allocated maseter ID, and json marshalled config.
+// - If workerType is worker type, the config is a user defined config struct, we
+//   marshal it to byte slice as returned config, and generate a random WorkerID.
+func (m *DefaultBaseMaster) prepareWorkerConfig(
+	workerType WorkerType, config WorkerConfig,
+) (rawConfig []byte, workerID string, err error) {
 	switch workerType {
 	case CvsJobMaster, FakeJobMaster:
 		masterCfg, ok := config.(*MasterMetaExt)
 		if !ok {
-			log.L().Warn("invalid master config, will gen random worker id")
+			err = derror.ErrMasterInvalidMeta.GenWithStackByArgs(config)
+			return
 		}
-		return masterCfg.ID
+		rawConfig = masterCfg.Config
+		workerID = masterCfg.ID
 	default:
+		rawConfig, err = json.Marshal(config)
+		if err != nil {
+			return
+		}
+		workerID = m.uuidGen.NewString()
 	}
-	return m.uuidGen.NewString()
+	return
+}
+
+func (m *DefaultBaseMaster) RegisterWorker(ctx context.Context, workerID WorkerID) error {
+	registerHandlerCtx, cancelRegisterHandler := context.WithTimeout(ctx, time.Second*1)
+	defer cancelRegisterHandler()
+	return m.registerHandlerForWorker(registerHandlerCtx, workerID)
 }
 
 func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error) {
@@ -464,25 +484,19 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 		zap.Int64("worker-type", int64(workerType)),
 		zap.Any("worker-config", config))
 
-	configBytes, err := json.Marshal(config)
-	if err != nil {
-		return "", errors.Trace(err)
-	}
-
-	// workerID is expected to be globally unique.
-	workerID := m.generateWorkerID(workerType, config)
-
 	if !m.createWorkerQuota.TryConsume() {
 		return "", derror.ErrMasterConcurrencyExceeded.GenWithStackByArgs()
+	}
+
+	configBytes, workerID, err := m.prepareWorkerConfig(workerType, config)
+	if err != nil {
+		return "", err
 	}
 
 	// register worker haneler before dispatching worker to executor.
 	// Because dispatchTask could fail, we must ensure register handler happens
 	// before unregister handler, in case of zombie handler.
-	registerHandlerCtx, cancelRegisterHandler := context.WithTimeout(context.TODO(), time.Second*1)
-	defer cancelRegisterHandler()
-
-	if err := m.registerHandlerForWorker(registerHandlerCtx, workerID); err != nil {
+	if err := m.RegisterWorker(context.TODO(), workerID); err != nil {
 		return "", errors.Trace(err)
 	}
 
