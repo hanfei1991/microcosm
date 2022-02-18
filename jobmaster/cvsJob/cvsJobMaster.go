@@ -2,7 +2,6 @@ package cvs
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/hanfei1991/microcosm/executor/worker"
 
@@ -51,19 +50,14 @@ func RegisterWorker() {
 	constructor := func(ctx *dcontext.Context, id lib.WorkerID, masterID lib.MasterID, config lib.WorkerConfig) lib.Worker {
 		return NewCVSJobMaster(ctx, id, masterID, config)
 	}
-	factory := registry.NewSimpleWorkerFactory(constructor, &lib.MasterMetaExt{})
+	factory := registry.NewSimpleWorkerFactory(constructor, &Config{})
 	registry.GlobalWorkerRegistry().MustRegisterWorkerType(lib.CvsJobMaster, factory)
 }
 
 func NewCVSJobMaster(ctx *dcontext.Context, workerID lib.WorkerID, _ lib.MasterID, conf lib.WorkerConfig) *JobMaster {
 	jm := &JobMaster{}
 	jm.workerID = workerID
-	jm.syncInfo = &Config{}
-	configBytes := conf.(*lib.MasterMetaExt).Config
-	err := json.Unmarshal(configBytes, jm.syncInfo)
-	if err != nil {
-		log.L().Panic(err.Error())
-	}
+	jm.syncInfo = conf.(*Config)
 	jm.syncFilesInfo = make(map[lib.WorkerID]*workerInfo)
 	deps := ctx.Dependencies
 
