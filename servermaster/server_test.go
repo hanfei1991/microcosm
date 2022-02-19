@@ -52,9 +52,9 @@ initial-cluster = "%s=http://127.0.0.1:%d"`
 	return masterAddr, cfg, cleanupFn
 }
 
+// Disable parallel run for this case, because prometheus http handler will meet
+// data race if parallel run is enabled
 func TestStartGrpcSrv(t *testing.T) {
-	t.Parallel()
-
 	masterAddr, cfg, cleanup := prepareServerEnv(t, "test-start-grpc-srv")
 	defer cleanup()
 
@@ -193,9 +193,9 @@ func TestCheckLeaderAndNeedForward(t *testing.T) {
 // - starts an embed etcd with gRPC service, including message service and
 //   server master pb service.
 // - campaigns to be leader and then runs leader service.
+// Disable parallel run for this case, because prometheus http handler will meet
+// data race if parallel run is enabled
 func TestRunLeaderService(t *testing.T) {
-	t.Parallel()
-
 	_, cfg, cleanup := prepareServerEnv(t, "test-run-leader-service")
 	defer cleanup()
 
