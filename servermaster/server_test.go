@@ -59,11 +59,14 @@ func TestStartGrpcSrv(t *testing.T) {
 	defer cleanup()
 
 	s := &Server{cfg: cfg}
+	registerMetrics()
 	ctx := context.Background()
 	err := s.startGrpcSrv(ctx)
 	require.Nil(t, err)
 
-	testPprof(t, fmt.Sprintf("http://%s", masterAddr))
+	apiURL := fmt.Sprintf("http://%s", masterAddr)
+	testPprof(t, apiURL)
+	testPrometheusMetrics(t, apiURL)
 	s.Stop()
 }
 
@@ -118,6 +121,20 @@ func testPprof(t *testing.T, addr string) {
 		"/debug/pprof/block",
 		"/debug/pprof/goroutine?debug=1",
 		"/debug/pprof/mutex?debug=1",
+	}
+	for _, uri := range urls {
+		resp, err := http.Get(addr + uri)
+		require.Nil(t, err)
+		defer resp.Body.Close()
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		_, err = ioutil.ReadAll(resp.Body)
+		require.Nil(t, err)
+	}
+}
+
+func testPrometheusMetrics(t *testing.T, addr string) {
+	urls := []string{
+		"/metrics",
 	}
 	for _, uri := range urls {
 		resp, err := http.Get(addr + uri)
