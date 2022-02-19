@@ -78,7 +78,6 @@ func NewCVSJobMaster(ctx *dcontext.Context, workerID lib.WorkerID, _ lib.MasterI
 
 func (jm *JobMaster) InitImpl(ctx context.Context) error {
 	if jm.syncInfo.DstHost == jm.syncInfo.SrcHost && jm.syncInfo.SrcDir == jm.syncInfo.DstDir {
-		log.L().Error("config file failed", zap.Any("config", *jm.syncInfo))
 		return &errorInfo{info: "bad configure file ,make sure the source address is not the same as the destination"}
 	}
 	log.L().Info("initializing the cvs jobmaster  ", zap.Any("id :", jm.workerID))
