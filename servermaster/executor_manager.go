@@ -24,6 +24,8 @@ type ExecutorManager interface {
 	AllocateNewExec(req *pb.RegisterExecutorRequest) (*model.NodeInfo, error)
 	RegisterExec(info *model.NodeInfo)
 	Start(ctx context.Context)
+	// Count returns executor count with given status
+	Count(status model.ExecutorStatus) int
 }
 
 // ExecutorManagerImpl holds all the executors info, including liveness, status, resource usage.
@@ -222,4 +224,16 @@ func (e *ExecutorManagerImpl) checkAliveImpl() error {
 	}
 	e.mu.Unlock()
 	return nil
+}
+
+// Count implements ExecutorManager.Count
+func (e *ExecutorManagerImpl) Count(status model.ExecutorStatus) (count int) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for _, executor := range e.executors {
+		if executor.Status == status {
+			count++
+		}
+	}
+	return
 }
