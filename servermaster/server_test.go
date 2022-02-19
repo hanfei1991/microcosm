@@ -282,7 +282,7 @@ func (m *mockExecutorManager) Start(ctx context.Context) {
 	panic("not implemented")
 }
 
-func (m *mockExecutorManager) Count(status model.ExecutorStatus) int {
+func (m *mockExecutorManager) ExecutorCount(status model.ExecutorStatus) int {
 	m.executorMu.RLock()
 	defer m.executorMu.RUnlock()
 	return m.count[status]

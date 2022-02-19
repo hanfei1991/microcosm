@@ -716,7 +716,7 @@ func (s *Server) collectMetricLoop(ctx context.Context, tickInterval time.Durati
 				metricJobNum[pbStatus].Set(float64(s.jobManager.JobCount(pbStatus)))
 			}
 			for status := range model.ExecutorStatusNameMapping {
-				metricExecutorNum[status].Set(float64(s.executorManager.Count(status)))
+				metricExecutorNum[status].Set(float64(s.executorManager.ExecutorCount(status)))
 			}
 		}
 	}
