@@ -40,3 +40,34 @@ func TestMasterMetadata(t *testing.T) {
 		require.Equal(t, FakeJobMaster, master.Tp)
 	}
 }
+
+func TestStoreMasterMetadata(t *testing.T) {
+	t.Parallel()
+	var (
+		ctx          = context.Background()
+		metaKVClient = metadata.NewMetaMock()
+		addr1        = "127.0.0.1:10000"
+		addr2        = "127.0.0.1:10001"
+		meta         = &MasterMetaKVData{
+			ID:   "master-1",
+			Tp:   FakeJobMaster,
+			Addr: addr1,
+		}
+	)
+	loadMeta := func() *MasterMetaKVData {
+		cli := NewMasterMetadataClient(meta.ID, metaKVClient)
+		meta, err := cli.Load(ctx)
+		require.NoError(t, err)
+		return meta
+	}
+
+	// persist master meta for the first time
+	err := StoreMasterMeta(ctx, metaKVClient, meta)
+	require.NoError(t, err)
+	require.Equal(t, addr1, loadMeta().Addr)
+
+	// overwrite master meta
+	meta.Addr = addr2
+	err = StoreMasterMeta(ctx, metaKVClient, meta)
+	require.Equal(t, addr2, loadMeta().Addr)
+}

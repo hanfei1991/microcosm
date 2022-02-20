@@ -92,7 +92,7 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 	}
 
 	// Store job master meta data before creating it
-	err = lib.StoreMasterMeta(ctx, meta.ID, jm.BaseMaster.MetaKVClient(), meta)
+	err = lib.StoreMasterMeta(ctx, jm.BaseMaster.MetaKVClient(), meta)
 	if err != nil {
 		resp.Err = errors.ToPBError(err)
 		return resp
@@ -137,7 +137,7 @@ func NewJobManagerImplV2(
 		id,
 	)
 
-	err = lib.StoreMasterMeta(dctx.Context(), id, impl.MetaKVClient(), impl.MasterMeta())
+	err = lib.StoreMasterMeta(dctx.Context(), impl.MetaKVClient(), impl.MasterMeta())
 	if err != nil {
 		return nil, err
 	}

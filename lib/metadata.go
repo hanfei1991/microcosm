@@ -155,11 +155,10 @@ func (c *WorkerMetadataClient) workerMetaKey(id WorkerID) string {
 // StoreMasterMeta is exposed to job manager for job master meta persistence
 func StoreMasterMeta(
 	ctx context.Context,
-	masterID MasterID, /* job master id */
 	metaKVClient metadata.MetaKV,
 	meta *MasterMetaKVData,
 ) error {
-	metaClient := NewMasterMetadataClient(masterID, metaKVClient)
+	metaClient := NewMasterMetadataClient(meta.ID, metaKVClient)
 	masterMeta, err := metaClient.Load(ctx)
 	if err != nil {
 		if !derror.ErrMasterNotFound.Equal(err) {
