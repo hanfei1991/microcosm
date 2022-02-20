@@ -209,7 +209,7 @@ func (m *DefaultBaseMaster) Init(ctx context.Context) error {
 }
 
 func (m *DefaultBaseMaster) doInit(ctx context.Context) (isFirstStartUp bool, err error) {
-	isInit, epoch, err := m.initMetadata(ctx)
+	isInit, epoch, err := m.refreshMetadata(ctx)
 	if err != nil {
 		return false, errors.Trace(err)
 	}
@@ -399,11 +399,11 @@ func (m *DefaultBaseMaster) OnError(err error) {
 	}
 }
 
-func (m *DefaultBaseMaster) initMetadata(ctx context.Context) (isInit bool, epoch Epoch, err error) {
-	// TODO refine this logic to make it correct and easier to understand.
-
+// master meta is persisted before it is created, in this function we update some
+// fileds to the current value, including epoch, nodeID and advertiseAddr.
+func (m *DefaultBaseMaster) refreshMetadata(ctx context.Context) (isInit bool, epoch Epoch, err error) {
 	metaClient := NewMasterMetadataClient(m.id, m.metaKVClient)
-	// master meta is persisted before it is created, so we should always load it.
+
 	masterMeta, err := metaClient.Load(ctx)
 	if err != nil {
 		return false, 0, err
@@ -424,6 +424,8 @@ func (m *DefaultBaseMaster) initMetadata(ctx context.Context) (isInit bool, epoc
 	}
 
 	m.masterMeta = masterMeta
+	// isInit true means the master is created but has not been initialized.
+	// TODO: consider to combine the state machine of master status with initialized
 	isInit = !masterMeta.Initialized
 
 	return
