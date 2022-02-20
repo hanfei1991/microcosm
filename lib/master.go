@@ -403,11 +403,11 @@ func (m *DefaultBaseMaster) initMetadata(ctx context.Context) (isInit bool, epoc
 	// TODO refine this logic to make it correct and easier to understand.
 
 	metaClient := NewMasterMetadataClient(m.id, m.metaKVClient)
+	// master meta is persisted before it is created, so we should always load it.
 	masterMeta, err := metaClient.Load(ctx)
 	if err != nil {
 		return false, 0, err
 	}
-	log.L().Info("init metadata", zap.Any("meta", masterMeta), zap.Any("id", m.id))
 
 	epoch, err = metaClient.GenerateEpoch(ctx)
 	if err != nil {
@@ -418,12 +418,12 @@ func (m *DefaultBaseMaster) initMetadata(ctx context.Context) (isInit bool, epoc
 	masterMeta.Addr = m.advertiseAddr
 	masterMeta.NodeID = m.nodeID
 	masterMeta.Epoch = epoch
-	m.masterMeta = masterMeta
 
 	if err := metaClient.Store(ctx, masterMeta); err != nil {
 		return false, 0, errors.Trace(err)
 	}
 
+	m.masterMeta = masterMeta
 	isInit = !masterMeta.Initialized
 
 	return
