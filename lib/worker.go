@@ -33,8 +33,7 @@ type WorkerImpl interface {
 	// InitImpl provides customized logic for the business logic to initialize.
 	InitImpl(ctx context.Context) error
 
-	// Tick is called on a fixed interval. When an error is returned, the worker
-	// will be stopped.
+	// Tick is called on a fixed interval.
 	Tick(ctx context.Context) error
 
 	// Workload returns the current workload of the worker.
@@ -536,7 +535,7 @@ func (m *masterClient) SendHeartBeat(ctx context.Context, clock clock.Clock) err
 }
 
 // used in unit test only
-func (m *masterClient) getlastMasterAckedPingTime() clock.MonotonicTime {
+func (m *masterClient) getLastMasterAckedPingTime() clock.MonotonicTime {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.lastMasterAckedPingTime
