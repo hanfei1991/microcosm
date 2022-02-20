@@ -71,6 +71,7 @@ type BaseMaster interface {
 	MetaKVClient() metadata.MetaKV
 	Init(ctx context.Context) error
 	Poll(ctx context.Context) error
+	MasterMeta() *MasterMetaKVData
 	MasterID() MasterID
 	GetWorkers() map[WorkerID]WorkerHandle
 	Close(ctx context.Context) error
@@ -106,11 +107,11 @@ type DefaultBaseMaster struct {
 	// closeCh is closed when the BaseMaster is exiting
 	closeCh chan struct{}
 
-	id            MasterID // id of this master
+	id            MasterID // id of this master itself
 	advertiseAddr string
 	nodeID        p2p.NodeID
 	timeoutConfig TimeoutConfig
-	masterMetaExt *MasterMetaExt
+	masterMeta    *MasterMetaKVData
 
 	// components for easier unit testing
 	uuidGen uuid.Generator
@@ -137,14 +138,14 @@ func NewBaseMaster(
 	var (
 		nodeID        p2p.NodeID
 		advertiseAddr string
-		masterMetaExt = &MasterMetaExt{}
+		masterMeta    = &MasterMetaKVData{}
 		params        masterParams
 	)
 	if ctx != nil {
 		nodeID = ctx.Environ.NodeID
 		advertiseAddr = ctx.Environ.Addr
-		metaBytes := ctx.Environ.MasterMetaExt
-		err := masterMetaExt.Unmarshal(metaBytes)
+		metaBytes := ctx.Environ.MasterMetaBytes
+		err := masterMeta.Unmarshal(metaBytes)
 		if err != nil {
 			log.L().Warn("invalid master meta", zap.ByteString("data", metaBytes), zap.Error(err))
 		}
@@ -167,7 +168,7 @@ func NewBaseMaster(
 		clock:                 clock.New(),
 
 		timeoutConfig: defaultTimeoutConfig,
-		masterMetaExt: masterMetaExt,
+		masterMeta:    masterMeta,
 
 		errCh:   make(chan error, 1),
 		closeCh: make(chan struct{}),
@@ -259,6 +260,10 @@ func (m *DefaultBaseMaster) doPoll(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 	return nil
+}
+
+func (m *DefaultBaseMaster) MasterMeta() *MasterMetaKVData {
+	return m.masterMeta
 }
 
 func (m *DefaultBaseMaster) MasterID() MasterID {
@@ -400,33 +405,27 @@ func (m *DefaultBaseMaster) initMetadata(ctx context.Context) (isInit bool, epoc
 	metaClient := NewMasterMetadataClient(m.id, m.metaKVClient)
 	masterMeta, err := metaClient.Load(ctx)
 	if err != nil {
-		if !derror.ErrMasterNotFound.Equal(err) {
-			return false, 0, errors.Trace(err)
-		}
-		// master starts up for the first time, no metadata in metastore
-		masterMeta = &MasterMetaKVData{ID: m.id}
-		err = metaClient.Store(ctx, masterMeta)
-		if err != nil {
-			return false, 0, errors.Trace(err)
-		}
+		return false, 0, err
 	}
+	log.L().Info("init metadata", zap.Any("meta", masterMeta), zap.Any("id", m.id))
 
 	epoch, err = metaClient.GenerateEpoch(ctx)
 	if err != nil {
 		return false, 0, errors.Trace(err)
 	}
 
-	isInit = !masterMeta.Initialized
-
 	// We should update the master data to reflect our current information
 	masterMeta.Addr = m.advertiseAddr
 	masterMeta.NodeID = m.nodeID
 	masterMeta.Epoch = epoch
-	masterMeta.MasterMetaExt = m.masterMetaExt
+	m.masterMeta = masterMeta
 
 	if err := metaClient.Store(ctx, masterMeta); err != nil {
 		return false, 0, errors.Trace(err)
 	}
+
+	isInit = !masterMeta.Initialized
+
 	return
 }
 
@@ -477,7 +476,7 @@ func (m *DefaultBaseMaster) registerHandlerForWorker(ctx context.Context, worker
 }
 
 // prepareWorkerConfig extracts information from WorkerConfig into detail fields.
-// - If workerType is master type, the config is a `*MasterMetaExt` struct and
+// - If workerType is master type, the config is a `*MasterMetaKVData` struct and
 //   contains pre allocated maseter ID, and json marshalled config.
 // - If workerType is worker type, the config is a user defined config struct, we
 //   marshal it to byte slice as returned config, and generate a random WorkerID.
@@ -486,13 +485,13 @@ func (m *DefaultBaseMaster) prepareWorkerConfig(
 ) (rawConfig []byte, workerID string, err error) {
 	switch workerType {
 	case CvsJobMaster, FakeJobMaster, DMJobMaster:
-		masterCfg, ok := config.(*MasterMetaExt)
+		masterMeta, ok := config.(*MasterMetaKVData)
 		if !ok {
 			err = derror.ErrMasterInvalidMeta.GenWithStackByArgs(config)
 			return
 		}
-		rawConfig = masterCfg.Config
-		workerID = masterCfg.ID
+		rawConfig = masterMeta.Config
+		workerID = masterMeta.ID
 	case WorkerDMDump, WorkerDMLoad, WorkerDMSync:
 		var b bytes.Buffer
 		err = toml.NewEncoder(&b).Encode(config)
