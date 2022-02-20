@@ -331,6 +331,7 @@ func (m *workerManagerImpl) OnWorkerOffline(ctx context.Context, id WorkerID) er
 	r, ok := m.statusReceivers[id]
 	if !ok {
 		log.L().Warn("worker not found in status receivers", zap.String("workerID", id))
+		return nil
 	}
 	topic := workerStatusUpdatedTopic(r.workerMetaClient.MasterID(), r.workerID)
 	_, err := r.messageHandlerManager.UnregisterHandler(ctx, topic)
