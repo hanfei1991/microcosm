@@ -69,5 +69,6 @@ func TestStoreMasterMetadata(t *testing.T) {
 	// overwrite master meta
 	meta.Addr = addr2
 	err = StoreMasterMeta(ctx, metaKVClient, meta)
+	require.NoError(t, err)
 	require.Equal(t, addr2, loadMeta().Addr)
 }
