@@ -42,11 +42,6 @@ type WorkerImpl interface {
 
 	// CloseImpl tells the WorkerImpl to quit running StatusWorker and release resources.
 	CloseImpl(ctx context.Context) error
-
-	// GetWorkerStatusExtTypeInfo returns an empty object that described the actual type
-	// of the `Ext` field in WorkerStatus.
-	// The returned type's kind must be Array, Chan, Map, Ptr, or Slice.
-	GetWorkerStatusExtTypeInfo() interface{}
 }
 
 type BaseWorker interface {
@@ -161,7 +156,7 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) error {
 			}))
 		})
 
-	w.workerMetaClient = NewWorkerMetadataClient(w.masterID, w.metaKVClient, w.Impl.GetWorkerStatusExtTypeInfo())
+	w.workerMetaClient = NewWorkerMetadataClient(w.masterID, w.metaKVClient)
 
 	w.statusSender = NewStatusSender(w.id, w.masterClient, w.workerMetaClient, w.messageSender, w.pool)
 

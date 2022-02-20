@@ -137,6 +137,7 @@ func (s *StatusSender) sendStatus(ctx context.Context) error {
 			log.L().Panic("StatusSender: unexpected fsm state",
 				zap.Int32("old-fsm-state", old))
 		}
+		s.lastUnsentStatus = nil
 	})
 	return errors.Trace(err)
 }
