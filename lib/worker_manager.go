@@ -376,21 +376,6 @@ type WorkerInfo struct {
 	workload model.RescUnit
 }
 
-func (w *WorkerInfo) ToPB() (*pb.WorkerInfo, error) {
-	statusBytes, err := w.status.Marshal()
-	if err != nil {
-		return nil, err
-	}
-	ret := &pb.WorkerInfo{
-		Id:         w.ID,
-		ExecutorId: w.NodeID,
-		Status:     statusBytes,
-		LastHbTime: w.lastHeartbeatReceiveTime.Unix(),
-		Workload:   int64(w.workload),
-	}
-	return ret, nil
-}
-
 func (w *WorkerInfo) hasTimedOut(clock clock.Clock, config *TimeoutConfig) bool {
 	duration := clock.Since(w.lastHeartbeatReceiveTime)
 	if duration > config.workerTimeoutDuration {
@@ -406,7 +391,7 @@ type WorkerHandle interface {
 	Status() *WorkerStatus
 	ID() WorkerID
 	IsTombStone() bool
-	GetWorkerInfo(id WorkerID) (*WorkerInfo, bool)
+	ToPB() (*pb.WorkerInfo, error)
 }
 
 type workerHandleImpl struct {
@@ -414,6 +399,28 @@ type workerHandleImpl struct {
 
 	// TODO think about how to handle the situation where the workerID has been removed from `manager`.
 	id WorkerID
+}
+
+func (w *workerHandleImpl) ToPB() (*pb.WorkerInfo, error) {
+	statusBytes, err := w.Status().Marshal()
+	if err != nil {
+		return nil, err
+	}
+
+	info, ok := w.manager.GetWorkerInfo(w.id)
+	if !ok {
+		// TODO add an appropriate error
+		return nil, nil
+	}
+
+	ret := &pb.WorkerInfo{
+		Id:         w.ID(),
+		ExecutorId: info.NodeID,
+		Status:     statusBytes,
+		LastHbTime: info.lastHeartbeatReceiveTime.Unix(),
+		Workload:   int64(info.workload),
+	}
+	return ret, nil
 }
 
 func (w *workerHandleImpl) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) error {
@@ -474,8 +481,9 @@ func (h *tombstoneWorkerHandleImpl) Status() *WorkerStatus {
 	return &h.status
 }
 
-func (h *tombstoneWorkerHandleImpl) GetWorkerInfo(id WorkerID) (*WorkerInfo, bool) {
-	return nil, false
+func (h *tombstoneWorkerHandleImpl) ToPB() (*pb.WorkerInfo, error) {
+	// TODO add an appropriate error
+	return nil, nil
 }
 
 func (h *tombstoneWorkerHandleImpl) Workload() model.RescUnit {
