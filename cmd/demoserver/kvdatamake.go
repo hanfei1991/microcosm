@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/sergi/go-diff/diffmatchpatch"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 )
 
@@ -156,11 +157,21 @@ func StartDataService(ctx context.Context) {
 		log.L().Panic("listen the port failed",
 			zap.String("error:", err.Error()))
 	}
-	log.L().Info("grpc serving ..")
-	err = grpcServer.Serve(lis)
-	if err != nil {
-		log.L().Panic("init the server failed",
-			zap.String("error:", err.Error()))
+
+	wg, ctx := errgroup.WithContext(ctx)
+	wg.Go(func() error {
+		log.L().Info("grpc serving ..")
+		return grpcServer.Serve(lis)
+	})
+
+	wg.Go(func() error {
+		<-ctx.Done()
+		grpcServer.Stop()
+		return nil
+	})
+
+	if err := wg.Wait(); err != nil {
+		log.L().Error("run grpc server with error", zap.Error(err))
 	}
 }
 
@@ -293,6 +304,7 @@ func (s *DataRWServer) ReadLines(req *pb.ReadLinesRequest, stream pb.DataRWServi
 
 func (s *DataRWServer) WriteLines(stream pb.DataRWService_WriteLinesServer) error {
 	count := 0
+	fileNames := make([]string, 0)
 	for {
 		select {
 		case <-s.ctx.Done():
@@ -305,6 +317,7 @@ func (s *DataRWServer) WriteLines(stream pb.DataRWService_WriteLinesServer) erro
 				if strings.TrimSpace(fileName) == "" {
 					continue
 				}
+				fileNames = append(fileNames, fileName)
 				s.mu.Lock()
 				writer, ok := s.fileWriterMap[fileName]
 				s.mu.Unlock()
@@ -366,8 +379,15 @@ func (s *DataRWServer) WriteLines(stream pb.DataRWService_WriteLinesServer) erro
 				}
 				s.mu.Unlock()
 				return stream.SendAndClose(&pb.WriteLinesResponse{})
+			} else {
+				log.L().Error("receive loop met error", zap.Error(err))
+				s.mu.Lock()
+				for _, fileName := range fileNames {
+					delete(s.fileWriterMap, fileName)
+				}
+				s.mu.Unlock()
+				return err
 			}
-
 		}
 	}
 }
