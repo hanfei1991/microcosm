@@ -190,7 +190,8 @@ func (m *DefaultBaseMaster) Init(ctx context.Context) error {
 		m.messageHandlerManager,
 		m.metaKVClient,
 		m.pool,
-		m.Impl.GetWorkerStatusExtTypeInfo())
+		m.Impl.GetWorkerStatusExtTypeInfo(),
+		&m.timeoutConfig)
 
 	m.startBackgroundTasks()
 

@@ -67,6 +67,7 @@ func newWorkerManager(
 	metaClient metadata.MetaKV,
 	pool workerpool.AsyncPool,
 	extTpi interface{},
+	timeoutConfig *TimeoutConfig,
 ) workerManager {
 	return &workerManagerImpl{
 		initialized:     !needWait,
@@ -76,7 +77,7 @@ func newWorkerManager(
 
 		masterEpoch:   curEpoch,
 		masterID:      id,
-		timeoutConfig: defaultTimeoutConfig,
+		timeoutConfig: *timeoutConfig,
 
 		extTpi: extTpi,
 
@@ -144,7 +145,6 @@ func (m *workerManagerImpl) Tick(
 			status := m.statusReceivers[workerID].Status()
 			m.tombstones[workerID] = &status
 			delete(m.workerInfos, workerID)
-			delete(m.statusReceivers, workerID)
 		}
 
 		if !workerInfo.hasPendingHeartbeat {
@@ -376,7 +376,13 @@ type WorkerInfo struct {
 }
 
 func (w *WorkerInfo) hasTimedOut(clock clock.Clock, config *TimeoutConfig) bool {
-	return clock.Since(w.lastHeartbeatReceiveTime) > config.workerTimeoutDuration
+	duration := clock.Since(w.lastHeartbeatReceiveTime)
+	if duration > config.workerTimeoutDuration {
+		// TODO add details about the worker.
+		log.L().Warn("Worker timed out", zap.Duration("duration", duration))
+		return true
+	}
+	return false
 }
 
 type WorkerHandle interface {

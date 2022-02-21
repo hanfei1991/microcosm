@@ -130,6 +130,7 @@ func TestMasterCreateWorker(t *testing.T) {
 	defer cancel()
 
 	master := NewMockMasterImpl("", masterName)
+	master.timeoutConfig.workerTimeoutDuration = time.Second * 1000
 	master.timeoutConfig.masterHeartbeatCheckLoopInterval = time.Millisecond * 10
 	master.uuidGen = uuid.NewMock()
 	prepareMeta(ctx, t, master.metaKVClient)

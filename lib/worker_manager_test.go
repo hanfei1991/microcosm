@@ -41,6 +41,7 @@ func TestHeartBeatPingPongAfterCreateWorker(t *testing.T) {
 		mockMeta,
 		pool,
 		&dummyStatus{},
+		&defaultTimeoutConfig,
 	).(*workerManagerImpl)
 	manager.clock = clock.NewMock()
 	manager.clock.(*clock.Mock).Set(time.Now())
@@ -58,9 +59,13 @@ func TestHeartBeatPingPongAfterCreateWorker(t *testing.T) {
 
 	replyTime := time.Now()
 	manager.clock.(*clock.Mock).Set(replyTime)
-	offlined, onlined := manager.Tick(ctx, msgSender)
-	require.Empty(t, offlined)
-	require.Len(t, onlined, 1)
+
+	var offlined, onlined []*WorkerInfo
+	require.Eventually(t, func() bool {
+		offlined, onlined = manager.Tick(ctx, msgSender)
+		require.Empty(t, offlined)
+		return len(onlined) == 1
+	}, 1*time.Second, 10*time.Millisecond)
 
 	msg, ok := msgSender.TryPop(executorNodeID1, HeartbeatPongTopic(masterName, workerID1))
 	require.True(t, ok)
@@ -101,7 +106,8 @@ func TestHeartBeatPingPongAfterFailover(t *testing.T) {
 		msgHandlerManager,
 		mockMeta,
 		pool,
-		&dummyStatus{}).(*workerManagerImpl)
+		&dummyStatus{},
+		&defaultTimeoutConfig).(*workerManagerImpl)
 	manager.clock = clock.NewMock()
 	manager.clock.(*clock.Mock).Set(time.Now())
 
@@ -158,7 +164,8 @@ func TestMultiplePendingHeartbeats(t *testing.T) {
 		msgHandlerManager,
 		mockMeta,
 		pool,
-		&dummyStatus{}).(*workerManagerImpl)
+		&dummyStatus{},
+		&defaultTimeoutConfig).(*workerManagerImpl)
 	manager.clock = clock.NewMock()
 	manager.clock.(*clock.Mock).Set(time.Now())
 
@@ -275,7 +282,8 @@ func TestWorkerManagerInitialization(t *testing.T) {
 		msgHandlerManager,
 		mockMeta,
 		pool,
-		&dummyStatus{}).(*workerManagerImpl)
+		&dummyStatus{},
+		&defaultTimeoutConfig).(*workerManagerImpl)
 	manager.clock = clock.NewMock()
 	manager.clock.(*clock.Mock).Set(time.Now())
 
@@ -344,6 +352,7 @@ func TestUpdateStatus(t *testing.T) {
 		mockMeta,
 		pool,
 		&dummyStatus{},
+		&defaultTimeoutConfig,
 	).(*workerManagerImpl)
 
 	err = manager.addWorker(workerID1, executorNodeID1)
@@ -422,6 +431,7 @@ func TestWorkerTimedOut(t *testing.T) {
 		mockMeta,
 		pool,
 		&dummyStatus{},
+		&defaultTimeoutConfig,
 	).(*workerManagerImpl)
 	manager.clock = clock.NewMock()
 	manager.clock.(*clock.Mock).Set(time.Now())
@@ -484,7 +494,8 @@ func TestWorkerTimedOutWithPendingHeartbeat(t *testing.T) {
 		msgHandlerManager,
 		mockMeta,
 		pool,
-		&dummyStatus{}).(*workerManagerImpl)
+		&dummyStatus{},
+		&defaultTimeoutConfig).(*workerManagerImpl)
 	manager.clock = clock.NewMock()
 	manager.clock.(*clock.Mock).Set(time.Now())
 
