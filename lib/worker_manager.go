@@ -13,6 +13,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/hanfei1991/microcosm/model"
+	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
@@ -375,6 +376,21 @@ type WorkerInfo struct {
 	workload model.RescUnit
 }
 
+func (w *WorkerInfo) ToPB() (*pb.WorkerInfo, error) {
+	statusBytes, err := w.status.Marshal()
+	if err != nil {
+		return nil, err
+	}
+	ret := &pb.WorkerInfo{
+		Id:         w.ID,
+		ExecutorId: w.NodeID,
+		Status:     statusBytes,
+		LastHbTime: w.lastHeartbeatReceiveTime.Unix(),
+		Workload:   int64(w.workload),
+	}
+	return ret, nil
+}
+
 func (w *WorkerInfo) hasTimedOut(clock clock.Clock, config *TimeoutConfig) bool {
 	duration := clock.Since(w.lastHeartbeatReceiveTime)
 	if duration > config.workerTimeoutDuration {
@@ -390,6 +406,7 @@ type WorkerHandle interface {
 	Status() *WorkerStatus
 	ID() WorkerID
 	IsTombStone() bool
+	GetWorkerInfo(id WorkerID) (*WorkerInfo, bool)
 }
 
 type workerHandleImpl struct {
@@ -414,6 +431,10 @@ func (w *workerHandleImpl) SendMessage(ctx context.Context, topic p2p.Topic, mes
 		return errors.Trace(err)
 	}
 	return nil
+}
+
+func (w *workerHandleImpl) GetWorkerInfo(id WorkerID) (*WorkerInfo, bool) {
+	return w.manager.GetWorkerInfo(id)
 }
 
 func (w *workerHandleImpl) Status() *WorkerStatus {
@@ -451,6 +472,10 @@ func (h *tombstoneWorkerHandleImpl) SendMessage(ctx context.Context, topic p2p.T
 
 func (h *tombstoneWorkerHandleImpl) Status() *WorkerStatus {
 	return &h.status
+}
+
+func (h *tombstoneWorkerHandleImpl) GetWorkerInfo(id WorkerID) (*WorkerInfo, bool) {
+	return nil, false
 }
 
 func (h *tombstoneWorkerHandleImpl) Workload() model.RescUnit {
