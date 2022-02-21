@@ -201,10 +201,10 @@ func TestMultiplePendingHeartbeats(t *testing.T) {
 
 	replyTime := time.Now()
 	manager.clock.(*clock.Mock).Set(replyTime)
-	offlined, onlined = manager.Tick(ctx, msgSender)
 
 	var totalOnlined int
 	require.Eventually(t, func() bool {
+		offlined, onlined = manager.Tick(ctx, msgSender)
 		totalOnlined += len(onlined)
 		require.Empty(t, offlined)
 		return totalOnlined == 2
