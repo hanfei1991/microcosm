@@ -42,7 +42,7 @@ type etcdImpl struct {
 	closeMu sync.Mutex
 }
 
-func NewEtcdImpl(config *metaclient.Config) (metaclient.KVClient, error) {
+func NewEtcdImpl(config *metaclient.Config) (*etcdImpl, error) {
 	conf := config.Clone()
 	cli, err := clientv3.New(clientv3.Config{
 		Endpoints: conf.Endpoints,
