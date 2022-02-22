@@ -4,6 +4,8 @@ import (
 	"context"
 	"sync"
 
+	"github.com/pingcap/errors"
+
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 
@@ -35,16 +37,29 @@ type exampleMaster struct {
 	tickCount int
 }
 
-func (e *exampleMaster) InitImpl(ctx context.Context) (err error) {
-	log.L().Info("InitImpl")
+func (e *exampleMaster) Init(ctx context.Context) (err error) {
+	log.L().Info("Init")
+
+	isFirstStartUp, err := e.DefaultBaseMaster.Init(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if !isFirstStartUp {
+		return nil
+	}
 	e.worker.mu.Lock()
 	e.worker.id, err = e.CreateWorker(exampleWorkerType, exampleWorkerCfg, exampleWorkerCost)
 	e.worker.mu.Unlock()
 	return
 }
 
-func (e *exampleMaster) Tick(ctx context.Context) error {
-	log.L().Info("Tick")
+func (e *exampleMaster) Poll(ctx context.Context) error {
+	log.L().Info("Poll")
+
+	if err := e.DefaultBaseMaster.Poll(ctx); err != nil {
+		return errors.Trace(err)
+	}
+
 	e.tickCount++
 
 	e.worker.mu.Lock()

@@ -3,6 +3,8 @@ package cvs
 import (
 	"context"
 
+	"github.com/pingcap/errors"
+
 	"github.com/hanfei1991/microcosm/executor/worker"
 
 	cvsTask "github.com/hanfei1991/microcosm/executor/cvsTask"
@@ -76,7 +78,16 @@ func NewCVSJobMaster(ctx *dcontext.Context, workerID lib.WorkerID, _ lib.MasterI
 	return jm
 }
 
-func (jm *JobMaster) InitImpl(ctx context.Context) error {
+func (jm *JobMaster) Init(ctx context.Context) error {
+	isFirstStartUp, err := jm.BaseMaster.Init(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	if !isFirstStartUp {
+		return nil
+	}
+
 	if jm.syncInfo.DstHost == jm.syncInfo.SrcHost && jm.syncInfo.SrcDir == jm.syncInfo.DstDir {
 		return &errorInfo{info: "bad configure file ,make sure the source address is not the same as the destination"}
 	}

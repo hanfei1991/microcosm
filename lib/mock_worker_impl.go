@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/pingcap/errors"
 	"github.com/stretchr/testify/mock"
 	"go.uber.org/atomic"
 
@@ -37,28 +38,12 @@ func newMockWorkerImpl(workerID WorkerID, masterID MasterID) *mockWorkerImpl {
 	return ret
 }
 
-func (w *mockWorkerImpl) InitImpl(ctx context.Context) error {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	args := w.Called(ctx)
-	return args.Error(0)
+func (w *mockWorkerImpl) Init(ctx context.Context) error {
+	return errors.Trace(w.DefaultBaseWorker.Init(ctx))
 }
 
-func (w *mockWorkerImpl) Tick(ctx context.Context) error {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	args := w.Called(ctx)
-	return args.Error(0)
-}
-
-func (w *mockWorkerImpl) Status() WorkerStatus {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	args := w.Called()
-	return args.Get(0).(WorkerStatus)
+func (w *mockWorkerImpl) Poll(ctx context.Context) error {
+	return errors.Trace(w.DefaultBaseWorker.Poll(ctx))
 }
 
 func (w *mockWorkerImpl) GetWorkerStatusExtTypeInfo() interface{} {
@@ -79,10 +64,6 @@ func (w *mockWorkerImpl) OnMasterFailover(reason MasterFailoverReason) error {
 	return args.Error(0)
 }
 
-func (w *mockWorkerImpl) CloseImpl(ctx context.Context) error {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	args := w.Called()
-	return args.Error(0)
+func (w *mockWorkerImpl) Close(ctx context.Context) error {
+	return errors.Trace(w.DefaultBaseWorker.Close(ctx))
 }

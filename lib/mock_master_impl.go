@@ -4,6 +4,8 @@ import (
 	"context"
 	"sync"
 
+	"github.com/pingcap/errors"
+
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/mock"
 	"go.uber.org/atomic"
@@ -24,6 +26,7 @@ type MockMasterImpl struct {
 
 	tickCount         atomic.Int64
 	onlineWorkerCount atomic.Int64
+	isFirstStartUp    atomic.Bool
 
 	dispatchedWorkers chan WorkerHandle
 	dispatchedResult  chan error
@@ -74,12 +77,14 @@ func (m *MockMasterImpl) TickCount() int64 {
 	return m.tickCount.Load()
 }
 
-func (m *MockMasterImpl) InitImpl(ctx context.Context) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+func (m *MockMasterImpl) Init(ctx context.Context) error {
+	isFirstStartUp, err := m.DefaultBaseMaster.Init(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	m.isFirstStartUp.Store(isFirstStartUp)
 
-	args := m.Called(ctx)
-	return args.Error(0)
+	return nil
 }
 
 func (m *MockMasterImpl) OnMasterRecovered(ctx context.Context) error {
@@ -90,15 +95,18 @@ func (m *MockMasterImpl) OnMasterRecovered(ctx context.Context) error {
 	return args.Error(0)
 }
 
-func (m *MockMasterImpl) Tick(ctx context.Context) error {
+func (m *MockMasterImpl) Poll(ctx context.Context) error {
+	if err := m.DefaultBaseMaster.Poll(ctx); err != nil {
+		return errors.Trace(err)
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	m.tickCount.Add(1)
 	log.L().Info("tick")
 
-	args := m.Called(ctx)
-	return args.Error(0)
+	return nil
 }
 
 func (m *MockMasterImpl) OnWorkerDispatched(worker WorkerHandle, result error) error {

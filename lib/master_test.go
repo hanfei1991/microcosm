@@ -54,8 +54,12 @@ func TestMasterInit(t *testing.T) {
 	master := NewMockMasterImpl("", masterName)
 	prepareMeta(ctx, t, master.metaKVClient)
 
-	master.On("InitImpl", mock.Anything).Return(nil)
 	err := master.Init(ctx)
+	require.NoError(t, err)
+
+	// Poll once so that the initialization status can be persisted in
+	// metastore.
+	err = master.Poll(ctx)
 	require.NoError(t, err)
 
 	rawResp, err := master.metaKVClient.Get(ctx, adapter.MasterMetaKey.Encode(masterName))

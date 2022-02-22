@@ -28,20 +28,17 @@ type Worker interface {
 }
 
 type WorkerImpl interface {
-	// InitImpl provides customized logic for the business logic to initialize.
-	InitImpl(ctx context.Context) error
+	// Init provides customized logic for the business logic to initialize.
+	Init(ctx context.Context) error
 
-	// Tick is called on a fixed interval.
-	Tick(ctx context.Context) error
+	// Poll is called on a fixed interval.
+	Poll(ctx context.Context) error
 
 	// Workload returns the current workload of the worker.
 	Workload() model.RescUnit
 
 	// OnMasterFailover is called when the master is failed over.
 	OnMasterFailover(reason MasterFailoverReason) error
-
-	// CloseImpl tells the WorkerImpl to quit running StatusWorker and release resources.
-	CloseImpl(ctx context.Context) error
 
 	// GetWorkerStatusExtTypeInfo returns an empty object that described the actual type
 	// of the `Ext` field in WorkerStatus.
@@ -157,10 +154,6 @@ func (w *DefaultBaseWorker) Init(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	if err := w.Impl.InitImpl(ctx); err != nil {
-		return errors.Trace(err)
-	}
-
 	if err := w.UpdateStatus(ctx, WorkerStatus{
 		Code: WorkerStatusInit,
 	}); err != nil {
@@ -188,9 +181,6 @@ func (w *DefaultBaseWorker) Poll(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	if err := w.Impl.Tick(ctx); err != nil {
-		return errors.Trace(err)
-	}
 	return nil
 }
 
@@ -209,11 +199,6 @@ func (w *DefaultBaseWorker) Close(ctx context.Context) error {
 	}
 
 	w.wg.Wait()
-
-	if err := w.Impl.CloseImpl(ctx); err != nil {
-		log.L().Error("Failed to close WorkerImpl", zap.Error(err))
-		return errors.Trace(err)
-	}
 	return nil
 }
 

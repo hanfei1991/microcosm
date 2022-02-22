@@ -69,7 +69,7 @@ func TestExampleMaster(t *testing.T) {
 	require.Equal(t, master.worker.handle, handle)
 
 	// before worker's first heartbeat, its status is WorkerStatusCreated
-	err = master.Tick(ctx)
+	err = master.Poll(ctx)
 	require.NoError(t, err)
 	master.worker.mu.Lock()
 	code := master.worker.statusCode

@@ -142,20 +142,18 @@ func NewJobManagerImplV2(
 		impl.executorClientManager,
 		impl.serverMasterClient,
 	)
-	err := impl.BaseMaster.Init(dctx.Context())
-	if err != nil {
-		return nil, err
-	}
+
 	return impl, nil
 }
 
-// InitImpl implements lib.MasterImpl.InitImpl
-func (jm *JobManagerImplV2) InitImpl(ctx context.Context) error {
-	return nil
+// Init implements lib.MasterImpl.Init
+func (jm *JobManagerImplV2) Init(ctx context.Context) error {
+	_, err := jm.BaseMaster.Init(ctx)
+	return err
 }
 
-// Tick implements lib.MasterImpl.Tick
-func (jm *JobManagerImplV2) Tick(ctx context.Context) error {
+// Poll implements lib.MasterImpl.Poll
+func (jm *JobManagerImplV2) Poll(ctx context.Context) error {
 	return jm.jobFsm.IterPendingJobs(
 		func(job *lib.MasterMetaExt) (string, error) {
 			return jm.BaseMaster.CreateWorker(

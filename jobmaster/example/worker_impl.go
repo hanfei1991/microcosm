@@ -6,6 +6,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/errors"
+	"go.uber.org/zap"
+
 	"github.com/pingcap/tiflow/dm/pkg/log"
 
 	"github.com/hanfei1991/microcosm/lib"
@@ -42,14 +45,19 @@ func (w *exampleWorker) run() {
 	w.work.mu.Unlock()
 }
 
-func (w *exampleWorker) InitImpl(ctx context.Context) error {
-	log.L().Info("InitImpl")
+func (w *exampleWorker) Init(ctx context.Context) error {
+	log.L().Info("Init")
+
+	if err := w.DefaultBaseWorker.Init(ctx); err != nil {
+		return errors.Trace(err)
+	}
+
 	w.wg.Add(1)
 	go w.run()
 	return nil
 }
 
-func (w *exampleWorker) Tick(ctx context.Context) error {
+func (w *exampleWorker) Poll(ctx context.Context) error {
 	log.L().Info("Tick")
 	w.work.mu.Lock()
 	w.work.tickCount++
@@ -80,8 +88,12 @@ func (w *exampleWorker) OnMasterFailover(reason lib.MasterFailoverReason) error 
 	return nil
 }
 
-func (w *exampleWorker) CloseImpl(ctx context.Context) error {
-	log.L().Info("CloseImpl")
+func (w *exampleWorker) Close(ctx context.Context) error {
+	if err := w.DefaultBaseWorker.Close(ctx); err != nil {
+		log.L().Warn("failed to close BaseWorker", zap.Error(err))
+	}
+
+	log.L().Info("Close")
 	w.wg.Wait()
 	return nil
 }

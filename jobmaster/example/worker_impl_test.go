@@ -33,9 +33,9 @@ func TestExampleWorker(t *testing.T) {
 	require.NoError(t, err)
 
 	// tick twice
-	err = worker.Tick(ctx)
+	err = worker.Poll(ctx)
 	require.NoError(t, err)
-	err = worker.Tick(ctx)
+	err = worker.Poll(ctx)
 	require.NoError(t, err)
 
 	time.Sleep(time.Second)

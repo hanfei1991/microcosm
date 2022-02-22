@@ -34,11 +34,9 @@ type Master interface {
 }
 
 type MasterImpl interface {
-	// InitImpl provides customized logic for the business logic to initialize.
-	InitImpl(ctx context.Context) error
-
-	// Tick is called on a fixed interval.
-	Tick(ctx context.Context) error
+	// Init is responsible for initializing the states and resources used
+	// by the MasterImpl.
+	Init(ctx context.Context) error
 
 	// OnMasterRecovered is called when the master has recovered from an error.
 	OnMasterRecovered(ctx context.Context) error
@@ -71,7 +69,7 @@ const (
 
 type BaseMaster interface {
 	MetaKVClient() metadata.MetaKV
-	Init(ctx context.Context) error
+	Init(ctx context.Context) (isFirstStartUp bool, err error)
 	Poll(ctx context.Context) error
 	MasterID() MasterID
 	GetWorkers() map[WorkerID]WorkerHandle
@@ -94,6 +92,8 @@ type DefaultBaseMaster struct {
 	executorClientManager client.ClientsManager
 	serverMasterClient    client.MasterClient
 	pool                  workerpool.AsyncPool
+
+	initialized bool
 
 	clock clock.Clock
 
@@ -176,10 +176,10 @@ func (m *DefaultBaseMaster) MetaKVClient() metadata.MetaKV {
 	return m.metaKVClient
 }
 
-func (m *DefaultBaseMaster) Init(ctx context.Context) error {
+func (m *DefaultBaseMaster) Init(ctx context.Context) (isFirstStartUp bool, err error) {
 	isInit, epoch, err := m.initMetadata(ctx)
 	if err != nil {
-		return errors.Trace(err)
+		return false, errors.Trace(err)
 	}
 	m.currentEpoch.Store(epoch)
 	m.workerManager = newWorkerManager(
@@ -194,24 +194,18 @@ func (m *DefaultBaseMaster) Init(ctx context.Context) error {
 		&m.timeoutConfig)
 
 	m.startBackgroundTasks()
-
-	if isInit {
-		if err := m.Impl.InitImpl(ctx); err != nil {
-			return errors.Trace(err)
-		}
-	} else {
-		if err := m.Impl.OnMasterRecovered(ctx); err != nil {
-			return errors.Trace(err)
-		}
-	}
-
-	if err := m.markInitializedInMetadata(ctx); err != nil {
-		return errors.Trace(err)
-	}
-	return nil
+	return isInit, nil
 }
 
 func (m *DefaultBaseMaster) Poll(ctx context.Context) error {
+	if !m.initialized {
+		// TODO (zixiong) make this operation asynchronous
+		if err := m.markInitializedInMetadata(ctx); err != nil {
+			m.initialized = true
+			return errors.Trace(err)
+		}
+	}
+
 	select {
 	case err := <-m.errCh:
 		if err != nil {
@@ -227,10 +221,6 @@ func (m *DefaultBaseMaster) Poll(ctx context.Context) error {
 	}
 
 	if err := m.workerManager.CheckStatusUpdate(ctx); err != nil {
-		return errors.Trace(err)
-	}
-
-	if err := m.Impl.Tick(ctx); err != nil {
 		return errors.Trace(err)
 	}
 

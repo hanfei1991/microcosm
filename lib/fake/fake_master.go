@@ -21,7 +21,7 @@ type Config struct {
 	WorkerCount int    `json:"worker-count"`
 }
 
-var _ lib.BaseJobMaster = (*Master)(nil)
+var _ worker.Runnable = (*Master)(nil)
 
 type Master struct {
 	lib.BaseJobMaster
@@ -36,6 +36,14 @@ type Master struct {
 	config           *Config
 }
 
+func (m *Master) OnJobManagerFailover(reason lib.MasterFailoverReason) error {
+	panic("implement me")
+}
+
+func (m *Master) IsJobMasterImpl() {
+	panic("implement me")
+}
+
 func (m *Master) ID() worker.RunnableID {
 	return m.workerID
 }
@@ -44,7 +52,11 @@ func (m *Master) Workload() model.RescUnit {
 	return 0
 }
 
-func (m *Master) InitImpl(ctx context.Context) error {
+func (m *Master) Init(ctx context.Context) error {
+	if _, err := m.BaseJobMaster.Init(ctx); err != nil {
+		return errors.Trace(err)
+	}
+
 	log.L().Info("FakeMaster: Init", zap.Any("config", m.config))
 	m.workerList = make([]lib.WorkerHandle, m.config.WorkerCount)
 	return nil
@@ -156,7 +168,6 @@ func NewFakeMaster(ctx *dcontext.Context, workerID lib.WorkerID, masterID lib.Ma
 	deps := ctx.Dependencies
 	base := lib.NewBaseJobMaster(
 		ctx,
-		ret,
 		ret,
 		masterID,
 		workerID,
