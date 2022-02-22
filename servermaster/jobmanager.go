@@ -148,12 +148,32 @@ func NewJobManagerImplV2(
 
 // Init implements lib.MasterImpl.Init
 func (jm *JobManagerImplV2) Init(ctx context.Context) error {
-	_, err := jm.BaseMaster.Init(ctx)
-	return err
+	isFirstStartUp, err := jm.BaseMaster.Init(ctx)
+	if err != nil {
+		return err
+	}
+	if !isFirstStartUp {
+		jobs, err := jm.masterMetaClient.LoadAllMasters(ctx)
+		if err != nil {
+			return err
+		}
+		for _, job := range jobs {
+			jm.jobFsm.JobDispatched(job.MasterMetaExt)
+			if err := jm.BaseMaster.RegisterWorker(ctx, job.ID); err != nil {
+				return err
+			}
+			// TODO: support check job that is not active in WaitAck queue and recreate it.
+			log.L().Info("recover job, move it to WaitAck job queue", zap.Any("job", job))
+		}
+	}
+	return nil
 }
 
 // Poll implements lib.MasterImpl.Poll
 func (jm *JobManagerImplV2) Poll(ctx context.Context) error {
+	if err := jm.BaseMaster.Poll(ctx); err != nil {
+		return err
+	}
 	return jm.jobFsm.IterPendingJobs(
 		func(job *lib.MasterMetaExt) (string, error) {
 			return jm.BaseMaster.CreateWorker(
@@ -163,6 +183,7 @@ func (jm *JobManagerImplV2) Poll(ctx context.Context) error {
 
 // OnMasterRecovered implements lib.MasterImpl.OnMasterRecovered
 func (jm *JobManagerImplV2) OnMasterRecovered(ctx context.Context) error {
+	// Deprecated
 	jobs, err := jm.masterMetaClient.LoadAllMasters(ctx)
 	if err != nil {
 		return err

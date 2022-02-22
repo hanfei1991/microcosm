@@ -537,6 +537,10 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		s.resign()
 	}()
 
+	if err := s.jobManager.Init(ctx); err != nil {
+		return err
+	}
+
 	leaderTicker := time.NewTicker(time.Millisecond * 200)
 	defer leaderTicker.Stop()
 	for {

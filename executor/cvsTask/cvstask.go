@@ -5,6 +5,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pingcap/errors"
+
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/lib/registry"
 	"github.com/hanfei1991/microcosm/model"
@@ -104,12 +106,17 @@ func (task *cvsTask) Init(ctx context.Context) error {
 
 // Poll is called on a fixed interval.
 func (task *cvsTask) Poll(ctx context.Context) error {
-	return task.BaseWorker.Poll(ctx)
-}
+	if err := task.BaseWorker.Poll(ctx); err != nil {
+		return errors.Trace(err)
+	}
 
-// Status returns a short worker status to be periodically sent to the master.
-func (task *cvsTask) Status() lib.WorkerStatus {
-	return lib.WorkerStatus{Code: task.status, ErrorMessage: "", Ext: task.counter}
+	if err := task.UpdateStatus(
+		ctx,
+		lib.WorkerStatus{Code: task.status, ErrorMessage: "", Ext: task.counter}); err != nil {
+		return errors.Trace(err)
+	}
+
+	return nil
 }
 
 // Workload returns the current workload of the worker.

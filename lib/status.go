@@ -223,7 +223,6 @@ func (r *StatusReceiver) Init(ctx context.Context) error {
 				return nil
 			}
 			r.hasPendingNotification.Store(true)
-			log.L().Info("notification stored")
 			return nil
 		})
 	if err != nil {
@@ -257,9 +256,6 @@ func (r *StatusReceiver) Status() WorkerStatus {
 
 // Tick should be called periodically to drive the logic internal to StatusReceiver.
 func (r *StatusReceiver) Tick(ctx context.Context) error {
-	if r.hasPendingNotification.Load() {
-		log.L().Info("has pending notification")
-	}
 	// TODO make the time interval configurable
 	needFetchStatus := r.hasPendingNotification.Swap(false) ||
 		r.clock.Since(r.lastStatusUpdated.Load()) > time.Second*10
