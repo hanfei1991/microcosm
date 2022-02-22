@@ -100,7 +100,7 @@ func TestDumpWorker(t *testing.T) {
 
 	err = worker.Init(ctx)
 	require.NoError(t, err)
-	err = worker.Tick(ctx)
+	err = worker.Poll(ctx)
 	require.NoError(t, err)
 	utils.WaitSomething(10, 100*time.Millisecond, func() bool {
 		status := worker.Status()

@@ -77,7 +77,11 @@ func NewCvsTask(ctx *dcontext.Context, _workerID lib.WorkerID, masterID lib.Mast
 	return task
 }
 
-func (task *cvsTask) InitImpl(ctx context.Context) error {
+func (task *cvsTask) Init(ctx context.Context) error {
+	if err := task.BaseWorker.Init(ctx); err != nil {
+		return err
+	}
+
 	log.L().Info("init the task  ", zap.Any("task id :", task.ID()))
 	task.status = lib.WorkerStatusNormal
 	ctx, task.cancelFn = context.WithCancel(ctx)
@@ -98,11 +102,9 @@ func (task *cvsTask) InitImpl(ctx context.Context) error {
 	return nil
 }
 
-// Tick is called on a fixed interval.
-func (task *cvsTask) Tick(ctx context.Context) error {
-	// log.L().Info("cvs task tick", zap.Any(" task id ", string(task.ID())+" -- "+strconv.FormatInt(task.counter, 10)))
-
-	return nil
+// Poll is called on a fixed interval.
+func (task *cvsTask) Poll(ctx context.Context) error {
+	return task.BaseWorker.Poll(ctx)
 }
 
 // Status returns a short worker status to be periodically sent to the master.
@@ -120,8 +122,12 @@ func (task *cvsTask) OnMasterFailover(reason lib.MasterFailoverReason) error {
 	return nil
 }
 
-// CloseImpl tells the WorkerImpl to quitrunStatusWorker and release resources.
-func (task *cvsTask) CloseImpl(ctx context.Context) error {
+// Close tells the WorkerImpl to quitrunStatusWorker and release resources.
+func (task *cvsTask) Close(ctx context.Context) error {
+	if err := task.BaseWorker.Close(ctx); err != nil {
+		log.L().Warn("failed to close BaseWorker", zap.Error(err))
+	}
+
 	task.cancelFn()
 	return nil
 }

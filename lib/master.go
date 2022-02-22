@@ -38,6 +38,10 @@ type MasterImpl interface {
 	// by the MasterImpl.
 	Init(ctx context.Context) error
 
+	// Poll is called periodically by the runtime to drive the internal
+	// logic of this master.
+	Poll(ctx context.Context) error
+
 	// OnMasterRecovered is called when the master has recovered from an error.
 	OnMasterRecovered(ctx context.Context) error
 
@@ -53,8 +57,8 @@ type MasterImpl interface {
 	// OnWorkerMessage is called when a customized message is received.
 	OnWorkerMessage(worker WorkerHandle, topic p2p.Topic, message interface{}) error
 
-	// CloseImpl is called when the master is being closed
-	CloseImpl(ctx context.Context) error
+	// Close is called when the master is being closed
+	Close(ctx context.Context) error
 
 	// GetWorkerStatusExtTypeInfo returns an empty object that described the actual type
 	// of the `Ext` field in WorkerStatus.
@@ -236,10 +240,6 @@ func (m *DefaultBaseMaster) GetWorkers() map[WorkerID]WorkerHandle {
 }
 
 func (m *DefaultBaseMaster) Close(ctx context.Context) error {
-	if err := m.Impl.CloseImpl(ctx); err != nil {
-		return errors.Trace(err)
-	}
-
 	close(m.closeCh)
 	m.wg.Wait()
 	if err := m.messageHandlerManager.Clean(ctx); err != nil {

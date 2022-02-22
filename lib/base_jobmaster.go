@@ -189,10 +189,12 @@ type jobMasterImplAsWorkerImpl struct {
 }
 
 func (j *jobMasterImplAsWorkerImpl) Init(ctx context.Context) error {
+	log.L().Panic("unexpected Init call")
 	return nil
 }
 
 func (j *jobMasterImplAsWorkerImpl) Poll(ctx context.Context) error {
+	log.L().Panic("unexpected Poll call")
 	return nil
 }
 
@@ -205,6 +207,7 @@ func (j *jobMasterImplAsWorkerImpl) OnMasterFailover(reason MasterFailoverReason
 }
 
 func (j *jobMasterImplAsWorkerImpl) Close(ctx context.Context) error {
+	log.L().Panic("unexpected Close call")
 	return nil
 }
 
@@ -214,6 +217,11 @@ func (j *jobMasterImplAsWorkerImpl) GetWorkerStatusExtTypeInfo() interface{} {
 
 type jobMasterImplAsMasterImpl struct {
 	inner JobMasterImpl
+}
+
+func (j *jobMasterImplAsMasterImpl) Poll(ctx context.Context) error {
+	log.L().Panic("unexpected poll call")
+	return nil
 }
 
 func (j *jobMasterImplAsMasterImpl) Init(ctx context.Context) error {
@@ -241,8 +249,8 @@ func (j *jobMasterImplAsMasterImpl) OnWorkerMessage(worker WorkerHandle, topic p
 	return j.inner.OnWorkerMessage(worker, topic, message)
 }
 
-func (j *jobMasterImplAsMasterImpl) CloseImpl(ctx context.Context) error {
-	// deprecated
+func (j *jobMasterImplAsMasterImpl) Close(ctx context.Context) error {
+	log.L().Panic("unexpected Close call")
 	return nil
 }
 

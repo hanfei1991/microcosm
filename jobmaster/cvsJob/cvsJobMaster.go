@@ -116,7 +116,11 @@ func (jm *JobMaster) Init(ctx context.Context) error {
 	return nil
 }
 
-func (jm *JobMaster) Tick(ctx context.Context) error {
+func (jm *JobMaster) Poll(ctx context.Context) error {
+	if err := jm.BaseMaster.Poll(ctx); err != nil {
+		return err
+	}
+
 	jm.counter = 0
 	for _, worker := range jm.syncFilesInfo {
 		if worker.handle == nil {
@@ -184,9 +188,9 @@ func (jm *JobMaster) OnWorkerMessage(worker lib.WorkerHandle, topic p2p.Topic, m
 	return nil
 }
 
-// CloseImpl is called when the master is being closed
-func (jm *JobMaster) CloseImpl(ctx context.Context) error {
-	return nil
+// Close is called when the master is being closed
+func (jm *JobMaster) Close(ctx context.Context) error {
+	return jm.BaseMaster.Close(ctx)
 }
 
 func (jm *JobMaster) ID() worker.RunnableID {

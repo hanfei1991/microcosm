@@ -3,6 +3,8 @@ package dm
 import (
 	"context"
 
+	"go.uber.org/zap"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/unit"
@@ -29,12 +31,20 @@ func newDumpWorker(cfg lib.WorkerConfig) lib.Worker {
 	}
 }
 
-func (d *dumpWorker) InitImpl(ctx context.Context) error {
+func (d *dumpWorker) Init(ctx context.Context) error {
+	if err := d.DefaultBaseWorker.Init(ctx); err != nil {
+		return errors.Trace(err)
+	}
+
 	d.unitHolder = newUnitHolder(dumpling.NewDumpling(d.cfg))
 	return errors.Trace(d.unitHolder.init(ctx))
 }
 
-func (d *dumpWorker) Tick(ctx context.Context) error {
+func (d *dumpWorker) Poll(ctx context.Context) error {
+	if err := d.DefaultBaseWorker.Poll(ctx); err != nil {
+		return errors.Trace(err)
+	}
+
 	d.unitHolder.lazyProcess()
 
 	return nil
@@ -68,7 +78,11 @@ func (d *dumpWorker) OnMasterFailover(reason lib.MasterFailoverReason) error {
 	return nil
 }
 
-func (d *dumpWorker) CloseImpl(ctx context.Context) error {
+func (d *dumpWorker) Close(ctx context.Context) error {
+	if err := d.DefaultBaseWorker.Close(ctx); err != nil {
+		log.L().Warn("failed to close BaseWorker", zap.Error(err))
+	}
+
 	d.unitHolder.close()
 	return nil
 }

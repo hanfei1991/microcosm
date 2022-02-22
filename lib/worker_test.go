@@ -44,11 +44,6 @@ func TestWorkerInitAndClose(t *testing.T) {
 		Initialized: true,
 	})
 
-	worker.On("InitImpl", mock.Anything).Return(nil)
-	worker.On("Status").Return(WorkerStatus{
-		Code: WorkerStatusNormal,
-	}, nil)
-	worker.On("Tick", mock.Anything).Return(nil)
 	worker.On("GetWorkerStatusExtTypeInfo").Return(&dummyStatus{})
 
 	err := worker.Init(ctx)
@@ -86,7 +81,6 @@ func TestWorkerInitAndClose(t *testing.T) {
 		Epoch: 1,
 	}, statusMsg)
 
-	worker.On("CloseImpl").Return(nil)
 	err = worker.Close(ctx)
 	require.NoError(t, err)
 }
@@ -122,7 +116,6 @@ func TestWorkerHeartbeatPingPong(t *testing.T) {
 
 	worker.clock.(*clock.Mock).Add(defaultTimeoutConfig.workerHeartbeatInterval)
 
-	worker.On("Tick", mock.Anything).Return(nil)
 	var lastHeartbeatSendTime clock.MonotonicTime
 	for i := 0; i < heartbeatPingPongTestRepeatTimes; i++ {
 		err := worker.Poll(ctx)
@@ -227,16 +220,13 @@ func TestWorkerStatus(t *testing.T) {
 		Initialized: true,
 	})
 
-	worker.On("InitImpl", mock.Anything).Return(nil)
 	worker.On("Status").Return(WorkerStatus{
 		Code: WorkerStatusNormal,
 		Ext: &dummyStatus{
 			Val: 1,
 		},
 	}, nil)
-	worker.On("Tick", mock.Anything).Return(nil)
 	worker.On("GetWorkerStatusExtTypeInfo").Return(&dummyStatus{})
-	worker.On("CloseImpl", mock.Anything).Return(nil)
 
 	err := worker.Init(ctx)
 	require.NoError(t, err)
@@ -303,7 +293,6 @@ func TestWorkerSuicide(t *testing.T) {
 	err := worker.Init(ctx)
 	require.NoError(t, err)
 
-	worker.On("Tick", mock.Anything).Return(nil)
 	err = worker.Poll(ctx)
 	require.NoError(t, err)
 

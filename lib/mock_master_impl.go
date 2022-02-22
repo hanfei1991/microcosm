@@ -149,12 +149,8 @@ func (m *MockMasterImpl) OnWorkerMessage(worker WorkerHandle, topic p2p.Topic, m
 	return args.Error(0)
 }
 
-func (m *MockMasterImpl) CloseImpl(ctx context.Context) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	args := m.Called(ctx)
-	return args.Error(0)
+func (m *MockMasterImpl) Close(ctx context.Context) error {
+	return m.DefaultBaseMaster.Close(ctx)
 }
 
 func (m *MockMasterImpl) MasterClient() *client.MockServerMasterClient {

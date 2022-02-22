@@ -3,6 +3,8 @@ package dm
 import (
 	"context"
 
+	"go.uber.org/zap"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/unit"
@@ -29,7 +31,11 @@ func newLoadWorker(cfg lib.WorkerConfig) lib.Worker {
 	}
 }
 
-func (d *loadWorker) InitImpl(ctx context.Context) error {
+func (d *loadWorker) Init(ctx context.Context) error {
+	if err := d.DefaultBaseWorker.Init(ctx); err != nil {
+		return errors.Trace(err)
+	}
+
 	// `workerName` and `etcdClient` of `NewLightning` are not used in dataflow
 	// scenario, we just use readable values here.
 	workerName := "dataflow-worker"
@@ -37,7 +43,11 @@ func (d *loadWorker) InitImpl(ctx context.Context) error {
 	return errors.Trace(d.unitHolder.init(ctx))
 }
 
-func (d *loadWorker) Tick(ctx context.Context) error {
+func (d *loadWorker) Poll(ctx context.Context) error {
+	if err := d.DefaultBaseWorker.Poll(ctx); err != nil {
+		return errors.Trace(err)
+	}
+
 	d.unitHolder.lazyProcess()
 
 	return nil
@@ -71,7 +81,10 @@ func (d *loadWorker) OnMasterFailover(reason lib.MasterFailoverReason) error {
 	return nil
 }
 
-func (d *loadWorker) CloseImpl(ctx context.Context) error {
+func (d *loadWorker) Close(ctx context.Context) error {
+	if err := d.DefaultBaseWorker.Close(ctx); err != nil {
+		log.L().Warn("Failed to close BaseWorker", zap.Error(err))
+	}
 	d.unitHolder.close()
 	return nil
 }

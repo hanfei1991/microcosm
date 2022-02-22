@@ -145,9 +145,9 @@ func (m *Master) OnWorkerMessage(worker lib.WorkerHandle, topic p2p.Topic, messa
 	return nil
 }
 
-func (m *Master) CloseImpl(ctx context.Context) error {
+func (m *Master) Close(ctx context.Context) error {
 	log.L().Info("FakeMaster: Close", zap.Stack("stack"))
-	return nil
+	return m.BaseJobMaster.Close(ctx)
 }
 
 func (m *Master) OnMasterFailover(reason lib.MasterFailoverReason) error {

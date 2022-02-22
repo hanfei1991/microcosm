@@ -72,7 +72,6 @@ func TestMasterInit(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, masterData.Initialized)
 
-	master.On("CloseImpl", mock.Anything).Return(nil)
 	err = master.Close(ctx)
 	require.NoError(t, err)
 
@@ -82,7 +81,6 @@ func TestMasterInit(t *testing.T) {
 	err = master.Init(ctx)
 	require.NoError(t, err)
 
-	master.On("CloseImpl", mock.Anything).Return(nil)
 	err = master.Close(ctx)
 	require.NoError(t, err)
 }

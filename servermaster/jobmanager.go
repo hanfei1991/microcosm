@@ -206,7 +206,7 @@ func (jm *JobManagerImplV2) OnWorkerMessage(worker lib.WorkerHandle, topic p2p.T
 	return nil
 }
 
-// CloseImpl implements lib.MasterImpl.CloseImpl
-func (jm *JobManagerImplV2) CloseImpl(ctx context.Context) error {
-	return nil
+// Close implements lib.MasterImpl.Close
+func (jm *JobManagerImplV2) Close(ctx context.Context) error {
+	return jm.BaseMaster.Close(ctx)
 }

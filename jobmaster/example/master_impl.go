@@ -105,7 +105,10 @@ func (e *exampleMaster) OnWorkerMessage(worker lib.WorkerHandle, topic p2p.Topic
 	return nil
 }
 
-func (e *exampleMaster) CloseImpl(ctx context.Context) error {
-	log.L().Info("CloseImpl")
+func (e *exampleMaster) Close(ctx context.Context) error {
+	log.L().Info("Close")
+	if err := e.DefaultBaseMaster.Close(ctx); err != nil {
+		log.L().Warn("Failed to close BaseMaster", zap.Error(err))
+	}
 	return nil
 }
