@@ -98,6 +98,14 @@ func (s *WorkerStatus) fillExt(tpi interface{}) (err error) {
 	return nil
 }
 
+func (s *WorkerStatus) Marshal() ([]byte, error) {
+	err := s.marshalExt()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return json.Marshal(s)
+}
+
 func (s *WorkerStatus) marshalExt() error {
 	bytes, err := json.Marshal(s.Ext)
 	if err != nil {
@@ -136,11 +144,6 @@ type HeartbeatPongMessage struct {
 	ReplyTime  time.Time           `json:"reply-time"`
 	ToWorkerID WorkerID            `json:"to-worker-id"`
 	Epoch      Epoch               `json:"epoch"`
-}
-
-type StatusUpdateMessage struct {
-	WorkerID WorkerID     `json:"worker-id"`
-	Status   WorkerStatus `json:"status"`
 }
 
 type WorkloadReportMessage struct {

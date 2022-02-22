@@ -22,6 +22,7 @@ type JobManager interface {
 	lib.Master
 
 	SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *pb.SubmitJobResponse
+	QueryJob(ctx context.Context, req *pb.QueryJobRequest) *pb.QueryJobResponse
 	CancelJob(ctx context.Context, req *pb.CancelJobRequest) *pb.CancelJobResponse
 	PauseJob(ctx context.Context, req *pb.PauseJobRequest) *pb.PauseJobResponse
 }
@@ -55,6 +56,10 @@ func (jm *JobManagerImplV2) CancelJob(ctx context.Context, req *pb.CancelJobRequ
 	panic("not implemented")
 }
 
+func (jm *JobManagerImplV2) QueryJob(ctx context.Context, req *pb.QueryJobRequest) *pb.QueryJobResponse {
+	return jm.jobFsm.QueryJob(req.JobId)
+}
+
 // SubmitJob processes "SubmitJobRequest".
 func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *pb.SubmitJobResponse {
 	log.L().Logger.Info("submit job", zap.String("config", string(req.Config)))
@@ -66,7 +71,8 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 	job := &lib.MasterMetaExt{
 		// TODO: we can use job name provided from user, but we must check the
 		// job name is unique before using it.
-		ID: jm.uuidGen.NewString(),
+		ID:     jm.uuidGen.NewString(),
+		Config: req.Config,
 	}
 	switch req.Tp {
 	case pb.JobType_CVSDemo:

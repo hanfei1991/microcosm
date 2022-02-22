@@ -182,7 +182,16 @@ func (m *DefaultBaseMaster) Init(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 	m.currentEpoch.Store(epoch)
-	m.workerManager = newWorkerManager(m.id, !isInit, epoch)
+	m.workerManager = newWorkerManager(
+		m.id,
+		!isInit,
+		epoch,
+		m.messageSender,
+		m.messageHandlerManager,
+		m.metaKVClient,
+		m.pool,
+		m.Impl.GetWorkerStatusExtTypeInfo(),
+		&m.timeoutConfig)
 
 	m.startBackgroundTasks()
 
@@ -214,6 +223,10 @@ func (m *DefaultBaseMaster) Poll(ctx context.Context) error {
 	}
 
 	if err := m.messageHandlerManager.CheckError(ctx); err != nil {
+		return errors.Trace(err)
+	}
+
+	if err := m.workerManager.CheckStatusUpdate(ctx); err != nil {
 		return errors.Trace(err)
 	}
 
@@ -295,7 +308,14 @@ func (m *DefaultBaseMaster) runWorkerCheck(ctx context.Context) error {
 
 		for _, workerInfo := range offlinedWorkers {
 			log.L().Info("worker is offline", zap.Any("worker-info", workerInfo))
-			tombstoneHandle := NewTombstoneWorkerHandle(workerInfo.ID, workerInfo.status)
+			status, ok := m.workerManager.GetStatus(workerInfo.ID)
+			if !ok {
+				log.L().Panic(
+					"offlined worker has no status found",
+					zap.Any("worker-info", workerInfo),
+				)
+			}
+			tombstoneHandle := NewTombstoneWorkerHandle(workerInfo.ID, *status)
 			err := m.unregisterMessageHandler(ctx, workerInfo.ID)
 			if err != nil {
 				return err
@@ -421,45 +441,34 @@ func (m *DefaultBaseMaster) registerHandlerForWorker(ctx context.Context, worker
 		log.L().Panic("duplicate handler",
 			zap.String("topic", topic))
 	}
-
-	topic = StatusUpdateTopic(m.id, workerID)
-	ok, err = m.messageHandlerManager.RegisterHandler(
-		ctx,
-		topic,
-		&StatusUpdateMessage{},
-		func(sender p2p.NodeID, value p2p.MessageValue) error {
-			statusUpdateMessage := value.(*StatusUpdateMessage)
-			if err := statusUpdateMessage.Status.fillExt(m.Impl.GetWorkerStatusExtTypeInfo()); err != nil {
-				m.OnError(err)
-				return nil
-			}
-			m.workerManager.UpdateStatus(statusUpdateMessage)
-			return nil
-		})
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if !ok {
-		log.L().Panic("duplicate handler",
-			zap.String("topic", topic))
-	}
 	return nil
 }
 
-// generateWorkerID assigns a new worker id.
-// When creating a job master, job manager provides a pre allocated ID, in other
-// cases, we need to generate a random WorkerID.
-func (m *DefaultBaseMaster) generateWorkerID(workerType WorkerType, config WorkerConfig) string {
+// prepareWorkerConfig extracts information from WorkerConfig into detail fields.
+// - If workerType is master type, the config is a `*MasterMetaExt` struct and
+//   contains pre allocated maseter ID, and json marshalled config.
+// - If workerType is worker type, the config is a user defined config struct, we
+//   marshal it to byte slice as returned config, and generate a random WorkerID.
+func (m *DefaultBaseMaster) prepareWorkerConfig(
+	workerType WorkerType, config WorkerConfig,
+) (rawConfig []byte, workerID string, err error) {
 	switch workerType {
 	case CvsJobMaster, FakeJobMaster:
 		masterCfg, ok := config.(*MasterMetaExt)
 		if !ok {
-			log.L().Warn("invalid master config, will gen random worker id")
+			err = derror.ErrMasterInvalidMeta.GenWithStackByArgs(config)
+			return
 		}
-		return masterCfg.ID
+		rawConfig = masterCfg.Config
+		workerID = masterCfg.ID
 	default:
+		rawConfig, err = json.Marshal(config)
+		if err != nil {
+			return
+		}
+		workerID = m.uuidGen.NewString()
 	}
-	return m.uuidGen.NewString()
+	return
 }
 
 func (m *DefaultBaseMaster) RegisterWorker(ctx context.Context, workerID WorkerID) error {
@@ -473,16 +482,13 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 		zap.Int64("worker-type", int64(workerType)),
 		zap.Any("worker-config", config))
 
-	configBytes, err := json.Marshal(config)
-	if err != nil {
-		return "", errors.Trace(err)
-	}
-
-	// workerID is expected to be globally unique.
-	workerID := m.generateWorkerID(workerType, config)
-
 	if !m.createWorkerQuota.TryConsume() {
 		return "", derror.ErrMasterConcurrencyExceeded.GenWithStackByArgs()
+	}
+
+	configBytes, workerID, err := m.prepareWorkerConfig(workerType, config)
+	if err != nil {
+		return "", err
 	}
 
 	// register worker haneler before dispatching worker to executor.
@@ -493,6 +499,10 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 	}
 
 	go func() {
+		// TODO make the timeout configurable
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
 		needUnregisterWorkerHandler := false
 		defer func() {
 			m.createWorkerQuota.Release()
@@ -574,7 +584,7 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 			return
 		}
 
-		if err := m.workerManager.AddWorker(workerID, p2p.NodeID(executorID), WorkerStatusCreated); err != nil {
+		if err := m.workerManager.OnWorkerCreated(ctx, workerID, p2p.NodeID(executorID)); err != nil {
 			needUnregisterWorkerHandler = true
 			m.OnError(errors.Trace(err))
 		}
