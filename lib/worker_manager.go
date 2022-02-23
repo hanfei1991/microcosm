@@ -254,15 +254,6 @@ func (m *workerManagerImpl) putWorkerInfo(info *WorkerInfo) bool {
 	return !exists
 }
 
-// AddWorker directly adds a status of a worker to the workerManager.
-// It is used for testing only for now.
-func (m *workerManagerImpl) AddWorker(id WorkerID, executorNodeID p2p.NodeID) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	return m.addWorker(id, executorNodeID)
-}
-
 func (m *workerManagerImpl) addWorker(id WorkerID, executorNodeID p2p.NodeID) error {
 	if _, exists := m.workerInfos[id]; exists {
 		// TODO determine whether it is appropriate to panic here.
