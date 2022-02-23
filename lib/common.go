@@ -65,9 +65,9 @@ type WorkerStatus struct {
 	Code         WorkerStatusCode `json:"code"`
 	ErrorMessage string           `json:"error-message"`
 
-	// ExtBytes carries the serialized form of the Ext field.
-	// See below for more information.
-	// Business should parse the raw bytes and decodes into business Go object
+	// ExtBytes carries the serialized form of the Ext field, which is used in
+	// business logic only.
+	// Business logic can parse the raw bytes and decode into business Go object
 	ExtBytes []byte `json:"ext-bytes"`
 }
 
