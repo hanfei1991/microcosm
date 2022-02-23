@@ -25,7 +25,7 @@ func init() {
 	r.MustRegisterWorkerType(WorkerDMSync, syncFactory)
 }
 
-type workerConstructor func(lib.BaseWorker, lib.WorkerConfig) lib.Worker
+type workerConstructor func(lib.BaseWorker, lib.WorkerConfig) lib.WorkerImpl
 
 type unitWorkerFactory struct {
 	constructor workerConstructor
@@ -41,7 +41,9 @@ func (u unitWorkerFactory) NewWorker(ctx *context.Context, workerID lib.WorkerID
 		workerID,
 		masterID,
 	)
-	return u.constructor(base, config), nil
+	worker := u.constructor(base, config)
+	base.(*lib.DefaultBaseWorker).Impl = worker
+	return worker.(lib.Worker), nil
 }
 
 func (u unitWorkerFactory) DeserializeConfig(configBytes []byte) (registry.WorkerConfig, error) {

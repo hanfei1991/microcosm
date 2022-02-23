@@ -45,6 +45,7 @@ func (w *exampleWorker) run() {
 	w.work.finished = true
 	w.work.mu.Unlock()
 
+	// nolint:errcheck
 	_, _ = w.BaseWorker.SendMessage(context.TODO(), testTopic, testMsg)
 }
 

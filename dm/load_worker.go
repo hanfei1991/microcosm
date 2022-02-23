@@ -13,7 +13,7 @@ import (
 	"github.com/hanfei1991/microcosm/model"
 )
 
-var _ lib.WorkerImpl = &loadWorker{}
+var _ lib.Worker = &loadWorker{}
 
 type loadWorker struct {
 	lib.BaseWorker
@@ -22,7 +22,7 @@ type loadWorker struct {
 	unitHolder *unitHolder
 }
 
-func newLoadWorker(base lib.BaseWorker, cfg lib.WorkerConfig) lib.Worker {
+func newLoadWorker(base lib.BaseWorker, cfg lib.WorkerConfig) lib.WorkerImpl {
 	subtaskCfg := cfg.(*config.SubTaskConfig)
 	return &loadWorker{
 		BaseWorker: base,
