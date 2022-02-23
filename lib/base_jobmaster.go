@@ -41,7 +41,7 @@ type BaseJobMaster interface {
 	IsBaseJobMaster()
 }
 
-type defaultBaseJobMaster struct {
+type DefaultBaseJobMaster struct {
 	master *DefaultBaseMaster
 	worker *DefaultBaseWorker
 	impl   JobMasterImpl
@@ -89,17 +89,18 @@ func NewBaseJobMaster(
 	baseWorker := NewBaseWorker(
 		&jobMasterImplAsWorkerImpl{jobMasterImpl}, messageHandlerManager, messageRouter, metaKVClient,
 		workerID, masterID)
-	return &defaultBaseJobMaster{
+	return &DefaultBaseJobMaster{
 		master: baseMaster.(*DefaultBaseMaster),
 		worker: baseWorker.(*DefaultBaseWorker),
+		impl:   jobMasterImpl,
 	}
 }
 
-func (d *defaultBaseJobMaster) MetaKVClient() metadata.MetaKV {
+func (d *DefaultBaseJobMaster) MetaKVClient() metadata.MetaKV {
 	return d.master.MetaKVClient()
 }
 
-func (d *defaultBaseJobMaster) Init(ctx context.Context) error {
+func (d *DefaultBaseJobMaster) Init(ctx context.Context) error {
 	if err := d.worker.doPreInit(ctx); err != nil {
 		return errors.Trace(err)
 	}
@@ -129,25 +130,28 @@ func (d *defaultBaseJobMaster) Init(ctx context.Context) error {
 	return nil
 }
 
-func (d *defaultBaseJobMaster) Poll(ctx context.Context) error {
+func (d *DefaultBaseJobMaster) Poll(ctx context.Context) error {
 	if err := d.master.doPoll(ctx); err != nil {
 		return errors.Trace(err)
 	}
 	if err := d.worker.doPoll(ctx); err != nil {
 		return errors.Trace(err)
 	}
+	if err := d.impl.Tick(ctx); err != nil {
+		return errors.Trace(err)
+	}
 	return nil
 }
 
-func (d *defaultBaseJobMaster) MasterID() MasterID {
+func (d *DefaultBaseJobMaster) MasterID() MasterID {
 	return d.master.MasterID()
 }
 
-func (d *defaultBaseJobMaster) GetWorkers() map[WorkerID]WorkerHandle {
+func (d *DefaultBaseJobMaster) GetWorkers() map[WorkerID]WorkerHandle {
 	return d.master.GetWorkers()
 }
 
-func (d *defaultBaseJobMaster) Close(ctx context.Context) error {
+func (d *DefaultBaseJobMaster) Close(ctx context.Context) error {
 	if err := d.impl.CloseImpl(ctx); err != nil {
 		return errors.Trace(err)
 	}
@@ -157,48 +161,48 @@ func (d *defaultBaseJobMaster) Close(ctx context.Context) error {
 	return nil
 }
 
-func (d *defaultBaseJobMaster) OnError(err error) {
+func (d *DefaultBaseJobMaster) OnError(err error) {
 	// TODO refine the OnError logic.
 	d.master.OnError(err)
 }
 
-func (d *defaultBaseJobMaster) RegisterWorker(ctx context.Context, workerID WorkerID) error {
+func (d *DefaultBaseJobMaster) RegisterWorker(ctx context.Context, workerID WorkerID) error {
 	return d.master.RegisterWorker(ctx, workerID)
 }
 
-func (d *defaultBaseJobMaster) CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error) {
+func (d *DefaultBaseJobMaster) CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error) {
 	return d.master.CreateWorker(workerType, config, cost)
 }
 
-func (d *defaultBaseJobMaster) GetWorkerStatusExtTypeInfo() interface{} {
+func (d *DefaultBaseJobMaster) GetWorkerStatusExtTypeInfo() interface{} {
 	return d.master.GetWorkerStatusExtTypeInfo()
 }
 
-func (d *defaultBaseJobMaster) UpdateStatus(ctx context.Context, status WorkerStatus) error {
+func (d *DefaultBaseJobMaster) UpdateStatus(ctx context.Context, status WorkerStatus) error {
 	return d.worker.UpdateStatus(ctx, status)
 }
 
-func (d *defaultBaseJobMaster) Workload() model.RescUnit {
+func (d *DefaultBaseJobMaster) Workload() model.RescUnit {
 	return d.worker.Workload()
 }
 
-func (d *defaultBaseJobMaster) ID() worker.RunnableID {
+func (d *DefaultBaseJobMaster) ID() worker.RunnableID {
 	return d.worker.ID()
 }
 
-func (d *defaultBaseJobMaster) GetJobMasterStatusExtTypeInfo() interface{} {
+func (d *DefaultBaseJobMaster) GetJobMasterStatusExtTypeInfo() interface{} {
 	panic("implement me")
 }
 
-func (d *defaultBaseJobMaster) JobMasterID() MasterID {
+func (d *DefaultBaseJobMaster) JobMasterID() MasterID {
 	return d.master.MasterID()
 }
 
-func (d *defaultBaseJobMaster) UpdateJobStatus(ctx context.Context, status WorkerStatus) error {
+func (d *DefaultBaseJobMaster) UpdateJobStatus(ctx context.Context, status WorkerStatus) error {
 	return d.worker.UpdateStatus(ctx, status)
 }
 
-func (d *defaultBaseJobMaster) IsBaseJobMaster() {
+func (d *DefaultBaseJobMaster) IsBaseJobMaster() {
 }
 
 type jobMasterImplAsWorkerImpl struct {
