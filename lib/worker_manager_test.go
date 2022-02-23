@@ -510,7 +510,7 @@ func TestWorkerTimedOutWithPendingHeartbeat(t *testing.T) {
 		pool,
 		&dummyStatus{},
 		&defaultTimeoutConfig).(*workerManagerImpl)
-	manager.clock = clock.NewMock()>>>>>>> master
+	manager.clock = clock.NewMock()
 	manager.clock.(*clock.Mock).Set(time.Now())
 
 	err := safeAddWorker(manager, workerID1, executorNodeID1)
