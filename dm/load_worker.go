@@ -16,16 +16,17 @@ import (
 var _ lib.WorkerImpl = &loadWorker{}
 
 type loadWorker struct {
-	*lib.DefaultBaseWorker
+	lib.BaseWorker
 
 	cfg        *config.SubTaskConfig
 	unitHolder *unitHolder
 }
 
-func newLoadWorker(cfg lib.WorkerConfig) lib.Worker {
+func newLoadWorker(base lib.BaseWorker, cfg lib.WorkerConfig) lib.Worker {
 	subtaskCfg := cfg.(*config.SubTaskConfig)
 	return &loadWorker{
-		cfg: subtaskCfg,
+		BaseWorker: base,
+		cfg:        subtaskCfg,
 	}
 }
 

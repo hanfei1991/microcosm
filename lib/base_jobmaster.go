@@ -3,13 +3,14 @@ package lib
 import (
 	"context"
 
+	"github.com/pingcap/errors"
+
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/executor/worker"
 	"github.com/hanfei1991/microcosm/model"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
-	"github.com/pingcap/errors"
 )
 
 type BaseJobMaster interface {
@@ -120,4 +121,9 @@ func (d *defaultBaseJobMaster) Workload() model.RescUnit {
 
 func (d *defaultBaseJobMaster) ID() worker.RunnableID {
 	return d.worker.ID()
+}
+
+func (d *defaultBaseJobMaster) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) (bool, error) {
+	// master will use WorkerHandle to send message
+	return d.worker.SendMessage(ctx, topic, message)
 }

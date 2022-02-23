@@ -16,16 +16,17 @@ import (
 var _ lib.WorkerImpl = &dumpWorker{}
 
 type dumpWorker struct {
-	*lib.DefaultBaseWorker
+	lib.BaseWorker
 
 	cfg        *config.SubTaskConfig
 	unitHolder *unitHolder
 }
 
-func newDumpWorker(cfg lib.WorkerConfig) lib.Worker {
+func newDumpWorker(base lib.BaseWorker, cfg lib.WorkerConfig) lib.Worker {
 	subtaskCfg := cfg.(*config.SubTaskConfig)
 	return &dumpWorker{
-		cfg: subtaskCfg,
+		BaseWorker: base,
+		cfg:        subtaskCfg,
 	}
 }
 

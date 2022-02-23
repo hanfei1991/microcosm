@@ -25,14 +25,23 @@ func init() {
 	r.MustRegisterWorkerType(WorkerDMSync, syncFactory)
 }
 
-type workerConstructor func(config lib.WorkerConfig) lib.Worker
+type workerConstructor func(lib.BaseWorker, lib.WorkerConfig) lib.Worker
 
 type unitWorkerFactory struct {
 	constructor workerConstructor
 }
 
 func (u unitWorkerFactory) NewWorker(ctx *context.Context, workerID lib.WorkerID, masterID lib.MasterID, config registry.WorkerConfig) (lib.Worker, error) {
-	return u.constructor(config), nil
+	deps := ctx.Dependencies
+	base := lib.NewBaseWorker(
+		nil,
+		deps.MessageHandlerManager,
+		deps.MessageRouter,
+		deps.MetaKVClient,
+		workerID,
+		masterID,
+	)
+	return u.constructor(base, config), nil
 }
 
 func (u unitWorkerFactory) DeserializeConfig(configBytes []byte) (registry.WorkerConfig, error) {

@@ -16,16 +16,17 @@ import (
 var _ lib.WorkerImpl = &syncWorker{}
 
 type syncWorker struct {
-	*lib.DefaultBaseWorker
+	lib.BaseWorker
 
 	cfg        *config.SubTaskConfig
 	unitHolder *unitHolder
 }
 
-func newSyncWorker(cfg lib.WorkerConfig) lib.Worker {
+func newSyncWorker(base lib.BaseWorker, cfg lib.WorkerConfig) lib.Worker {
 	subtaskCfg := cfg.(*config.SubTaskConfig)
 	return &syncWorker{
-		cfg: subtaskCfg,
+		BaseWorker: base,
+		cfg:        subtaskCfg,
 	}
 }
 
