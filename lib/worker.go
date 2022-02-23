@@ -118,6 +118,22 @@ func (w *DefaultBaseWorker) Workload() model.RescUnit {
 }
 
 func (w *DefaultBaseWorker) Init(ctx context.Context) error {
+	if err := w.doPreInit(ctx); err != nil {
+		return errors.Trace(err)
+	}
+
+	if err := w.Impl.InitImpl(ctx); err != nil {
+		return errors.Trace(err)
+	}
+
+	if err := w.doPostInit(ctx); err != nil {
+		return errors.Trace(err)
+	}
+
+	return nil
+}
+
+func (w *DefaultBaseWorker) doPreInit(ctx context.Context) error {
 	// TODO refine this part
 	poolCtx, cancelPool := context.WithCancel(context.TODO())
 	w.cancelMu.Lock()
@@ -158,10 +174,10 @@ func (w *DefaultBaseWorker) Init(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	if err := w.Impl.InitImpl(ctx); err != nil {
-		return errors.Trace(err)
-	}
+	return nil
+}
 
+func (w *DefaultBaseWorker) doPostInit(ctx context.Context) error {
 	if err := w.UpdateStatus(ctx, WorkerStatus{
 		Code: WorkerStatusInit,
 	}); err != nil {
@@ -172,7 +188,7 @@ func (w *DefaultBaseWorker) Init(ctx context.Context) error {
 	return nil
 }
 
-func (w *DefaultBaseWorker) Poll(ctx context.Context) error {
+func (w *DefaultBaseWorker) doPoll(ctx context.Context) error {
 	if err := w.messageHandlerManager.CheckError(ctx); err != nil {
 		return errors.Trace(err)
 	}
@@ -189,13 +205,21 @@ func (w *DefaultBaseWorker) Poll(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
+	return nil
+}
+
+func (w *DefaultBaseWorker) Poll(ctx context.Context) error {
+	if err := w.doPoll(ctx); err != nil {
+		return errors.Trace(err)
+	}
+
 	if err := w.Impl.Tick(ctx); err != nil {
 		return errors.Trace(err)
 	}
 	return nil
 }
 
-func (w *DefaultBaseWorker) Close(ctx context.Context) error {
+func (w *DefaultBaseWorker) doClose() {
 	w.cancelMu.Lock()
 	w.cancelBgTasks()
 	w.cancelPool()
@@ -210,11 +234,15 @@ func (w *DefaultBaseWorker) Close(ctx context.Context) error {
 	}
 
 	w.wg.Wait()
+}
 
+func (w *DefaultBaseWorker) Close(ctx context.Context) error {
 	if err := w.Impl.CloseImpl(ctx); err != nil {
 		log.L().Error("Failed to close WorkerImpl", zap.Error(err))
 		return errors.Trace(err)
 	}
+
+	w.doClose()
 	return nil
 }
 
