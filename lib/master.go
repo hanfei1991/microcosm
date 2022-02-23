@@ -81,7 +81,6 @@ type BaseMaster interface {
 	RegisterWorker(ctx context.Context, workerID WorkerID) error
 	// CreateWorker registers worker handler and dispatches worker to executor
 	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error)
-	GetWorkerStatusExtTypeInfo() interface{}
 }
 
 type DefaultBaseMaster struct {

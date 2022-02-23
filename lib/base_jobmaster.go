@@ -27,9 +27,6 @@ type BaseJobMaster interface {
 	RegisterWorker(ctx context.Context, workerID WorkerID) error
 	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error)
 
-	GetWorkerStatusExtTypeInfo() interface{}
-	GetJobMasterStatusExtTypeInfo() interface{}
-
 	Workload() model.RescUnit
 
 	JobMasterID() MasterID
@@ -174,10 +171,6 @@ func (d *DefaultBaseJobMaster) CreateWorker(workerType WorkerType, config Worker
 	return d.master.CreateWorker(workerType, config, cost)
 }
 
-func (d *DefaultBaseJobMaster) GetWorkerStatusExtTypeInfo() interface{} {
-	return d.master.GetWorkerStatusExtTypeInfo()
-}
-
 func (d *DefaultBaseJobMaster) UpdateStatus(ctx context.Context, status WorkerStatus) error {
 	return d.worker.UpdateStatus(ctx, status)
 }
@@ -188,10 +181,6 @@ func (d *DefaultBaseJobMaster) Workload() model.RescUnit {
 
 func (d *DefaultBaseJobMaster) ID() worker.RunnableID {
 	return d.worker.ID()
-}
-
-func (d *DefaultBaseJobMaster) GetJobMasterStatusExtTypeInfo() interface{} {
-	panic("implement me")
 }
 
 func (d *DefaultBaseJobMaster) JobMasterID() MasterID {
