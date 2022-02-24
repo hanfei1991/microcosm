@@ -45,11 +45,6 @@ type WorkerImpl interface {
 
 	// CloseImpl tells the WorkerImpl to quit running StatusWorker and release resources.
 	CloseImpl(ctx context.Context) error
-
-	// GetWorkerStatusExtTypeInfo returns an empty object that described the actual type
-	// of the `Ext` field in WorkerStatus.
-	// The returned type's kind must be Array, Chan, Map, Ptr, or Slice.
-	GetWorkerStatusExtTypeInfo() interface{}
 }
 
 type BaseWorker interface {
@@ -60,6 +55,7 @@ type BaseWorker interface {
 	ID() runtime.RunnableID
 	MetaKVClient() metadata.MetaKV
 	UpdateStatus(ctx context.Context, status WorkerStatus) error
+	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) (bool, error)
 }
 
 type DefaultBaseWorker struct {
@@ -176,7 +172,7 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) error {
 			}))
 		})
 
-	w.workerMetaClient = NewWorkerMetadataClient(w.masterID, w.metaKVClient, w.Impl.GetWorkerStatusExtTypeInfo())
+	w.workerMetaClient = NewWorkerMetadataClient(w.masterID, w.metaKVClient)
 
 	w.statusSender = NewStatusSender(w.id, w.masterClient, w.workerMetaClient, w.messageSender, w.pool)
 
@@ -274,6 +270,14 @@ func (w *DefaultBaseWorker) UpdateStatus(ctx context.Context, status WorkerStatu
 		return errors.Trace(err)
 	}
 	return nil
+}
+
+func (w *DefaultBaseWorker) SendMessage(
+	ctx context.Context,
+	topic p2p.Topic,
+	message interface{},
+) (bool, error) {
+	return w.messageSender.SendToNode(ctx, w.masterClient.MasterNode(), topic, message)
 }
 
 func (w *DefaultBaseWorker) startBackgroundTasks() {

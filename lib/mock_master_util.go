@@ -158,9 +158,8 @@ func MockBaseMasterWorkerUpdateStatus(
 	workerID WorkerID,
 	executorID p2p.NodeID,
 	status *WorkerStatus,
-	extTpi interface{},
 ) {
-	workerMetaClient := NewWorkerMetadataClient(masterID, master.metaKVClient, extTpi)
+	workerMetaClient := NewWorkerMetadataClient(masterID, master.metaKVClient)
 	err := workerMetaClient.Store(ctx, workerID, status)
 	require.NoError(t, err)
 

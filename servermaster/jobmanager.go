@@ -43,10 +43,6 @@ type JobManagerImplV2 struct {
 	uuidGen          uuid.Generator
 }
 
-func (jm *JobManagerImplV2) GetWorkerStatusExtTypeInfo() interface{} {
-	return struct{}{}
-}
-
 func (jm *JobManagerImplV2) PauseJob(ctx context.Context, req *pb.PauseJobRequest) *pb.PauseJobResponse {
 	panic("not implemented")
 }

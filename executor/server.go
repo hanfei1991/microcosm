@@ -455,7 +455,7 @@ func (s *Server) selfRegister(ctx context.Context) (err error) {
 	log.L().Logger.Info("master client init successful")
 	registerReq := &pb.RegisterExecutorRequest{
 		Address:    s.cfg.AdvertiseAddr,
-		Capability: 100,
+		Capability: defaultCapability,
 	}
 
 	resp, err := s.cli.RegisterExecutor(ctx, registerReq, s.cfg.RPCTimeout)
@@ -463,9 +463,10 @@ func (s *Server) selfRegister(ctx context.Context) (err error) {
 		return err
 	}
 	s.info = &model.NodeInfo{
-		Type: model.NodeTypeExecutor,
-		ID:   model.ExecutorID(resp.ExecutorId),
-		Addr: s.cfg.AdvertiseAddr,
+		Type:       model.NodeTypeExecutor,
+		ID:         model.ExecutorID(resp.ExecutorId),
+		Addr:       s.cfg.AdvertiseAddr,
+		Capability: int(defaultCapability),
 	}
 	log.L().Logger.Info("register successful", zap.Any("info", s.info))
 	return nil

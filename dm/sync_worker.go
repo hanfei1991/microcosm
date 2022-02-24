@@ -13,19 +13,20 @@ import (
 	"github.com/hanfei1991/microcosm/model"
 )
 
-var _ lib.WorkerImpl = &syncWorker{}
+var _ lib.Worker = &syncWorker{}
 
 type syncWorker struct {
-	*lib.DefaultBaseWorker
+	lib.BaseWorker
 
 	cfg        *config.SubTaskConfig
 	unitHolder *unitHolder
 }
 
-func newSyncWorker(cfg lib.WorkerConfig) lib.Worker {
+func newSyncWorker(base lib.BaseWorker, cfg lib.WorkerConfig) lib.WorkerImpl {
 	subtaskCfg := cfg.(*config.SubTaskConfig)
 	return &syncWorker{
-		cfg: subtaskCfg,
+		BaseWorker: base,
+		cfg:        subtaskCfg,
 	}
 }
 
@@ -53,10 +54,6 @@ func (s *syncWorker) Status() lib.WorkerStatus {
 	}
 	// should not happen, syncer will run continuously.
 	return lib.WorkerStatus{Code: lib.WorkerStatusFinished}
-}
-
-func (s *syncWorker) GetWorkerStatusExtTypeInfo() interface{} {
-	return &struct{}{}
 }
 
 func (s *syncWorker) Workload() model.RescUnit {
