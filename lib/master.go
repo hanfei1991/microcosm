@@ -7,13 +7,17 @@ import (
 	"time"
 
 	"github.com/hanfei1991/microcosm/client"
+	runtime "github.com/hanfei1991/microcosm/executor/worker"
+	"github.com/hanfei1991/microcosm/lib/quota"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
+	"github.com/hanfei1991/microcosm/pkg/clock"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/pkg/workerpool"
@@ -26,7 +30,7 @@ type Master interface {
 	Poll(ctx context.Context) error
 	MasterID() MasterID
 
-	Closer
+	runtime.Closer
 }
 
 type MasterImpl interface {
@@ -56,19 +60,36 @@ type MasterImpl interface {
 }
 
 const (
-	createWorkerTimeout = 10 * time.Second
+	createWorkerTimeout        = 10 * time.Second
+	maxCreateWorkerConcurrency = 100
 )
 
-type BaseMaster struct {
+type BaseMaster interface {
+	MetaKVClient() metadata.MetaKV
+	Init(ctx context.Context) error
+	Poll(ctx context.Context) error
+	MasterID() MasterID
+	GetWorkers() map[WorkerID]WorkerHandle
+	Close(ctx context.Context) error
+	OnError(err error)
+	// RegisterWorker registers worker handler only, the worker is expected to be running
+	RegisterWorker(ctx context.Context, workerID WorkerID) error
+	// CreateWorker registers worker handler and dispatches worker to executor
+	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error)
+}
+
+type DefaultBaseMaster struct {
 	Impl MasterImpl
 
 	// dependencies
 	messageHandlerManager p2p.MessageHandlerManager
-	messageRouter         p2p.MessageSender
+	messageSender         p2p.MessageSender
 	metaKVClient          metadata.MetaKV
 	executorClientManager client.ClientsManager
 	serverMasterClient    client.MasterClient
 	pool                  workerpool.AsyncPool
+
+	clock clock.Clock
 
 	// workerManager maintains the list of all workers and
 	// their statuses.
@@ -82,14 +103,17 @@ type BaseMaster struct {
 	// closeCh is closed when the BaseMaster is exiting
 	closeCh chan struct{}
 
-	// read-only fields
-	id            MasterID
+	id            MasterID // id of this master
 	advertiseAddr string
 	nodeID        p2p.NodeID
 	timeoutConfig TimeoutConfig
+	masterMetaExt *MasterMetaExt
 
 	// components for easier unit testing
 	uuidGen uuid.Generator
+
+	// TODO use a shared quota for all masters.
+	createWorkerQuota quota.ConcurrencyQuota
 }
 
 func NewBaseMaster(
@@ -97,30 +121,38 @@ func NewBaseMaster(
 	impl MasterImpl,
 	id MasterID,
 	messageHandlerManager p2p.MessageHandlerManager,
-	messageRouter p2p.MessageSender,
+	messageSender p2p.MessageSender,
 	metaKVClient metadata.MetaKV,
 	executorClientManager client.ClientsManager,
 	serverMasterClient client.MasterClient,
-) *BaseMaster {
+) BaseMaster {
 	var (
 		nodeID        p2p.NodeID
 		advertiseAddr string
+		masterMetaExt = &MasterMetaExt{}
 	)
 	if ctx != nil {
 		nodeID = ctx.Environ.NodeID
 		advertiseAddr = ctx.Environ.Addr
+		metaBytes := ctx.Environ.MasterMetaExt
+		err := masterMetaExt.Unmarshal(metaBytes)
+		if err != nil {
+			log.L().Warn("invalid master meta", zap.ByteString("data", metaBytes), zap.Error(err))
+		}
 	}
-	return &BaseMaster{
+	return &DefaultBaseMaster{
 		Impl:                  impl,
 		messageHandlerManager: messageHandlerManager,
-		messageRouter:         messageRouter,
+		messageSender:         messageSender,
 		metaKVClient:          metaKVClient,
 		executorClientManager: executorClientManager,
 		serverMasterClient:    serverMasterClient,
 		pool:                  workerpool.NewDefaultAsyncPool(4),
 		id:                    id,
+		clock:                 clock.New(),
 
 		timeoutConfig: defaultTimeoutConfig,
+		masterMetaExt: masterMetaExt,
 
 		errCh:   make(chan error, 1),
 		closeCh: make(chan struct{}),
@@ -129,22 +161,20 @@ func NewBaseMaster(
 
 		nodeID:        nodeID,
 		advertiseAddr: advertiseAddr,
+
+		createWorkerQuota: quota.NewConcurrencyQuota(maxCreateWorkerConcurrency),
 	}
 }
 
-func (m *BaseMaster) MetaKVClient() metadata.MetaKV {
+func (m *DefaultBaseMaster) MetaKVClient() metadata.MetaKV {
 	return m.metaKVClient
 }
 
-func (m *BaseMaster) Init(ctx context.Context) error {
-	isInit, epoch, err := m.initMetadata(ctx)
+func (m *DefaultBaseMaster) Init(ctx context.Context) error {
+	isInit, err := m.doInit(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	m.currentEpoch.Store(epoch)
-	m.workerManager = newWorkerManager(m.id, !isInit, epoch)
-
-	m.startBackgroundTasks()
 
 	if isInit {
 		if err := m.Impl.InitImpl(ctx); err != nil {
@@ -162,7 +192,40 @@ func (m *BaseMaster) Init(ctx context.Context) error {
 	return nil
 }
 
-func (m *BaseMaster) Poll(ctx context.Context) error {
+func (m *DefaultBaseMaster) doInit(ctx context.Context) (isFirstStartUp bool, err error) {
+	isInit, epoch, err := m.initMetadata(ctx)
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	m.currentEpoch.Store(epoch)
+	m.workerManager = newWorkerManager(
+		m.id,
+		!isInit,
+		epoch,
+		m.messageSender,
+		m.messageHandlerManager,
+		m.metaKVClient,
+		m.pool,
+		&m.timeoutConfig)
+
+	m.startBackgroundTasks()
+
+	return isInit, nil
+}
+
+func (m *DefaultBaseMaster) Poll(ctx context.Context) error {
+	if err := m.doPoll(ctx); err != nil {
+		return errors.Trace(err)
+	}
+
+	if err := m.Impl.Tick(ctx); err != nil {
+		return errors.Trace(err)
+	}
+
+	return nil
+}
+
+func (m *DefaultBaseMaster) doPoll(ctx context.Context) error {
 	select {
 	case err := <-m.errCh:
 		if err != nil {
@@ -177,35 +240,42 @@ func (m *BaseMaster) Poll(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	if err := m.Impl.Tick(ctx); err != nil {
+	if err := m.workerManager.CheckStatusUpdate(ctx); err != nil {
 		return errors.Trace(err)
 	}
-
 	return nil
 }
 
-func (m *BaseMaster) MasterID() MasterID {
+func (m *DefaultBaseMaster) MasterID() MasterID {
 	return m.id
 }
 
-func (m *BaseMaster) GetWorkers() map[WorkerID]WorkerHandle {
+func (m *DefaultBaseMaster) GetWorkers() map[WorkerID]WorkerHandle {
 	return m.workerManager.GetWorkers()
 }
 
-func (m *BaseMaster) Close(ctx context.Context) error {
+func (m *DefaultBaseMaster) doClose() {
+	closeCtx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+	defer cancel()
+
+	close(m.closeCh)
+	m.wg.Wait()
+	if err := m.messageHandlerManager.Clean(closeCtx); err != nil {
+		log.L().Warn("Failed to clean up message handlers",
+			zap.String("master-id", m.id))
+	}
+}
+
+func (m *DefaultBaseMaster) Close(ctx context.Context) error {
 	if err := m.Impl.CloseImpl(ctx); err != nil {
 		return errors.Trace(err)
 	}
 
-	close(m.closeCh)
-	m.wg.Wait()
-	if err := m.messageHandlerManager.Clean(ctx); err != nil {
-		return errors.Trace(err)
-	}
+	m.doClose()
 	return nil
 }
 
-func (m *BaseMaster) startBackgroundTasks() {
+func (m *DefaultBaseMaster) startBackgroundTasks() {
 	cctx, cancel := context.WithCancel(context.Background())
 	m.wg.Add(1)
 	go func() {
@@ -231,7 +301,7 @@ func (m *BaseMaster) startBackgroundTasks() {
 	}()
 }
 
-func (m *BaseMaster) runWorkerCheck(ctx context.Context) error {
+func (m *DefaultBaseMaster) runWorkerCheck(ctx context.Context) error {
 	ticker := time.NewTicker(m.timeoutConfig.masterHeartbeatCheckLoopInterval)
 	for {
 		select {
@@ -240,16 +310,9 @@ func (m *BaseMaster) runWorkerCheck(ctx context.Context) error {
 		case <-ticker.C:
 		}
 
-		offlinedWorkers, onlinedWorkers := m.workerManager.Tick(ctx, m.messageRouter)
-		for _, workerInfo := range offlinedWorkers {
-			log.L().Info("worker is offline", zap.Any("worker-info", workerInfo))
-			tombstoneHandle := NewTombstoneWorkerHandle(workerInfo.ID, workerInfo.status)
-			err := m.Impl.OnWorkerOffline(tombstoneHandle, derror.ErrWorkerOffline.GenWithStackByArgs(workerInfo.ID))
-			if err != nil {
-				return errors.Trace(err)
-			}
-		}
-
+		offlinedWorkers, onlinedWorkers := m.workerManager.Tick(ctx, m.messageSender)
+		// It is logical to call `OnWorkerOnline` first and then call `OnWorkerOffline`.
+		// In case that these two events for the same worker is detected in the same tick.
 		for _, workerInfo := range onlinedWorkers {
 			log.L().Info("worker is online", zap.Any("worker-info", workerInfo))
 
@@ -259,10 +322,52 @@ func (m *BaseMaster) runWorkerCheck(ctx context.Context) error {
 				return errors.Trace(err)
 			}
 		}
+
+		for _, workerInfo := range offlinedWorkers {
+			log.L().Info("worker is offline", zap.Any("worker-info", workerInfo))
+			status, ok := m.workerManager.GetStatus(workerInfo.ID)
+			if !ok {
+				log.L().Panic(
+					"offlined worker has no status found",
+					zap.Any("worker-info", workerInfo),
+				)
+			}
+			tombstoneHandle := NewTombstoneWorkerHandle(workerInfo.ID, *status)
+			err := m.unregisterMessageHandler(ctx, workerInfo.ID)
+			if err != nil {
+				return err
+			}
+			err = m.Impl.OnWorkerOffline(tombstoneHandle, derror.ErrWorkerOffline.GenWithStackByArgs(workerInfo.ID))
+			if err != nil {
+				return errors.Trace(err)
+			}
+		}
 	}
 }
 
-func (m *BaseMaster) OnError(err error) {
+func (m *DefaultBaseMaster) unregisterMessageHandler(ctx context.Context, workerID WorkerID) error {
+	topic := HeartbeatPingTopic(m.id, workerID)
+	removed, err := m.messageHandlerManager.UnregisterHandler(ctx, topic)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if !removed {
+		log.L().Warn("heartbeat message handler is not removed", zap.String("topic", topic))
+	}
+
+	topic = StatusUpdateTopic(m.id, workerID)
+	removed, err = m.messageHandlerManager.UnregisterHandler(ctx, topic)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if !removed {
+		log.L().Warn("status update message handler is not removed", zap.String("topic", topic))
+	}
+
+	return nil
+}
+
+func (m *DefaultBaseMaster) OnError(err error) {
 	if errors.Cause(err) == context.Canceled {
 		// TODO think about how to gracefully handle cancellation here.
 		log.L().Warn("BaseMaster is being canceled", zap.Error(err))
@@ -274,10 +379,10 @@ func (m *BaseMaster) OnError(err error) {
 	}
 }
 
-func (m *BaseMaster) initMetadata(ctx context.Context) (isInit bool, epoch Epoch, err error) {
+func (m *DefaultBaseMaster) initMetadata(ctx context.Context) (isInit bool, epoch Epoch, err error) {
 	// TODO refine this logic to make it correct and easier to understand.
 
-	metaClient := NewMetadataClient(m.id, m.metaKVClient)
+	metaClient := NewMasterMetadataClient(m.id, m.metaKVClient)
 	masterMeta, err := metaClient.Load(ctx)
 	if err != nil {
 		if !derror.ErrMasterNotFound.Equal(err) {
@@ -302,6 +407,7 @@ func (m *BaseMaster) initMetadata(ctx context.Context) (isInit bool, epoch Epoch
 	masterMeta.Addr = m.advertiseAddr
 	masterMeta.NodeID = m.nodeID
 	masterMeta.Epoch = epoch
+	masterMeta.MasterMetaExt = m.masterMetaExt
 
 	if err := metaClient.Store(ctx, masterMeta); err != nil {
 		return false, 0, errors.Trace(err)
@@ -309,8 +415,8 @@ func (m *BaseMaster) initMetadata(ctx context.Context) (isInit bool, epoch Epoch
 	return
 }
 
-func (m *BaseMaster) markInitializedInMetadata(ctx context.Context) error {
-	metaClient := NewMetadataClient(m.id, m.metaKVClient)
+func (m *DefaultBaseMaster) markInitializedInMetadata(ctx context.Context) error {
+	metaClient := NewMasterMetadataClient(m.id, m.metaKVClient)
 	masterMeta, err := metaClient.Load(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -324,7 +430,7 @@ func (m *BaseMaster) markInitializedInMetadata(ctx context.Context) error {
 	return nil
 }
 
-func (m *BaseMaster) registerHandlerForWorker(ctx context.Context, workerID WorkerID) error {
+func (m *DefaultBaseMaster) registerHandlerForWorker(ctx context.Context, workerID WorkerID) error {
 	topic := HeartbeatPingTopic(m.id, workerID)
 	ok, err := m.messageHandlerManager.RegisterHandler(
 		ctx,
@@ -352,46 +458,84 @@ func (m *BaseMaster) registerHandlerForWorker(ctx context.Context, workerID Work
 		log.L().Panic("duplicate handler",
 			zap.String("topic", topic))
 	}
-
-	topic = StatusUpdateTopic(m.id, workerID)
-	ok, err = m.messageHandlerManager.RegisterHandler(
-		ctx,
-		topic,
-		&StatusUpdateMessage{},
-		func(sender p2p.NodeID, value p2p.MessageValue) error {
-			statusUpdateMessage := value.(*StatusUpdateMessage)
-			m.workerManager.UpdateStatus(statusUpdateMessage)
-			return nil
-		})
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if !ok {
-		log.L().Panic("duplicate handler",
-			zap.String("topic", topic))
-	}
 	return nil
 }
 
-func (m *BaseMaster) CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error) {
+// prepareWorkerConfig extracts information from WorkerConfig into detail fields.
+// - If workerType is master type, the config is a `*MasterMetaExt` struct and
+//   contains pre allocated maseter ID, and json marshalled config.
+// - If workerType is worker type, the config is a user defined config struct, we
+//   marshal it to byte slice as returned config, and generate a random WorkerID.
+func (m *DefaultBaseMaster) prepareWorkerConfig(
+	workerType WorkerType, config WorkerConfig,
+) (rawConfig []byte, workerID string, err error) {
+	switch workerType {
+	case CvsJobMaster, FakeJobMaster:
+		masterCfg, ok := config.(*MasterMetaExt)
+		if !ok {
+			err = derror.ErrMasterInvalidMeta.GenWithStackByArgs(config)
+			return
+		}
+		rawConfig = masterCfg.Config
+		workerID = masterCfg.ID
+	default:
+		rawConfig, err = json.Marshal(config)
+		if err != nil {
+			return
+		}
+		workerID = m.uuidGen.NewString()
+	}
+	return
+}
+
+func (m *DefaultBaseMaster) RegisterWorker(ctx context.Context, workerID WorkerID) error {
+	registerHandlerCtx, cancelRegisterHandler := context.WithTimeout(ctx, time.Second*1)
+	defer cancelRegisterHandler()
+	return m.registerHandlerForWorker(registerHandlerCtx, workerID)
+}
+
+func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error) {
 	log.L().Info("CreateWorker",
 		zap.Int64("worker-type", int64(workerType)),
 		zap.Any("worker-config", config))
 
-	configBytes, err := json.Marshal(config)
+	if !m.createWorkerQuota.TryConsume() {
+		return "", derror.ErrMasterConcurrencyExceeded.GenWithStackByArgs()
+	}
+
+	configBytes, workerID, err := m.prepareWorkerConfig(workerType, config)
 	if err != nil {
+		return "", err
+	}
+
+	// register worker haneler before dispatching worker to executor.
+	// Because dispatchTask could fail, we must ensure register handler happens
+	// before unregister handler, in case of zombie handler.
+	if err := m.RegisterWorker(context.TODO(), workerID); err != nil {
 		return "", errors.Trace(err)
 	}
 
-	// workerID is expected to be globally unique.
-	workerID := WorkerID(m.uuidGen.NewString())
+	go func() {
+		// TODO make the timeout configurable
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
 
-	// poolCtx is used to prevent `m.pool.Go(...)` from blocking indefinitely.
-	// TODO add an asynchronous interface to the pool, so that we do not need a context anymore.
-	poolCtx, cancel := context.WithTimeout(context.Background(), createWorkerTimeout)
-	defer cancel()
+		needUnregisterWorkerHandler := false
+		defer func() {
+			m.createWorkerQuota.Release()
+			if needUnregisterWorkerHandler {
+				ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+				defer cancel()
+				if err := m.unregisterMessageHandler(ctx, workerID); err != nil {
+					m.OnError(errors.Trace(err))
+				}
+			}
+		}()
 
-	err = m.pool.Go(poolCtx, func() {
+		// When CreateWorker failed, we need to pass the worker id to
+		// OnWorkerDispatched, so we use a dummy WorkerHandle.
+		dispatchFailedDummyHandler := NewTombstoneWorkerHandle(
+			workerID, WorkerStatus{Code: WorkerStatusError})
 		requestCtx, cancel := context.WithTimeout(context.Background(), createWorkerTimeout)
 		defer cancel()
 		// This following API should be refined.
@@ -404,7 +548,8 @@ func (m *BaseMaster) CreateWorker(workerType WorkerType, config WorkerConfig, co
 			// TODO (zixiong) make the timeout configurable
 			time.Second*10)
 		if err != nil {
-			err1 := m.Impl.OnWorkerDispatched(nil, errors.Trace(err))
+			needUnregisterWorkerHandler = true
+			err1 := m.Impl.OnWorkerDispatched(dispatchFailedDummyHandler, errors.Trace(err))
 			if err1 != nil {
 				m.OnError(errors.Trace(err1))
 			}
@@ -412,13 +557,14 @@ func (m *BaseMaster) CreateWorker(workerType WorkerType, config WorkerConfig, co
 		}
 		schedule := resp.GetSchedule()
 		if len(schedule) != 1 {
-			panic("unreachable")
+			log.L().Panic("unexpected schedule result", zap.Any("schedule", schedule))
 		}
 		executorID := model.ExecutorID(schedule[0].ExecutorId)
 
 		err = m.executorClientManager.AddExecutor(executorID, schedule[0].Addr)
 		if err != nil {
-			err1 := m.Impl.OnWorkerDispatched(nil, errors.Trace(err))
+			needUnregisterWorkerHandler = true
+			err1 := m.Impl.OnWorkerDispatched(dispatchFailedDummyHandler, errors.Trace(err))
 			if err1 != nil {
 				m.OnError(errors.Trace(err1))
 			}
@@ -430,12 +576,13 @@ func (m *BaseMaster) CreateWorker(workerType WorkerType, config WorkerConfig, co
 			Req: &pb.DispatchTaskRequest{
 				TaskTypeId: int64(workerType),
 				TaskConfig: configBytes,
-				MasterId:   string(m.id),
-				WorkerId:   string(workerID),
+				MasterId:   m.id,
+				WorkerId:   workerID,
 			},
 		})
 		if err != nil {
-			err1 := m.Impl.OnWorkerDispatched(nil, errors.Trace(err))
+			needUnregisterWorkerHandler = true
+			err1 := m.Impl.OnWorkerDispatched(dispatchFailedDummyHandler, errors.Trace(err))
 			if err1 != nil {
 				m.OnError(errors.Trace(err1))
 			}
@@ -445,15 +592,17 @@ func (m *BaseMaster) CreateWorker(workerType WorkerType, config WorkerConfig, co
 		log.L().Info("Worker dispatched", zap.Any("response", dispatchTaskResp))
 		errCode := dispatchTaskResp.GetErrorCode()
 		if errCode != pb.DispatchTaskErrorCode_OK {
-			err1 := m.Impl.OnWorkerDispatched(
-				nil, errors.Errorf("dispatch worker failed with error code: %d", errCode))
+			needUnregisterWorkerHandler = true
+			err1 := m.Impl.OnWorkerDispatched(dispatchFailedDummyHandler,
+				errors.Errorf("dispatch worker failed with error code: %d", errCode))
 			if err1 != nil {
 				m.OnError(errors.Trace(err1))
 			}
 			return
 		}
 
-		if err := m.workerManager.AddWorker(workerID, p2p.NodeID(executorID), WorkerStatusCreated); err != nil {
+		if err := m.workerManager.OnWorkerCreated(ctx, workerID, p2p.NodeID(executorID)); err != nil {
+			needUnregisterWorkerHandler = true
 			m.OnError(errors.Trace(err))
 		}
 		handle := m.workerManager.GetWorkerHandle(workerID)
@@ -461,16 +610,7 @@ func (m *BaseMaster) CreateWorker(workerType WorkerType, config WorkerConfig, co
 		if err := m.Impl.OnWorkerDispatched(handle, nil); err != nil {
 			m.OnError(errors.Trace(err))
 		}
-	})
-	if err != nil {
-		return "", errors.Trace(err)
-	}
+	}()
 
-	registerHandlerCtx, cancelRegisterHandler := context.WithTimeout(context.TODO(), time.Second*1)
-	defer cancelRegisterHandler()
-
-	if err := m.registerHandlerForWorker(registerHandlerCtx, workerID); err != nil {
-		return "", errors.Trace(err)
-	}
 	return workerID, nil
 }

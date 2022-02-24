@@ -1,7 +1,7 @@
 package lib
 
 import (
-	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -11,13 +11,13 @@ import (
 )
 
 type (
-	MasterID         string
-	WorkerID         string
 	WorkerStatusCode int32
 	WorkerType       int64
 
 	Epoch        = int64
 	WorkerConfig = interface{}
+	MasterID     = string
+	WorkerID     = string
 )
 
 // Among these statuses, only WorkerStatusCreated is used by the framework
@@ -34,10 +34,14 @@ const (
 
 const (
 	JobManager = WorkerType(iota + 1)
+	// job master
 	CvsJobMaster
+	FakeJobMaster
 	DmJobMaster
 	CdcJobMaster
+	// task
 	CvsTask
+	FakeTask
 	DmTask
 	CdcTask
 )
@@ -61,20 +65,24 @@ var defaultTimeoutConfig TimeoutConfig = TimeoutConfig{
 type WorkerStatus struct {
 	Code         WorkerStatusCode `json:"code"`
 	ErrorMessage string           `json:"error-message"`
-	Ext          interface{}      `json:"ext"`
+
+	// ExtBytes carries the serialized form of the Ext field, which is used in
+	// business logic only.
+	// Business logic can parse the raw bytes and decode into business Go object
+	ExtBytes []byte `json:"ext-bytes"`
 }
 
-type Closer interface {
-	Close(ctx context.Context) error
+func (s *WorkerStatus) Marshal() ([]byte, error) {
+	return json.Marshal(s)
 }
 
 func HeartbeatPingTopic(masterID MasterID, workerID WorkerID) p2p.Topic {
-	return fmt.Sprintf("heartbeat-ping-%s-%s", string(masterID), string(workerID))
+	return fmt.Sprintf("heartbeat-ping-%s-%s", masterID, workerID)
 }
 
 func HeartbeatPongTopic(masterID MasterID, workerID WorkerID) p2p.Topic {
 	// TODO do we need hex-encoding here?
-	return fmt.Sprintf("heartbeat-pong-%s-%s", string(masterID), string(workerID))
+	return fmt.Sprintf("heartbeat-pong-%s-%s", masterID, workerID)
 }
 
 func WorkloadReportTopic(masterID MasterID) p2p.Topic {
@@ -98,18 +106,12 @@ type HeartbeatPongMessage struct {
 	Epoch      Epoch               `json:"epoch"`
 }
 
-type StatusUpdateMessage struct {
-	WorkerID WorkerID     `json:"worker-id"`
-	Status   WorkerStatus `json:"status"`
-}
-
 type WorkloadReportMessage struct {
 	WorkerID WorkerID       `json:"worker-id"`
 	Workload model.RescUnit `json:"workload"`
 }
 
 type (
-	MasterMetaExt    = interface{}
 	MasterMetaKVData struct {
 		ID          MasterID   `json:"id"`
 		Addr        string     `json:"addr"`
@@ -118,9 +120,16 @@ type (
 		Initialized bool       `json:"initialized"`
 
 		// Ext holds business-specific data
-		Ext MasterMetaExt `json:"ext"`
+		MasterMetaExt *MasterMetaExt `json:"meta-ext"`
 	}
 )
+
+type WorkerMetaKVData struct {
+	MasterID   Master           `json:"id"`
+	NodeID     p2p.NodeID       `json:"node-id"`
+	StatusCode WorkerStatusCode `json:"status-code"`
+	Message    string           `json:"message"`
+}
 
 type MasterFailoverReasonCode int32
 

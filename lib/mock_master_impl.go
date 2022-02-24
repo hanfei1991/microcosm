@@ -2,28 +2,32 @@ package lib
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 
-	"github.com/hanfei1991/microcosm/client"
-	"github.com/hanfei1991/microcosm/pkg/metadata"
-	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/mock"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
+
+	"github.com/hanfei1991/microcosm/client"
+	"github.com/hanfei1991/microcosm/pkg/metadata"
+	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
 type MockMasterImpl struct {
 	mu sync.Mutex
 	mock.Mock
 
-	*BaseMaster
-	id MasterID
+	*DefaultBaseMaster
+	masterID MasterID
+	id       MasterID
 
 	tickCount         atomic.Int64
 	onlineWorkerCount atomic.Int64
 
 	dispatchedWorkers chan WorkerHandle
+	dispatchedResult  chan error
 
 	messageHandlerManager *p2p.MockMessageHandlerManager
 	messageSender         p2p.MessageSender
@@ -32,27 +36,19 @@ type MockMasterImpl struct {
 	serverMasterClient    *client.MockServerMasterClient
 }
 
-func NewMockMasterImpl(id MasterID) *MockMasterImpl {
+func NewMockMasterImpl(masterID, id MasterID) *MockMasterImpl {
 	ret := &MockMasterImpl{
-		id:                    id,
-		dispatchedWorkers:     make(chan WorkerHandle),
-		messageHandlerManager: p2p.NewMockMessageHandlerManager(),
-		messageSender:         p2p.NewMockMessageSender(),
-		metaKVClient:          metadata.NewMetaMock(),
-		executorClientManager: client.NewClientManager(),
-		serverMasterClient:    &client.MockServerMasterClient{},
+		masterID:          masterID,
+		id:                id,
+		dispatchedWorkers: make(chan WorkerHandle),
+		dispatchedResult:  make(chan error, 1),
 	}
-	ret.BaseMaster = NewBaseMaster(
-		// ctx is nil for now
-		// TODO refine this
-		nil,
-		ret,
-		id,
-		ret.messageHandlerManager,
-		ret.messageSender,
-		ret.metaKVClient,
-		ret.executorClientManager,
-		ret.serverMasterClient)
+	ret.DefaultBaseMaster = MockBaseMaster(id, ret)
+	ret.messageHandlerManager = ret.DefaultBaseMaster.messageHandlerManager.(*p2p.MockMessageHandlerManager)
+	ret.messageSender = ret.DefaultBaseMaster.messageSender
+	ret.metaKVClient = ret.DefaultBaseMaster.metaKVClient.(*metadata.MetaMock)
+	ret.executorClientManager = ret.DefaultBaseMaster.executorClientManager.(*client.Manager)
+	ret.serverMasterClient = ret.DefaultBaseMaster.serverMasterClient.(*client.MockServerMasterClient)
 
 	return ret
 }
@@ -64,7 +60,7 @@ func (m *MockMasterImpl) Reset() {
 	m.Mock.ExpectedCalls = nil
 	m.Mock.Calls = nil
 
-	m.BaseMaster = NewBaseMaster(
+	m.DefaultBaseMaster = NewBaseMaster(
 		nil,
 		m,
 		m.id,
@@ -72,7 +68,7 @@ func (m *MockMasterImpl) Reset() {
 		m.messageSender,
 		m.metaKVClient,
 		m.executorClientManager,
-		m.serverMasterClient)
+		m.serverMasterClient).(*DefaultBaseMaster)
 }
 
 func (m *MockMasterImpl) TickCount() int64 {
@@ -111,6 +107,7 @@ func (m *MockMasterImpl) OnWorkerDispatched(worker WorkerHandle, result error) e
 	defer m.mu.Unlock()
 
 	m.dispatchedWorkers <- worker
+	m.dispatchedResult <- result
 
 	args := m.Called(worker, result)
 	return args.Error(0)
@@ -155,4 +152,16 @@ func (m *MockMasterImpl) CloseImpl(ctx context.Context) error {
 
 func (m *MockMasterImpl) MasterClient() *client.MockServerMasterClient {
 	return m.serverMasterClient
+}
+
+type dummyStatus struct {
+	Val int
+}
+
+func (s *dummyStatus) Marshal() ([]byte, error) {
+	return json.Marshal(s)
+}
+
+func (s *dummyStatus) Unmarshal(data []byte) error {
+	return json.Unmarshal(data, s)
 }

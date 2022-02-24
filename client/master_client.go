@@ -34,6 +34,7 @@ type MasterClient interface {
 		req *pb.ExecWorkloadRequest,
 	) (resp *pb.ExecWorkloadResponse, err error)
 	SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) (resp *pb.SubmitJobResponse, err error)
+	QueryJob(ctx context.Context, req *pb.QueryJobRequest) (resp *pb.QueryJobResponse, err error)
 	PauseJob(ctx context.Context, req *pb.PauseJobRequest) (resp *pb.PauseJobResponse, err error)
 	CancelJob(ctx context.Context, req *pb.CancelJobRequest) (resp *pb.CancelJobResponse, err error)
 	QueryMetaStore(
@@ -106,7 +107,7 @@ func (c *MasterClientImpl) UpdateClients(ctx context.Context, urls []string) {
 func (c *MasterClientImpl) init(ctx context.Context, urls []string) error {
 	c.UpdateClients(ctx, urls)
 	if len(c.clients) == 0 {
-		return errors.ErrGrpcBuildConn.GenWithStack("failed to dial to master, urls: %v", c.urls)
+		return errors.ErrGrpcBuildConn.GenWithStack("failed to dial to master, urls: %v", urls)
 	}
 	return nil
 }
@@ -156,7 +157,7 @@ func (c *MasterClientImpl) rpcWrap(ctx context.Context, req interface{}, respPoi
 			err = errInterface.(error)
 		}
 		if err != nil {
-			log.L().Error("rpc to server master failed",
+			log.L().Debug("rpc to server master failed",
 				zap.Any("payload", req), zap.String("method", methodName),
 				zap.String("addr", addr), zap.Error(err),
 			)
@@ -185,6 +186,11 @@ func (c *MasterClientImpl) RegisterExecutor(ctx context.Context, req *pb.Registe
 }
 
 func (c *MasterClientImpl) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) (resp *pb.SubmitJobResponse, err error) {
+	err = c.rpcWrap(ctx, req, &resp)
+	return
+}
+
+func (c *MasterClientImpl) QueryJob(ctx context.Context, req *pb.QueryJobRequest) (resp *pb.QueryJobResponse, err error) {
 	err = c.rpcWrap(ctx, req, &resp)
 	return
 }

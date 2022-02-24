@@ -3,75 +3,84 @@ package main
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"math/rand"
 	"net"
 	"os"
+	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/sergi/go-diff/diffmatchpatch"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 )
 
 const (
 	FILENUM     = 50
-	RECORDERNUM = 10000
+	RECORDERNUM = 1000000
 	FLUSHLEN    = 10
-	PORT        = "127.0.0.1:1234"
+	PORT        = "0.0.0.0:1234"
 )
+
+var ready = make(chan struct{})
 
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
-	var err error
 
-	fmt.Println("Listening the client call ..")
-
-	go DataService(ctx)
-	fmt.Printf("type q if expected to quit .\n")
-	fmt.Printf("create the files in the format : d dir [100000]\n")
-	for {
-		var cmd string
-		reader := bufio.NewReader(os.Stdin)
-		cmd, err = reader.ReadString('\n')
-		if err != nil {
-			return
-		}
-		cmd = strings.TrimSpace(cmd)
-		if cmd == "" {
-			continue
-		}
-		strs := strings.Fields(cmd)
-		switch strs[0] {
-		case "q":
-			cancel()
-			return
-		case "d":
-
-			if len(strs) >= 2 {
-				folder := strs[1]
-				recorderNum := RECORDERNUM
-				if len(strs) > 2 {
-					recorderNum, err = strconv.Atoi(os.Args[2])
-					if err != nil {
-						fmt.Printf("the third parameter should be an interger,the format is : d dir [100000]\n")
-					}
-				}
-				go generateData(folder, recorderNum)
-			} else {
-				fmt.Printf("the format is : d dir [100000]\n")
-			}
-		default:
-
-		}
-
+	err := log.InitLogger(&log.Config{
+		Level: "info",
+	})
+	if err != nil {
+		fmt.Printf("err: %v", err)
+		os.Exit(1)
 	}
+
+	sc := make(chan os.Signal, 1)
+	signal.Notify(sc,
+		syscall.SIGHUP,
+		syscall.SIGINT,
+		syscall.SIGTERM,
+		syscall.SIGQUIT)
+	go func() {
+		select {
+		case <-ctx.Done():
+		case sig := <-sc:
+			log.L().Info("got signal to exit", zap.Stringer("signal", sig))
+			cancel()
+		}
+	}()
+	Run(ctx, os.Args)
+	log.L().Info("server exits normally")
+}
+
+func Run(ctx context.Context, args []string) {
+	if len(args) >= 2 {
+		folder := args[1]
+		recorderNum := RECORDERNUM
+		if len(args) > 2 {
+			var err error
+			recorderNum, err = strconv.Atoi(args[2])
+			if err != nil {
+				log.L().Fatal("the third parameter should be an interger")
+			}
+		}
+		go generateData(folder, recorderNum)
+	} else {
+		log.L().Fatal("the args should be : dir [100000]")
+	}
+
+	StartDataService(ctx)
 }
 
 type ErrorInfo struct {
@@ -86,10 +95,10 @@ func generateData(folderName string, recorders int) int {
 	fmt.Println("Start to generate the data ...")
 	_dir, err := ioutil.ReadDir(folderName)
 	if err != nil {
-		fmt.Printf("the folder %s doesn't exist ", folderName)
+		log.L().Warn("the folder doesn't exist ", zap.String("folder", folderName))
 		err = os.Mkdir(folderName, os.ModePerm)
 		if err != nil {
-			fmt.Printf("create the folder failed %v", folderName)
+			log.L().Error("create the folder failed", zap.String("folder", folderName))
 			return 0
 		}
 
@@ -104,25 +113,21 @@ func generateData(folderName string, recorders int) int {
 		}
 	}
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	var fileNum int
-	for fileNum = r.Intn(FILENUM); fileNum == 0; {
-		fileNum = r.Intn(FILENUM)
-	}
+	fileNum := r.Intn(FILENUM) + 1
 	fileWriterMap := make(map[int]*bufio.Writer)
 	for i := 0; i < fileNum; i++ {
 		fileName := folderName + "/" + strconv.Itoa(i) + ".txt"
 		file, err := os.OpenFile(fileName, os.O_CREATE|os.O_WRONLY, 0o666)
 		if err != nil {
-			// if create file failed ,just ingore this file
-			fileNum = fileNum - 1
-			continue
+			// We don't allow failure of creating files for simplicity.
+			log.L().Logger.Panic("fail to generate file", zap.String("name", fileName), zap.Error(err))
 		}
 		defer file.Close()
 		writer := bufio.NewWriter(file)
 		fileWriterMap[i] = writer
 	}
 	shouldFlush := false
-	for k := 0; (k < recorders) && fileNum > 0; k++ {
+	for k := 0; k < recorders; k++ {
 		if (k % FLUSHLEN) == 0 {
 			shouldFlush = true
 		}
@@ -144,22 +149,34 @@ func generateData(folderName string, recorders int) int {
 	for _, writer := range fileWriterMap {
 		writer.Flush()
 	}
-	fmt.Printf("%v files have been created \n", fileNum)
+	log.L().Info("files have been created", zap.Any("filnumber", fileNum))
+	close(ready)
 	return fileNum
 }
 
-func DataService(ctx context.Context) {
+func StartDataService(ctx context.Context) {
 	grpcServer := grpc.NewServer()
 	pb.RegisterDataRWServiceServer(grpcServer, NewDataRWServer(ctx))
-	lis, err := net.Listen("tcp", PORT)
+	lis, err := net.Listen("tcp", PORT) //nolint:gosec
 	if err != nil {
 		log.L().Panic("listen the port failed",
 			zap.String("error:", err.Error()))
 	}
-	err = grpcServer.Serve(lis)
-	if err != nil {
-		log.L().Panic("init the server failed",
-			zap.String("error:", err.Error()))
+
+	wg, ctx := errgroup.WithContext(ctx)
+	wg.Go(func() error {
+		log.L().Info("grpc serving ..")
+		return grpcServer.Serve(lis)
+	})
+
+	wg.Go(func() error {
+		<-ctx.Done()
+		grpcServer.Stop()
+		return nil
+	})
+
+	if err := wg.Wait(); err != nil {
+		log.L().Error("run grpc server with error", zap.Error(err))
 	}
 }
 
@@ -179,7 +196,6 @@ func NewDataRWServer(ctx context.Context) *DataRWServer {
 }
 
 func (*DataRWServer) ListFiles(ctx context.Context, folder *pb.ListFilesReq) (*pb.ListFilesResponse, error) {
-	// fmt.Printf("receive the list file call %s", folder.String())
 	fd := folder.FolderName
 	_dir, err := ioutil.ReadDir(fd)
 	log.L().Info("receive the list file call ",
@@ -197,12 +213,63 @@ func (*DataRWServer) ListFiles(ctx context.Context, folder *pb.ListFilesReq) (*p
 	return &pb.ListFilesResponse{FileNames: files}, nil
 }
 
+func (s *DataRWServer) IsReady(ctx context.Context, req *pb.IsReadyRequest) (*pb.IsReadyResponse, error) {
+	select {
+	case <-ready:
+		return &pb.IsReadyResponse{Ready: true}, nil
+	default:
+		return &pb.IsReadyResponse{Ready: false}, nil
+	}
+}
+
+func openFileAndReadString(path string) (content []byte, err error) {
+	fp, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer fp.Close()
+	return ioutil.ReadAll(fp)
+}
+
+func (s *DataRWServer) compareTwoFiles(path1, path2 string) error {
+	str1, err := openFileAndReadString(path1)
+	if err != nil {
+		return err
+	}
+	str2, err := openFileAndReadString(path2)
+	if err != nil {
+		return err
+	}
+	dmp := diffmatchpatch.New()
+
+	diffs := dmp.DiffMain(string(str1), string(str2), false)
+	if len(diffs) != 0 {
+		return errors.New(dmp.DiffPrettyText(diffs))
+	}
+	return nil
+}
+
+func (s *DataRWServer) CheckDir(ctx context.Context, req *pb.CheckDirRequest) (*pb.CheckDirResponse, error) {
+	dir := req.Dir
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for path := range s.fileWriterMap {
+		name := filepath.Base(path)
+		destPath := filepath.Join(dir, name)
+		err := s.compareTwoFiles(path, destPath)
+		if err != nil {
+			return &pb.CheckDirResponse{ErrMsg: err.Error(), ErrFileName: destPath}, nil
+		}
+	}
+	return &pb.CheckDirResponse{}, nil
+}
+
 func (s *DataRWServer) ReadLines(req *pb.ReadLinesRequest, stream pb.DataRWService_ReadLinesServer) error {
 	fileName := req.FileName
 	log.L().Info("receive the request for reading file ")
 	file, err := os.OpenFile(fileName, os.O_RDONLY, 0o666)
 	if err != nil {
-		log.L().Info("make sure the file exist ",
+		log.L().Error("make sure the file exist ",
 			zap.String("fileName ", fileName))
 		return err
 	}
@@ -216,8 +283,9 @@ func (s *DataRWServer) ReadLines(req *pb.ReadLinesRequest, stream pb.DataRWServi
 		default:
 			reply, err := reader.ReadString('\n')
 			if err == io.EOF {
-				log.L().Info("reach the end of the file ")
-				break
+				log.L().Info("reach the end of the file")
+				err = stream.Send(&pb.ReadLinesResponse{Linestr: "", IsEof: true})
+				return err
 			}
 			if i < int(req.LineNo) {
 				continue
@@ -226,7 +294,7 @@ func (s *DataRWServer) ReadLines(req *pb.ReadLinesRequest, stream pb.DataRWServi
 			if reply == "" {
 				continue
 			}
-			err = stream.Send(&pb.ReadLinesResponse{Linestr: reply})
+			err = stream.Send(&pb.ReadLinesResponse{Linestr: reply, IsEof: false})
 			i++
 			if err != nil {
 				return err
@@ -237,6 +305,7 @@ func (s *DataRWServer) ReadLines(req *pb.ReadLinesRequest, stream pb.DataRWServi
 
 func (s *DataRWServer) WriteLines(stream pb.DataRWService_WriteLinesServer) error {
 	count := 0
+	fileNames := make([]string, 0)
 	for {
 		select {
 		case <-s.ctx.Done():
@@ -244,11 +313,11 @@ func (s *DataRWServer) WriteLines(stream pb.DataRWService_WriteLinesServer) erro
 		default:
 			res, err := stream.Recv()
 			if err == nil {
-				//	fmt.Printf("write data %v ", res.FileName+res.GetKey())
 				fileName := res.FileName
 				if strings.TrimSpace(fileName) == "" {
 					continue
 				}
+				fileNames = append(fileNames, fileName)
 				s.mu.Lock()
 				writer, ok := s.fileWriterMap[fileName]
 				s.mu.Unlock()
@@ -260,7 +329,7 @@ func (s *DataRWServer) WriteLines(stream pb.DataRWService_WriteLinesServer) erro
 					} else {
 						index := strings.LastIndex(fileName, "/")
 						if index <= 1 {
-							log.L().Info("bad file name ",
+							log.L().Error("bad file name ",
 								zap.Int("index ", index))
 							return &ErrorInfo{info: " bad file name :" + fileName}
 						}
@@ -276,7 +345,7 @@ func (s *DataRWServer) WriteLines(stream pb.DataRWService_WriteLinesServer) erro
 							if err != nil {
 								return &ErrorInfo{info: "create the folder " + folder + " failed"}
 							}
-							log.L().Info("create the folder ",
+							log.L().Error("create the folder ",
 								zap.String("folder  ", folder))
 						}
 						// create the file
@@ -293,27 +362,32 @@ func (s *DataRWServer) WriteLines(stream pb.DataRWService_WriteLinesServer) erro
 					s.mu.Unlock()
 				}
 				_, err = writer.WriteString(res.Key + "," + strings.TrimSpace(res.Value) + "\n")
-				fmt.Printf("writer the key %v \n", res.Key)
-
 				count++
 				if (count % FLUSHLEN) == 0 {
 					err = writer.Flush()
 				}
 				if err != nil {
-					log.L().Info("write data failed  ",
+					log.L().Error("write data failed  ",
 						zap.String("error   ", err.Error()))
 				}
 
 			} else if err == io.EOF {
-				fmt.Printf("receive the eof %v \n", res.Key)
+				log.L().Info("receive the eof")
 				s.mu.Lock()
 				for _, w := range s.fileWriterMap {
 					w.Flush()
 				}
 				s.mu.Unlock()
 				return stream.SendAndClose(&pb.WriteLinesResponse{})
+			} else {
+				log.L().Error("receive loop met error", zap.Error(err))
+				s.mu.Lock()
+				for _, fileName := range fileNames {
+					delete(s.fileWriterMap, fileName)
+				}
+				s.mu.Unlock()
+				return err
 			}
-
 		}
 	}
 }

@@ -6,11 +6,18 @@ import (
 	"testing"
 	"time"
 
+	runtime "github.com/hanfei1991/microcosm/executor/worker"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
+
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+)
+
+var (
+	_ Worker           = (*DefaultBaseWorker)(nil)
+	_ runtime.Runnable = (Worker)(nil)
 )
 
 func putMasterMeta(ctx context.Context, t *testing.T, metaclient metadata.MetaKV, metaData *MasterMetaKVData) {
@@ -41,6 +48,8 @@ func TestWorkerInitAndClose(t *testing.T) {
 	worker.On("Status").Return(WorkerStatus{
 		Code: WorkerStatusNormal,
 	}, nil)
+	worker.On("Tick", mock.Anything).Return(nil)
+
 	err := worker.Init(ctx)
 	require.NoError(t, err)
 
@@ -59,19 +68,21 @@ func TestWorkerInitAndClose(t *testing.T) {
 		return hbMsg.FromWorkerID == workerID1 && hbMsg.Epoch == 1
 	}, "unexpected heartbeat %v", hbMsg)
 
-	var statusMsg *StatusUpdateMessage
+	err = worker.UpdateStatus(ctx, WorkerStatus{Code: WorkerStatusNormal})
+	require.NoError(t, err)
+
+	var statusMsg *workerStatusUpdatedMessage
 	require.Eventually(t, func() bool {
-		rawMsg, ok := worker.messageSender.TryPop(masterNodeName, StatusUpdateTopic(masterName, workerID1))
+		err := worker.Poll(ctx)
+		require.NoError(t, err)
+		rawMsg, ok := worker.messageSender.TryPop(masterNodeName, workerStatusUpdatedTopic(masterName, workerID1))
 		if ok {
-			statusMsg = rawMsg.(*StatusUpdateMessage)
+			statusMsg = rawMsg.(*workerStatusUpdatedMessage)
 		}
 		return ok
 	}, time.Second, time.Millisecond*10)
-	require.Equal(t, &StatusUpdateMessage{
-		WorkerID: workerID1,
-		Status: WorkerStatus{
-			Code: WorkerStatusNormal,
-		},
+	require.Equal(t, &workerStatusUpdatedMessage{
+		Epoch: 1,
 	}, statusMsg)
 
 	worker.On("CloseImpl").Return(nil)
@@ -103,6 +114,7 @@ func TestWorkerHeartbeatPingPong(t *testing.T) {
 	worker.On("Status").Return(WorkerStatus{
 		Code: WorkerStatusNormal,
 	}, nil)
+
 	err := worker.Init(ctx)
 	require.NoError(t, err)
 
@@ -198,6 +210,70 @@ func TestWorkerMasterFailover(t *testing.T) {
 	}, time.Second*1, time.Millisecond*10)
 }
 
+func TestWorkerStatus(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	worker := newMockWorkerImpl(workerID1, masterName)
+	worker.clock = clock.NewMock()
+	worker.clock.(*clock.Mock).Set(time.Now())
+	putMasterMeta(ctx, t, worker.metaKVClient, &MasterMetaKVData{
+		ID:          masterName,
+		NodeID:      masterNodeName,
+		Epoch:       1,
+		Initialized: true,
+	})
+
+	worker.On("InitImpl", mock.Anything).Return(nil)
+	worker.On("Status").Return(WorkerStatus{
+		Code:     WorkerStatusNormal,
+		ExtBytes: fastMarshalDummyStatus(t, 1),
+	}, nil)
+	worker.On("Tick", mock.Anything).Return(nil)
+	worker.On("CloseImpl", mock.Anything).Return(nil)
+
+	err := worker.Init(ctx)
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool {
+		err := worker.UpdateStatus(ctx, WorkerStatus{
+			Code:     WorkerStatusNormal,
+			ExtBytes: fastMarshalDummyStatus(t, 6),
+		})
+		if err == nil {
+			return true
+		}
+		require.Regexp(t, ".*ErrWorkerUpdateStatusTryAgain.*", err.Error())
+		return false
+	}, 1*time.Second, 10*time.Millisecond)
+
+	var status *workerStatusUpdatedMessage
+	require.Eventually(t, func() bool {
+		err := worker.Poll(ctx)
+		require.NoError(t, err)
+		rawStatus, ok := worker.messageSender.TryPop(masterNodeName, workerStatusUpdatedTopic(masterName, workerID1))
+		if ok {
+			status = rawStatus.(*workerStatusUpdatedMessage)
+		}
+		return ok
+	}, time.Second, 10*time.Millisecond)
+	require.Equal(t, &workerStatusUpdatedMessage{
+		Epoch: 1,
+	}, status)
+
+	workerMetaClient := NewWorkerMetadataClient(masterName, worker.metaKVClient)
+	actualStatus, err := workerMetaClient.Load(ctx, workerID1)
+	require.NoError(t, err)
+	require.Equal(t, &WorkerStatus{
+		Code:     WorkerStatusNormal,
+		ExtBytes: fastMarshalDummyStatus(t, 6),
+	},
+		actualStatus)
+
+	err = worker.Close(ctx)
+	require.NoError(t, err)
+}
+
 func TestWorkerSuicide(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -216,6 +292,7 @@ func TestWorkerSuicide(t *testing.T) {
 	worker.On("Status").Return(WorkerStatus{
 		Code: WorkerStatusNormal,
 	}, nil)
+
 	err := worker.Init(ctx)
 	require.NoError(t, err)
 

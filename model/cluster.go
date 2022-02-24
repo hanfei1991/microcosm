@@ -6,27 +6,40 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 )
 
+// NodeType is the type of a server instance, could be either server master or executor
+type NodeType int
+
+// All node types
+const (
+	NodeTypeServerMaster NodeType = iota + 1
+	NodeTypeExecutor
+)
+
 // RescUnit is the min unit of resource that we count.
 type RescUnit int
 
-type ExecutorID string
+// DeployNodeID means the identify of a node
+type DeployNodeID string
 
-// ExecutorInfo describes an Executor.
-type ExecutorInfo struct {
-	ID   ExecutorID `json:"id"`
-	Addr string     `json:"addr"`
+type ExecutorID = DeployNodeID
+
+// NodeInfo describes the information of server instance, contains node type, node
+// uuid, advertise address and capability(executor node only)
+type NodeInfo struct {
+	Type NodeType     `json:"type"`
+	ID   DeployNodeID `json:"id"`
+	Addr string       `json:"addr"`
+
 	// The capability of executor, including
 	// 1. cpu (goroutines)
 	// 2. memory
 	// 3. disk cap
 	// TODO: So we should enrich the cap dimensions in the future.
 	Capability int `json:"cap"`
-	// What kind of information do we need?
-	// LastHeartbeatTime int64
 }
 
-func (e *ExecutorInfo) EtcdKey() string {
-	return adapter.ExecutorInfoKeyAdapter.Encode(string(e.ID))
+func (e *NodeInfo) EtcdKey() string {
+	return adapter.NodeInfoKeyAdapter.Encode(string(e.ID))
 }
 
 type ExecutorStatus int32
@@ -36,10 +49,25 @@ const (
 	Running
 	Disconnected
 	Tombstone
-	Busy
 )
 
-func (e *ExecutorInfo) ToJSON() (string, error) {
+var ExecutorStatusNameMapping = map[ExecutorStatus]string{
+	Initing:      "initializing",
+	Running:      "running",
+	Disconnected: "disconnected",
+	Tombstone:    "tombstone",
+}
+
+// String implements fmt.Stringer
+func (s ExecutorStatus) String() string {
+	val, ok := ExecutorStatusNameMapping[s]
+	if !ok {
+		return "unknown"
+	}
+	return val
+}
+
+func (e *NodeInfo) ToJSON() (string, error) {
 	data, err := json.Marshal(e)
 	if err != nil {
 		return "", err

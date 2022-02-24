@@ -10,14 +10,17 @@ require (
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/mock v1.6.0
 	github.com/google/uuid v1.1.2
-	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0 // indirect
+	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
-	github.com/pingcap/errors v0.11.5-0.20211009033009-93128226aaa3
-	github.com/pingcap/failpoint v0.0.0-20210918120811-547c13e3eb00 // indirect
+	github.com/pingcap/errors v0.11.5-0.20211224045212-9687c2b0f87c
 	github.com/pingcap/log v0.0.0-20211207084639-71a2e5860834
-	github.com/pingcap/tiflow v0.0.0-20211227085550-ccba0a4c362a
-	github.com/pkg/errors v0.9.1
+	github.com/pingcap/tidb-tools v5.2.3-0.20211105044302-2dabb6641a6e+incompatible
+	github.com/pingcap/tiflow v0.0.0-20220216064339-744a26e0b588
+	github.com/prometheus/client_golang v1.12.1
+	github.com/sergi/go-diff v1.2.0
+	github.com/spf13/cobra v1.2.1
+	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.7.0
 	go.etcd.io/etcd v0.5.0-alpha.5.0.20210512015243-d19fbe541bf9
 	go.uber.org/atomic v1.9.0

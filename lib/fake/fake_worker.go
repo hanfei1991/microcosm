@@ -3,6 +3,7 @@ package fake
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync/atomic"
 
 	"github.com/hanfei1991/microcosm/lib"
@@ -17,7 +18,7 @@ var _ lib.Worker = (*dummyWorker)(nil)
 type (
 	Worker      = dummyWorker
 	dummyWorker struct {
-		*lib.BaseWorker
+		lib.BaseWorker
 
 		init   bool
 		closed int32
@@ -38,7 +39,9 @@ func (d *dummyWorker) Tick(ctx context.Context) error {
 		return errors.New("not yet init")
 	}
 
-	log.L().Info("FakeWorker: Tick", zap.String("worker-id", string(d.ID())))
+	if d.tick%200 == 0 {
+		log.L().Info("FakeWorker: Tick", zap.String("worker-id", d.ID()), zap.Int64("tick", d.tick))
+	}
 	if atomic.LoadInt32(&d.closed) == 1 {
 		return nil
 	}
@@ -48,7 +51,10 @@ func (d *dummyWorker) Tick(ctx context.Context) error {
 
 func (d *dummyWorker) Status() lib.WorkerStatus {
 	if d.init {
-		return lib.WorkerStatus{Code: lib.WorkerStatusNormal, Ext: d.tick}
+		return lib.WorkerStatus{
+			Code:     lib.WorkerStatusNormal,
+			ExtBytes: []byte(fmt.Sprintf("%d", d.tick)),
+		}
 	}
 	return lib.WorkerStatus{Code: lib.WorkerStatusCreated}
 }

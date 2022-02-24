@@ -14,15 +14,18 @@ import (
 	"github.com/hanfei1991/microcosm/test"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
+	"golang.org/x/time/rate"
 )
 
 // ExecutorManager defines an interface to manager all executors
 type ExecutorManager interface {
 	HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error)
 	Allocate(tasks []*pb.ScheduleTask) (bool, *pb.TaskSchedulerResponse)
-	AllocateNewExec(req *pb.RegisterExecutorRequest) (*model.ExecutorInfo, error)
-	RegisterExec(info *model.ExecutorInfo)
+	AllocateNewExec(req *pb.RegisterExecutorRequest) (*model.NodeInfo, error)
+	RegisterExec(info *model.NodeInfo)
 	Start(ctx context.Context)
+	// Count returns executor count with given status
+	ExecutorCount(status model.ExecutorStatus) int
 }
 
 // ExecutorManagerImpl holds all the executors info, including liveness, status, resource usage.
@@ -40,6 +43,7 @@ type ExecutorManagerImpl struct {
 	haStore ha.HAStore // nolint:structcheck,unused
 
 	rescMgr resource.RescMgr
+	logRL   *rate.Limiter
 }
 
 func NewExecutorManagerImpl(initHeartbeatTTL, keepAliveInterval time.Duration, ctx *test.Context) *ExecutorManagerImpl {
@@ -50,6 +54,7 @@ func NewExecutorManagerImpl(initHeartbeatTTL, keepAliveInterval time.Duration, c
 		initHeartbeatTTL:  initHeartbeatTTL,
 		keepAliveInterval: keepAliveInterval,
 		rescMgr:           resource.NewCapRescMgr(),
+		logRL:             rate.NewLimiter(rate.Every(time.Second*5), 1 /*burst*/),
 	}
 }
 
@@ -80,7 +85,9 @@ func (e *ExecutorManagerImpl) removeExecutorImpl(id model.ExecutorID) error {
 
 // HandleHeartbeat implements pb interface,
 func (e *ExecutorManagerImpl) HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
-	log.L().Logger.Info("handle heart beat", zap.Stringer("req", req))
+	if e.logRL.Allow() {
+		log.L().Logger.Info("handle heart beat", zap.Stringer("req", req))
+	}
 	e.mu.Lock()
 	exec, ok := e.executors[model.ExecutorID(req.ExecutorId)]
 
@@ -113,13 +120,14 @@ func (e *ExecutorManagerImpl) HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.Hea
 }
 
 // RegisterExec registers executor to both executor manager and resource manager
-func (e *ExecutorManagerImpl) RegisterExec(info *model.ExecutorInfo) {
+func (e *ExecutorManagerImpl) RegisterExec(info *model.NodeInfo) {
 	log.L().Info("register executor", zap.Any("info", info))
 	exec := &Executor{
-		ExecutorInfo:   *info,
+		NodeInfo:       *info,
 		lastUpdateTime: time.Now(),
 		heartbeatTTL:   e.initHeartbeatTTL,
 		Status:         model.Initing,
+		logRL:          rate.NewLimiter(rate.Every(time.Second*5), 1 /*burst*/),
 	}
 	e.mu.Lock()
 	e.executors[info.ID] = exec
@@ -129,11 +137,11 @@ func (e *ExecutorManagerImpl) RegisterExec(info *model.ExecutorInfo) {
 
 // AllocateNewExec allocates new executor info to a give RegisterExecutorRequest
 // and then registers the executor.
-func (e *ExecutorManagerImpl) AllocateNewExec(req *pb.RegisterExecutorRequest) (*model.ExecutorInfo, error) {
+func (e *ExecutorManagerImpl) AllocateNewExec(req *pb.RegisterExecutorRequest) (*model.NodeInfo, error) {
 	log.L().Logger.Info("allocate new executor", zap.Stringer("req", req))
 
 	e.mu.Lock()
-	info := &model.ExecutorInfo{
+	info := &model.NodeInfo{
 		ID:         model.ExecutorID(e.idAllocator.AllocID()),
 		Addr:       req.Address,
 		Capability: int(req.Capability),
@@ -154,17 +162,20 @@ func (e *ExecutorManagerImpl) Allocate(tasks []*pb.ScheduleTask) (bool, *pb.Task
 
 // Executor records the status of an executor instance.
 type Executor struct {
-	model.ExecutorInfo
+	model.NodeInfo
 	Status model.ExecutorStatus
 
 	mu sync.Mutex
 	// Last heartbeat
 	lastUpdateTime time.Time
 	heartbeatTTL   time.Duration
+	logRL          *rate.Limiter
 }
 
 func (e *Executor) checkAlive() bool {
-	log.L().Logger.Info("check alive", zap.String("exec", string(e.ExecutorInfo.ID)))
+	if e.logRL.Allow() {
+		log.L().Logger.Info("check alive", zap.String("exec", string(e.NodeInfo.ID)))
+	}
 
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -213,4 +224,16 @@ func (e *ExecutorManagerImpl) checkAliveImpl() error {
 	}
 	e.mu.Unlock()
 	return nil
+}
+
+// Count implements ExecutorManager.ExecutorCount
+func (e *ExecutorManagerImpl) ExecutorCount(status model.ExecutorStatus) (count int) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for _, executor := range e.executors {
+		if executor.Status == status {
+			count++
+		}
+	}
+	return
 }

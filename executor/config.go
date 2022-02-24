@@ -35,6 +35,9 @@ var (
 	defaultKeepAliveInterval = "500ms"
 	defaultRPCTimeout        = "3s"
 	defaultDiscoverTicker    = 3 * time.Second
+	defaultMetricInterval    = 15 * time.Second
+
+	defaultCapability int64 = 100 // TODO: make this configurable
 )
 
 // NewConfig creates a new base config for worker.
@@ -177,6 +180,11 @@ func (c *Config) Parse(arguments []string) error {
 	if c.PollConcurrency == 0 {
 		c.PollConcurrency = runtime.NumCPU()
 	}
+
+	if c.AdvertiseAddr == "" {
+		c.AdvertiseAddr = c.WorkerAddr
+	}
+
 	return nil
 }
 

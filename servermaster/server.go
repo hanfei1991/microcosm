@@ -13,24 +13,30 @@ import (
 
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/lib"
+	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
+	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/etcdutils"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
+	"github.com/hanfei1991/microcosm/pkg/serverutils"
 	"github.com/hanfei1991/microcosm/servermaster/cluster"
 	"github.com/hanfei1991/microcosm/test"
 	"github.com/hanfei1991/microcosm/test/mock"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	p2pProtocol "github.com/pingcap/tiflow/proto/p2p"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/embed"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
 )
 
@@ -59,9 +65,14 @@ type Server struct {
 	executorManager ExecutorManager
 	jobManager      JobManager
 	//
-	cfg *Config
+	cfg     *Config
+	info    *model.NodeInfo
+	metrics *serverMasterMetric
 
-	msgService *p2p.MessageRPCService
+	msgService      *p2p.MessageRPCService
+	p2pMsgRouter    p2p.MessageRouter
+	rpcLogRL        *rate.Limiter
+	discoveryKeeper *serverutils.DiscoveryKeepaliver
 
 	initialized atomic.Bool
 
@@ -69,6 +80,31 @@ type Server struct {
 	mockGrpcServer mock.GrpcServer
 
 	testCtx *test.Context
+}
+
+type serverMasterMetric struct {
+	metricJobNum      map[pb.QueryJobResponse_JobStatus]prometheus.Gauge
+	metricExecutorNum map[model.ExecutorStatus]prometheus.Gauge
+}
+
+func newServerMasterMetric() *serverMasterMetric {
+	// Following are leader only metrics
+	metricJobNum := make(map[pb.QueryJobResponse_JobStatus]prometheus.Gauge)
+	for status, name := range pb.QueryJobResponse_JobStatus_name {
+		metric := serverJobNumGauge.WithLabelValues(name)
+		metricJobNum[pb.QueryJobResponse_JobStatus(status)] = metric
+	}
+
+	metricExecutorNum := make(map[model.ExecutorStatus]prometheus.Gauge)
+	for status, name := range model.ExecutorStatusNameMapping {
+		metric := serverExecutorNumGauge.WithLabelValues(name)
+		metricExecutorNum[status] = metric
+	}
+
+	return &serverMasterMetric{
+		metricJobNum:      metricJobNum,
+		metricExecutorNum: metricExecutorNum,
+	}
 }
 
 // NewServer creates a new master-server.
@@ -84,12 +120,23 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 		masterAddrs = append(masterAddrs, u.Host)
 	}
 
+	info := &model.NodeInfo{
+		Type: model.NodeTypeServerMaster,
+		ID:   model.DeployNodeID(cfg.Etcd.Name),
+		Addr: cfg.AdvertiseAddr,
+	}
+	p2pMsgRouter := p2p.NewMessageRouter(p2p.NodeID(info.ID), info.Addr)
+
 	server := &Server{
 		cfg:             cfg,
+		info:            info,
 		executorManager: executorManager,
 		initialized:     *atomic.NewBool(false),
 		testCtx:         ctx,
 		leader:          atomic.Value{},
+		p2pMsgRouter:    p2pMsgRouter,
+		rpcLogRL:        rate.NewLimiter(rate.Every(time.Second*5), 3 /*burst*/),
+		metrics:         newServerMasterMetric(),
 	}
 	server.leaderServiceFn = server.runLeaderService
 	return server, nil
@@ -143,6 +190,23 @@ func (s *Server) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) (*pb.S
 		return &pb.SubmitJobResponse{Err: err}, nil
 	}
 	return s.jobManager.SubmitJob(ctx, req), nil
+}
+
+func (s *Server) QueryJob(ctx context.Context, req *pb.QueryJobRequest) (*pb.QueryJobResponse, error) {
+	var (
+		resp2 *pb.QueryJobResponse
+		err2  error
+	)
+	shouldRet := s.rpcForwardIfNeeded(ctx, req, &resp2, &err2)
+	if shouldRet {
+		return resp2, err2
+	}
+
+	err := s.apiPreCheck()
+	if err != nil {
+		return &pb.QueryJobResponse{Err: err}, nil
+	}
+	return s.jobManager.QueryJob(ctx, req), nil
 }
 
 func (s *Server) CancelJob(ctx context.Context, req *pb.CancelJobRequest) (*pb.CancelJobResponse, error) {
@@ -213,6 +277,20 @@ func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorR
 // - queries resource manager to allocate resource and maps tasks to executors
 // - returns scheduler response to job master
 func (s *Server) ScheduleTask(ctx context.Context, req *pb.TaskSchedulerRequest) (*pb.TaskSchedulerResponse, error) {
+	var (
+		resp2 *pb.TaskSchedulerResponse
+		err2  error
+	)
+	shouldRet := s.rpcForwardIfNeeded(ctx, req, &resp2, &err2)
+	if shouldRet {
+		return resp2, err2
+	}
+
+	checkErr := s.apiPreCheck()
+	if checkErr != nil {
+		return &pb.TaskSchedulerResponse{Err: checkErr}, nil
+	}
+
 	tasks := req.GetTasks()
 	success, resp := s.executorManager.Allocate(tasks)
 	if !success {
@@ -278,11 +356,7 @@ func (s *Server) startForTest(ctx context.Context) (err error) {
 	}
 
 	s.executorManager.Start(ctx)
-	s.jobManager = NewJobManagerImpl([]string{s.cfg.MasterAddr})
-	err = s.jobManager.Start(ctx, s.testCtx.GetMetaKV())
-	if err != nil {
-		return
-	}
+	// TODO: start job manager
 	s.leader.Store(&Member{Name: s.name(), IsServLeader: true, IsEtcdLeader: true})
 	s.initialized.Store(true)
 	return
@@ -313,6 +387,8 @@ func (s *Server) Run(ctx context.Context) (err error) {
 		return s.startForTest(ctx)
 	}
 
+	registerMetrics()
+
 	err = s.startGrpcSrv(ctx)
 	if err != nil {
 		return
@@ -335,6 +411,14 @@ func (s *Server) Run(ctx context.Context) (err error) {
 
 	wg.Go(func() error {
 		return s.memberLoop(ctx)
+	})
+
+	s.discoveryKeeper = serverutils.NewDiscoveryKeepaliver(
+		s.info, s.etcdClient, int(defaultSessionTTL/time.Second),
+		defaultDiscoverTicker, s.p2pMsgRouter,
+	)
+	wg.Go(func() error {
+		return s.discoveryKeeper.Keepalive(ctx)
 	})
 
 	return wg.Wait()
@@ -368,7 +452,8 @@ func (s *Server) startGrpcSrv(ctx context.Context) (err error) {
 	}
 
 	httpHandlers := map[string]http.Handler{
-		"/debug/": getDebugHandler(),
+		"/debug/":  getDebugHandler(),
+		"/metrics": promhttp.Handler(),
 	}
 
 	// generate grpcServer
@@ -407,8 +492,13 @@ func (s *Server) reset(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrap(errors.ErrMasterNewServer, err)
 	}
-	_, err = s.etcdClient.Put(ctx, adapter.MasterInfoKey.Encode(s.name()),
-		s.cfg.String(), clientv3.WithLease(sess.Lease()))
+
+	// register NodeInfo key used in service discovery
+	value, err := s.info.ToJSON()
+	if err != nil {
+		return errors.Wrap(errors.ErrMasterNewServer, err)
+	}
+	_, err = s.etcdClient.Put(ctx, s.info.EtcdKey(), value, clientv3.WithLease(sess.Lease()))
 	if err != nil {
 		return errors.Wrap(errors.ErrEtcdAPIError, err)
 	}
@@ -445,8 +535,21 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	if err != nil {
 		return
 	}
-	s.jobManager, err = NewJobManagerImplV2(ctx, lib.MasterID(s.name()),
-		s.msgService.MakeHandlerManager(), clients, metadata.NewMetaEtcd(s.etcdClient))
+	dctx := dcontext.NewContext(ctx, log.L())
+	dctx.Environ.Addr = s.cfg.AdvertiseAddr
+	dctx.Environ.NodeID = s.name()
+	masterMetaExt := &lib.MasterMetaExt{
+		ID: lib.JobManagerUUID,
+		Tp: lib.JobManager,
+	}
+	masterMetaExtBytes, err := masterMetaExt.Marshal()
+	if err != nil {
+		return
+	}
+	dctx.Environ.MasterMetaExt = masterMetaExtBytes
+	s.jobManager, err = NewJobManagerImplV2(dctx, "", lib.JobManagerUUID,
+		s.msgService.MakeHandlerManager(), p2p.NewMessageSender(s.p2pMsgRouter),
+		clients, metadata.NewMetaEtcd(s.etcdClient))
 	if err != nil {
 		return
 	}
@@ -462,6 +565,8 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		s.resign()
 	}()
 
+	metricTicker := time.NewTicker(defaultMetricInterval)
+	defer metricTicker.Stop()
 	leaderTicker := time.NewTicker(time.Millisecond * 200)
 	defer leaderTicker.Stop()
 	for {
@@ -475,6 +580,12 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 					zap.String("old-leader-name", s.name()))
 				return errors.ErrEtcdLeaderChanged.GenWithStackByArgs()
 			}
+			err := s.jobManager.Poll(ctx)
+			if err != nil {
+				return err
+			}
+		case <-leaderTicker.C:
+			s.collectLeaderMetric()
 		}
 	}
 }
@@ -526,7 +637,10 @@ func (s *Server) rpcForwardIfNeeded(ctx context.Context, req interface{}, respPo
 	fullMethodName := runtime.FuncForPC(pc).Name()
 	methodName := fullMethodName[strings.LastIndexByte(fullMethodName, '.')+1:]
 
-	log.L().Info("", zap.Any("payload", req), zap.String("request", methodName))
+	// TODO: rate limiter based on different sender
+	if s.rpcLogRL.Allow() {
+		log.L().Info("", zap.Any("payload", req), zap.String("request", methodName))
+	}
 
 	isLeader, needForward := s.isLeaderAndNeedForward(ctx)
 	if isLeader {
@@ -601,5 +715,15 @@ func (s *Server) memberLoop(ctx context.Context) error {
 				log.L().Warn("update server master members failed", zap.Error(err))
 			}
 		}
+	}
+}
+
+func (s *Server) collectLeaderMetric() {
+	for status := range pb.QueryJobResponse_JobStatus_name {
+		pbStatus := pb.QueryJobResponse_JobStatus(status)
+		s.metrics.metricJobNum[pbStatus].Set(float64(s.jobManager.JobCount(pbStatus)))
+	}
+	for status := range model.ExecutorStatusNameMapping {
+		s.metrics.metricExecutorNum[status].Set(float64(s.executorManager.ExecutorCount(status)))
 	}
 }
