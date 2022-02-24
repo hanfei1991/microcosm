@@ -30,15 +30,14 @@ func newSyncWorker(base lib.BaseWorker, cfg lib.WorkerConfig) lib.WorkerImpl {
 }
 
 func (s *syncWorker) InitImpl(ctx context.Context) error {
+	log.L().Info("init sync worker")
 	s.unitHolder = newUnitHolder(syncer.NewSyncer(s.cfg, nil, nil))
 	return errors.Trace(s.unitHolder.init(ctx))
 }
 
 func (s *syncWorker) Tick(ctx context.Context) error {
 	s.unitHolder.lazyProcess()
-	s.unitHolder.tryUpdateStatus(ctx, s.BaseWorker)
-
-	return nil
+	return s.unitHolder.tryUpdateStatus(ctx, s.BaseWorker)
 }
 
 func (s *syncWorker) Workload() model.RescUnit {

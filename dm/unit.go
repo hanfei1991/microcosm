@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/dm/unit"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -55,10 +56,10 @@ func (u *unitHolder) getResult() (bool, *pb.ProcessResult) {
 	}
 }
 
-func (u *unitHolder) tryUpdateStatus(ctx context.Context, base lib.BaseWorker) {
+func (u *unitHolder) tryUpdateStatus(ctx context.Context, base lib.BaseWorker) error {
 	hasResult, result := u.getResult()
 	if !hasResult {
-		return
+		return nil
 	}
 	var s lib.WorkerStatus
 	if len(result.Errors) > 0 {
@@ -74,7 +75,10 @@ func (u *unitHolder) tryUpdateStatus(ctx context.Context, base lib.BaseWorker) {
 	err := base.UpdateStatus(ctx, s)
 	if err != nil {
 		log.L().Error("update status failed", zap.Error(err))
+		return nil
 	}
+	// after UpdateStatus, return any not-nil error to kill the worker
+	return errors.New("test")
 }
 
 func (u *unitHolder) close() {

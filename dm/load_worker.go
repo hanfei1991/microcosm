@@ -30,6 +30,7 @@ func newLoadWorker(base lib.BaseWorker, cfg lib.WorkerConfig) lib.WorkerImpl {
 }
 
 func (l *loadWorker) InitImpl(ctx context.Context) error {
+	log.L().Info("init load worker")
 	// `workerName` and `etcdClient` of `NewLightning` are not used in dataflow
 	// scenario, we just use readable values here.
 	workerName := "dataflow-worker"
@@ -39,9 +40,7 @@ func (l *loadWorker) InitImpl(ctx context.Context) error {
 
 func (l *loadWorker) Tick(ctx context.Context) error {
 	l.unitHolder.lazyProcess()
-	l.unitHolder.tryUpdateStatus(ctx, l.BaseWorker)
-
-	return nil
+	return l.unitHolder.tryUpdateStatus(ctx, l.BaseWorker)
 }
 
 func (l *loadWorker) Workload() model.RescUnit {

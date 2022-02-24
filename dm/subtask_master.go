@@ -115,7 +115,8 @@ func (s *SubTaskMaster) buildDMUnit(tp lib.WorkerType) unit.Unit {
 func (s *SubTaskMaster) Tick(ctx context.Context) error {
 	log.L().Info("tick")
 	status := s.GetWorkers()[s.workerID].Status()
-	if status.Code == lib.WorkerStatusFinished {
+	switch status.Code {
+	case lib.WorkerStatusFinished:
 		log.L().Info("worker finished", zap.String("workerID", string(s.workerID)))
 		if len(s.workerSeq) > 0 {
 			s.workerSeq = s.workerSeq[1:]
@@ -130,6 +131,8 @@ func (s *SubTaskMaster) Tick(ctx context.Context) error {
 				//s.Close(ctx)
 			}
 		}
+	case lib.WorkerStatusError:
+		log.L().Info("worker error", zap.String("workerID", string(s.workerID)))
 	}
 	return nil
 }
