@@ -3,9 +3,8 @@ package cvs
 import (
 	"context"
 
-	"github.com/hanfei1991/microcosm/executor/worker"
-
 	cvsTask "github.com/hanfei1991/microcosm/executor/cvsTask"
+	"github.com/hanfei1991/microcosm/executor/worker"
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/lib/registry"
 	"github.com/hanfei1991/microcosm/model"
@@ -59,17 +58,10 @@ func NewCVSJobMaster(ctx *dcontext.Context, workerID lib.WorkerID, _ lib.MasterI
 	jm.workerID = workerID
 	jm.syncInfo = conf.(*Config)
 	jm.syncFilesInfo = make(map[lib.WorkerID]*workerInfo)
-	deps := ctx.Dependencies
-
 	base := lib.NewBaseMaster(
 		ctx,
 		jm,
 		workerID,
-		deps.MessageHandlerManager,
-		deps.MessageRouter,
-		deps.MetaKVClient,
-		deps.ExecutorClientManager,
-		deps.ServerMasterClient,
 	)
 	jm.BaseMaster = base
 	log.L().Info("new cvs jobmaster ", zap.Any("id :", jm.workerID))

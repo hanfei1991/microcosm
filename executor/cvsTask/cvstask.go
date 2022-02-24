@@ -64,12 +64,9 @@ func NewCvsTask(ctx *dcontext.Context, _workerID lib.WorkerID, masterID lib.Mast
 		index:   cfg.StartLoc,
 		buffer:  make(chan strPair, BUFFERSIZE),
 	}
-	deps := ctx.Dependencies
 	base := lib.NewBaseWorker(
+		ctx,
 		task,
-		deps.MessageHandlerManager,
-		deps.MessageRouter,
-		deps.MetaKVClient,
 		_workerID,
 		masterID,
 	)
