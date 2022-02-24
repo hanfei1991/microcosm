@@ -38,7 +38,6 @@ func newSubTaskMaster(
 	}
 }
 
-// TODO: does InitImpl has a time limit?
 func (s *SubTaskMaster) InitImpl(ctx context.Context) error {
 	switch s.cfg.Mode {
 	case config.ModeAll:
@@ -91,7 +90,7 @@ func (s *SubTaskMaster) InitImpl(ctx context.Context) error {
 	if len(s.workerSeq) == 0 {
 		return nil
 	}
-	log.L().Info("s.workerSeq", zap.Any("workerSeq", s.workerSeq))
+	log.L().Info("workerSequence", zap.Any("workerSeq", s.workerSeq))
 	var err error
 	s.workerID, err = s.CreateWorker(s.workerSeq[0], s.cfg, 0)
 	return errors.Trace(err)
@@ -113,11 +112,10 @@ func (s *SubTaskMaster) buildDMUnit(tp lib.WorkerType) unit.Unit {
 }
 
 func (s *SubTaskMaster) Tick(ctx context.Context) error {
-	log.L().Info("tick")
 	status := s.GetWorkers()[s.workerID].Status()
 	switch status.Code {
 	case lib.WorkerStatusFinished:
-		log.L().Info("worker finished", zap.String("workerID", string(s.workerID)))
+		log.L().Info("worker finished", zap.String("workerID", s.workerID))
 		if len(s.workerSeq) > 0 {
 			s.workerSeq = s.workerSeq[1:]
 			if len(s.workerSeq) > 0 {
@@ -127,12 +125,12 @@ func (s *SubTaskMaster) Tick(ctx context.Context) error {
 					return errors.Trace(err)
 				}
 			} else {
-				// TODO: find a way to close itself
-				//s.Close(ctx)
+				return lib.StopAfterTick
 			}
 		}
 	case lib.WorkerStatusError:
-		log.L().Info("worker error", zap.String("workerID", string(s.workerID)))
+		// TODO: will print lots of logs, should find a way to expose the error
+		log.L().Info("worker error", zap.String("message", status.ErrorMessage))
 	}
 	return nil
 }

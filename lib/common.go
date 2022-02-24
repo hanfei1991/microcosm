@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/pingcap/errors"
+
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
@@ -146,3 +148,6 @@ type MasterFailoverReason struct {
 	Code         MasterFailoverReasonCode
 	ErrorMessage string
 }
+
+// nolint:revive
+var StopAfterTick = errors.New("stop after tick")

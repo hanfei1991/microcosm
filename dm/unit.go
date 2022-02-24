@@ -4,7 +4,6 @@ import (
 	"context"
 	"sync"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/dm/unit"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -78,7 +77,7 @@ func (u *unitHolder) tryUpdateStatus(ctx context.Context, base lib.BaseWorker) e
 		return nil
 	}
 	// after UpdateStatus, return any not-nil error to kill the worker
-	return errors.New("test")
+	return lib.StopAfterTick
 }
 
 func (u *unitHolder) close() {
