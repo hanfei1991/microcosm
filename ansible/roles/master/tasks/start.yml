@@ -1,0 +1,2 @@
+- name: start master
+  shell: "{{ df_script_dir }}/start_master.sh"

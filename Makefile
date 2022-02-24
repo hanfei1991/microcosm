@@ -14,9 +14,11 @@ df-proto:
 
 df-master:
 	go build -o bin/master ./cmd/master
+	cp ./bin/master ./ansible/roles/common/files
 
 df-executor:
 	go build -o bin/executor ./cmd/executor
+	cp ./bin/executor ./ansible/roles/common/files
 
 df-master-client:
 	go build -o bin/master-client ./cmd/master-client

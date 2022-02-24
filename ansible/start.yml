@@ -1,0 +1,3 @@
+- hosts: df_master_servers
+  tasks:
+  - include: roles/master/tasks/start.yml
