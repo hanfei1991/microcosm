@@ -5,7 +5,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/dm/config"
-	"github.com/pingcap/tiflow/dm/dm/unit"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/syncer"
 
@@ -37,23 +36,9 @@ func (s *syncWorker) InitImpl(ctx context.Context) error {
 
 func (s *syncWorker) Tick(ctx context.Context) error {
 	s.unitHolder.lazyProcess()
+	s.unitHolder.tryUpdateStatus(ctx, s.BaseWorker)
 
 	return nil
-}
-
-func (s *syncWorker) Status() lib.WorkerStatus {
-	hasResult, result := s.unitHolder.getResult()
-	if !hasResult {
-		return lib.WorkerStatus{Code: lib.WorkerStatusNormal}
-	}
-	if len(result.Errors) > 0 {
-		return lib.WorkerStatus{
-			Code:         lib.WorkerStatusError,
-			ErrorMessage: unit.JoinProcessErrors(result.Errors),
-		}
-	}
-	// should not happen, syncer will run continuously.
-	return lib.WorkerStatus{Code: lib.WorkerStatusFinished}
 }
 
 func (s *syncWorker) Workload() model.RescUnit {

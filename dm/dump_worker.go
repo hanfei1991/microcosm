@@ -5,7 +5,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/dm/config"
-	"github.com/pingcap/tiflow/dm/dm/unit"
 	"github.com/pingcap/tiflow/dm/dumpling"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 
@@ -37,22 +36,9 @@ func (d *dumpWorker) InitImpl(ctx context.Context) error {
 
 func (d *dumpWorker) Tick(ctx context.Context) error {
 	d.unitHolder.lazyProcess()
+	d.unitHolder.tryUpdateStatus(ctx, d.BaseWorker)
 
 	return nil
-}
-
-func (d *dumpWorker) Status() lib.WorkerStatus {
-	hasResult, result := d.unitHolder.getResult()
-	if !hasResult {
-		return lib.WorkerStatus{Code: lib.WorkerStatusNormal}
-	}
-	if len(result.Errors) > 0 {
-		return lib.WorkerStatus{
-			Code:         lib.WorkerStatusError,
-			ErrorMessage: unit.JoinProcessErrors(result.Errors),
-		}
-	}
-	return lib.WorkerStatus{Code: lib.WorkerStatusFinished}
 }
 
 func (d *dumpWorker) Workload() model.RescUnit {

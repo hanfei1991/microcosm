@@ -20,8 +20,7 @@ import (
 
 // TODO: this is not the final jobmaster! I just want to make a runnable test.
 type SubTaskMaster struct {
-	lib.BaseMaster
-	lib.BaseWorker
+	lib.BaseJobMaster
 
 	cfg       *config.SubTaskConfig
 	workerSeq []lib.WorkerType
@@ -29,15 +28,13 @@ type SubTaskMaster struct {
 }
 
 func newSubTaskMaster(
-	baseMaster lib.BaseMaster,
-	baseWorker lib.BaseWorker,
+	base lib.BaseJobMaster,
 	cfg lib.WorkerConfig,
 ) *SubTaskMaster {
 	subtaskCfg := cfg.(*config.SubTaskConfig)
 	return &SubTaskMaster{
-		BaseMaster: baseMaster,
-		BaseWorker: baseWorker,
-		cfg:        subtaskCfg,
+		BaseJobMaster: base,
+		cfg:           subtaskCfg,
 	}
 }
 
@@ -46,18 +43,18 @@ func (s *SubTaskMaster) InitImpl(ctx context.Context) error {
 	switch s.cfg.Mode {
 	case config.ModeAll:
 		s.workerSeq = []lib.WorkerType{
-			WorkerDMDump,
-			WorkerDMLoad,
-			WorkerDMSync,
+			lib.WorkerDMDump,
+			lib.WorkerDMLoad,
+			lib.WorkerDMSync,
 		}
 	case config.ModeFull:
 		s.workerSeq = []lib.WorkerType{
-			WorkerDMDump,
-			WorkerDMLoad,
+			lib.WorkerDMDump,
+			lib.WorkerDMLoad,
 		}
 	case config.ModeIncrement:
 		s.workerSeq = []lib.WorkerType{
-			WorkerDMSync,
+			lib.WorkerDMSync,
 		}
 	default:
 		return errors.Errorf("unknown mode: %s", s.cfg.Mode)
@@ -102,14 +99,14 @@ func (s *SubTaskMaster) InitImpl(ctx context.Context) error {
 
 func (s *SubTaskMaster) buildDMUnit(tp lib.WorkerType) unit.Unit {
 	switch tp {
-	case WorkerDMDump:
+	case lib.WorkerDMDump:
 		return dumpling.NewDumpling(s.cfg)
-	case WorkerDMLoad:
+	case lib.WorkerDMLoad:
 		if s.cfg.NeedUseLightning() {
 			return loader.NewLightning(s.cfg, nil, "subtask-master")
 		}
 		return loader.NewLoader(s.cfg, nil, "subtask-master")
-	case WorkerDMSync:
+	case lib.WorkerDMSync:
 		return syncer.NewSyncer(s.cfg, nil, nil)
 	}
 	return nil

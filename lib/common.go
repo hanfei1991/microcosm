@@ -44,6 +44,10 @@ const (
 	FakeTask
 	DmTask
 	CdcTask
+	// worker
+	WorkerDMDump
+	WorkerDMLoad
+	WorkerDMSync
 )
 
 type TimeoutConfig struct {

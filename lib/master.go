@@ -1,10 +1,13 @@
 package lib
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"sync"
 	"time"
+
+	"github.com/BurntSushi/toml"
 
 	"github.com/hanfei1991/microcosm/client"
 	runtime "github.com/hanfei1991/microcosm/executor/worker"
@@ -470,7 +473,7 @@ func (m *DefaultBaseMaster) prepareWorkerConfig(
 	workerType WorkerType, config WorkerConfig,
 ) (rawConfig []byte, workerID string, err error) {
 	switch workerType {
-	case CvsJobMaster, FakeJobMaster:
+	case CvsJobMaster, FakeJobMaster, DMJobMaster:
 		masterCfg, ok := config.(*MasterMetaExt)
 		if !ok {
 			err = derror.ErrMasterInvalidMeta.GenWithStackByArgs(config)
@@ -478,6 +481,14 @@ func (m *DefaultBaseMaster) prepareWorkerConfig(
 		}
 		rawConfig = masterCfg.Config
 		workerID = masterCfg.ID
+	case WorkerDMDump, WorkerDMLoad, WorkerDMSync:
+		var b bytes.Buffer
+		err = toml.NewEncoder(&b).Encode(config)
+		if err != nil {
+			return
+		}
+		rawConfig = b.Bytes()
+		workerID = m.uuidGen.NewString()
 	default:
 		rawConfig, err = json.Marshal(config)
 		if err != nil {

@@ -85,7 +85,7 @@ func TestDumpWorker(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	workerWrapped, err := registry.GlobalWorkerRegistry().CreateWorker(
-		dcontext.Background(), WorkerDMDump, workerID, masterID, mockWorkerConfig())
+		dcontext.Background(), lib.WorkerDMDump, workerID, masterID, mockWorkerConfig())
 	require.NoError(t, err)
 
 	worker := workerWrapped.(*dumpWorker)
