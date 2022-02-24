@@ -51,4 +51,5 @@ lint:
 	tools/bin/golangci-lint run --config=./.golangci.yml --timeout 10m0s --skip-files "pb"
 
 mockgen: tools_setup
-	tools/bin/mockgen -source=pkg/metaclient/kv.go > pkg/metaclient/kvclient/mock/mockclient.go
+	tools/bin/mockgen github.com/hanfei1991/microcosm/pkg/metaclient KVClient \
+	> pkg/metaclient/kvclient/mock/mockclient.go
