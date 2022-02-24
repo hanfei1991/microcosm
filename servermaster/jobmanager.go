@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/zap"
+
 	"github.com/hanfei1991/microcosm/client"
 	cvs "github.com/hanfei1991/microcosm/jobmaster/cvsJob"
 	"github.com/hanfei1991/microcosm/lib"
@@ -13,8 +16,6 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	"go.uber.org/zap"
 )
 
 // JobManager defines manager of job master
@@ -87,6 +88,8 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 		}
 		job.Tp = lib.CvsJobMaster
 		job.Config = req.Config
+	case pb.JobType_DM:
+		job.Tp = lib.DMJobMaster
 	case pb.JobType_FakeJob:
 		job.Tp = lib.FakeJobMaster
 	default:

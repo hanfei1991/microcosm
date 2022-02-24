@@ -37,7 +37,7 @@ const (
 	// job master
 	CvsJobMaster
 	FakeJobMaster
-	DmJobMaster
+	DMJobMaster
 	CdcJobMaster
 	// task
 	CvsTask

@@ -16,40 +16,48 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
-const (
-	WorkerDumpUnit = iota + 1
-	WorkerLoadUnit
-	WorkerSyncUnit
-)
+//var _ lib.BaseJobMaster = &SubTaskMaster{}
 
-var _ lib.MasterImpl = &SubTaskMaster{}
-
+// TODO: this is not the final jobmaster! I just want to make a runnable test.
 type SubTaskMaster struct {
-	*lib.BaseMaster
+	lib.BaseMaster
+	lib.BaseWorker
 
-	id        lib.MasterID
 	cfg       *config.SubTaskConfig
 	workerSeq []lib.WorkerType
 	workerID  lib.WorkerID
 }
 
-// TODO: does InitImpl has a run time limit?
-func (s SubTaskMaster) InitImpl(ctx context.Context) error {
+func newSubTaskMaster(
+	baseMaster lib.BaseMaster,
+	baseWorker lib.BaseWorker,
+	cfg lib.WorkerConfig,
+) *SubTaskMaster {
+	subtaskCfg := cfg.(*config.SubTaskConfig)
+	return &SubTaskMaster{
+		BaseMaster: baseMaster,
+		BaseWorker: baseWorker,
+		cfg:        subtaskCfg,
+	}
+}
+
+// TODO: does InitImpl has a time limit?
+func (s *SubTaskMaster) InitImpl(ctx context.Context) error {
 	switch s.cfg.Mode {
 	case config.ModeAll:
 		s.workerSeq = []lib.WorkerType{
-			WorkerDumpUnit,
-			WorkerLoadUnit,
-			WorkerSyncUnit,
+			WorkerDMDump,
+			WorkerDMLoad,
+			WorkerDMSync,
 		}
 	case config.ModeFull:
 		s.workerSeq = []lib.WorkerType{
-			WorkerDumpUnit,
-			WorkerLoadUnit,
+			WorkerDMDump,
+			WorkerDMLoad,
 		}
 	case config.ModeIncrement:
 		s.workerSeq = []lib.WorkerType{
-			WorkerSyncUnit,
+			WorkerDMSync,
 		}
 	default:
 		return errors.Errorf("unknown mode: %s", s.cfg.Mode)
@@ -92,22 +100,22 @@ func (s SubTaskMaster) InitImpl(ctx context.Context) error {
 	return errors.Trace(err)
 }
 
-func (s SubTaskMaster) buildDMUnit(tp lib.WorkerType) unit.Unit {
+func (s *SubTaskMaster) buildDMUnit(tp lib.WorkerType) unit.Unit {
 	switch tp {
-	case WorkerDumpUnit:
+	case WorkerDMDump:
 		return dumpling.NewDumpling(s.cfg)
-	case WorkerLoadUnit:
+	case WorkerDMLoad:
 		if s.cfg.NeedUseLightning() {
 			return loader.NewLightning(s.cfg, nil, "subtask-master")
 		}
 		return loader.NewLoader(s.cfg, nil, "subtask-master")
-	case WorkerSyncUnit:
+	case WorkerDMSync:
 		return syncer.NewSyncer(s.cfg, nil, nil)
 	}
 	return nil
 }
 
-func (s SubTaskMaster) Tick(ctx context.Context) error {
+func (s *SubTaskMaster) Tick(ctx context.Context) error {
 	log.L().Info("tick")
 	status := s.GetWorkers()[s.workerID].Status()
 	if status.Code == lib.WorkerStatusFinished {
@@ -129,32 +137,46 @@ func (s SubTaskMaster) Tick(ctx context.Context) error {
 	return nil
 }
 
-func (s SubTaskMaster) OnMasterRecovered(ctx context.Context) error {
+func (s *SubTaskMaster) OnMasterRecovered(ctx context.Context) error {
 	log.L().Info("on master recovered")
 	return nil
 }
 
-func (s SubTaskMaster) OnWorkerDispatched(worker lib.WorkerHandle, result error) error {
+func (s *SubTaskMaster) OnWorkerDispatched(worker lib.WorkerHandle, result error) error {
 	log.L().Info("on worker dispatched")
 	return nil
 }
 
-func (s SubTaskMaster) OnWorkerOnline(worker lib.WorkerHandle) error {
+func (s *SubTaskMaster) OnWorkerOnline(worker lib.WorkerHandle) error {
 	log.L().Info("on worker online")
 	return nil
 }
 
-func (s SubTaskMaster) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
+func (s *SubTaskMaster) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
 	log.L().Info("on worker offline")
 	return nil
 }
 
-func (s SubTaskMaster) OnWorkerMessage(worker lib.WorkerHandle, topic p2p.Topic, message interface{}) error {
+func (s *SubTaskMaster) OnWorkerMessage(worker lib.WorkerHandle, topic p2p.Topic, message interface{}) error {
 	log.L().Info("on worker message")
 	return nil
 }
 
-func (s SubTaskMaster) CloseImpl(ctx context.Context) error {
+func (s *SubTaskMaster) CloseImpl(ctx context.Context) error {
 	log.L().Info("close")
+	return nil
+}
+
+func (s *SubTaskMaster) OnJobManagerFailover(reason lib.MasterFailoverReason) error {
+	log.L().Info("on job manager failover")
+	return nil
+}
+
+func (s *SubTaskMaster) IsJobMasterImpl() {
+	log.L().Info("is job master impl")
+}
+
+func (s *SubTaskMaster) OnMasterFailover(reason lib.MasterFailoverReason) error {
+	log.L().Info("on manager failover")
 	return nil
 }
