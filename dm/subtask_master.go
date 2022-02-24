@@ -91,7 +91,7 @@ func (s *SubTaskMaster) InitImpl(ctx context.Context) error {
 	if len(s.workerSeq) == 0 {
 		return nil
 	}
-	log.L().Debug("s.workerSeq", zap.Any("workerSeq", s.workerSeq))
+	log.L().Info("s.workerSeq", zap.Any("workerSeq", s.workerSeq))
 	var err error
 	s.workerID, err = s.CreateWorker(s.workerSeq[0], s.cfg, 0)
 	return errors.Trace(err)
