@@ -16,7 +16,7 @@ require (
 	github.com/pingcap/errors v0.11.5-0.20211224045212-9687c2b0f87c
 	github.com/pingcap/log v0.0.0-20211207084639-71a2e5860834
 	github.com/pingcap/tidb-tools v5.2.3-0.20211105044302-2dabb6641a6e+incompatible
-	github.com/pingcap/tiflow v0.0.0-20220216064339-744a26e0b588
+	github.com/pingcap/tiflow v0.0.0-20220224093943-901ba1d0ff05
 	github.com/prometheus/client_golang v1.12.1
 	github.com/sergi/go-diff v1.2.0
 	github.com/spf13/cobra v1.2.1
@@ -34,5 +34,3 @@ require (
 // cloud.google.com/go/storage will upgrade grpc to v1.40.0
 // we need keep the replacement until go.etcd.io supports the higher version of grpc.
 replace google.golang.org/grpc v1.40.0 => google.golang.org/grpc v1.29.1
-
-replace github.com/pingcap/tiflow v0.0.0-20220216064339-744a26e0b588 => /home/lance/Projects/tiflow

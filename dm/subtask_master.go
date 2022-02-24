@@ -16,7 +16,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
-//var _ lib.BaseJobMaster = &SubTaskMaster{}
+var _ lib.JobMasterImpl = &SubTaskMaster{}
 
 // TODO: this is not the final jobmaster! I just want to make a runnable test.
 type SubTaskMaster struct {
@@ -174,9 +174,4 @@ func (s *SubTaskMaster) OnJobManagerFailover(reason lib.MasterFailoverReason) er
 
 func (s *SubTaskMaster) IsJobMasterImpl() {
 	log.L().Info("is job master impl")
-}
-
-func (s *SubTaskMaster) OnMasterFailover(reason lib.MasterFailoverReason) error {
-	log.L().Info("on manager failover")
-	return nil
 }
