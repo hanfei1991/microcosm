@@ -108,17 +108,3 @@ func TestSetImplMember(t *testing.T) {
 	setImplMember(iface, "MyBase", 2)
 	require.Equal(t, 2, iface.(*myImpl).MyBase.(int))
 }
-
-func TestFillBaseForWorker(t *testing.T) {
-	GlobalWorkerRegistry().MustRegisterWorkerType(fakeWorkerType, fakeWorkerFactory)
-
-	worker, err := GlobalWorkerRegistry().CreateWorker(
-		makeCtxWithMockDeps(t),
-		fakeWorkerType,
-		"worker-1",
-		"master-1",
-		[]byte(`{"Val":0}`))
-	require.NoError(t, err)
-	require.IsType(t, &fake.Worker{}, worker)
-	require.Equal(t, "worker-1", worker.ID())
-}

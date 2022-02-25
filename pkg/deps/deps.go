@@ -74,24 +74,3 @@ func (d *Deps) Fill(params interface{}) error {
 	}
 	return nil
 }
-
-func (d *Deps) FillInner(useType interface{}, toFill interface{}, fillMember string) error {
-	invokeFnTp := reflect.FuncOf(
-		[]reflect.Type{reflect.TypeOf(useType)},
-		[]reflect.Type{reflect.TypeOf(new(error))},
-		false)
-	invokeFn := reflect.MakeFunc(invokeFnTp, func(args []reflect.Value) (results []reflect.Value) {
-		defer func() {
-			if v := recover(); v != nil {
-				tmp := errors.Errorf("internal error: %v", v)
-				results = []reflect.Value{reflect.ValueOf(&tmp)}
-			}
-		}()
-		reflect.ValueOf(toFill).Elem().FieldByName(fillMember).Set(args[0])
-		return []reflect.Value{reflect.ValueOf(new(error))}
-	})
-	if err := d.container.Invoke(invokeFn.Interface()); err != nil {
-		return errors.Trace(err)
-	}
-	return nil
-}
