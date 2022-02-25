@@ -8,6 +8,12 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/pkg/workerpool"
+	"go.uber.org/atomic"
+	"go.uber.org/dig"
+	"go.uber.org/zap"
 
 	"github.com/hanfei1991/microcosm/client"
 	runtime "github.com/hanfei1991/microcosm/executor/worker"
@@ -20,12 +26,6 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
-
-	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/pkg/workerpool"
-	"go.uber.org/atomic"
-	"go.uber.org/zap"
 )
 
 type Master interface {
@@ -119,20 +119,26 @@ type DefaultBaseMaster struct {
 	createWorkerQuota quota.ConcurrencyQuota
 }
 
+type masterParams struct {
+	dig.In
+
+	MessageHandlerManager p2p.MessageHandlerManager
+	MessageSender         p2p.MessageSender
+	MetaKVClient          metadata.MetaKV
+	ExecutorClientManager client.ClientsManager
+	ServerMasterClient    client.MasterClient
+}
+
 func NewBaseMaster(
 	ctx *dcontext.Context,
 	impl MasterImpl,
 	id MasterID,
-	messageHandlerManager p2p.MessageHandlerManager,
-	messageSender p2p.MessageSender,
-	metaKVClient metadata.MetaKV,
-	executorClientManager client.ClientsManager,
-	serverMasterClient client.MasterClient,
 ) BaseMaster {
 	var (
 		nodeID        p2p.NodeID
 		advertiseAddr string
 		masterMetaExt = &MasterMetaExt{}
+		params        masterParams
 	)
 	if ctx != nil {
 		nodeID = ctx.Environ.NodeID
@@ -143,13 +149,19 @@ func NewBaseMaster(
 			log.L().Warn("invalid master meta", zap.ByteString("data", metaBytes), zap.Error(err))
 		}
 	}
+
+	if err := ctx.Deps().Fill(&params); err != nil {
+		// TODO more elegant error handling
+		log.L().Panic("failed to provide dependencies", zap.Error(err))
+	}
+
 	return &DefaultBaseMaster{
 		Impl:                  impl,
-		messageHandlerManager: messageHandlerManager,
-		messageSender:         messageSender,
-		metaKVClient:          metaKVClient,
-		executorClientManager: executorClientManager,
-		serverMasterClient:    serverMasterClient,
+		messageHandlerManager: params.MessageHandlerManager,
+		messageSender:         params.MessageSender,
+		metaKVClient:          params.MetaKVClient,
+		executorClientManager: params.ExecutorClientManager,
+		serverMasterClient:    params.ServerMasterClient,
 		pool:                  workerpool.NewDefaultAsyncPool(4),
 		id:                    id,
 		clock:                 clock.New(),
