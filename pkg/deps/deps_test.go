@@ -24,6 +24,8 @@ type params struct {
 }
 
 func TestDepsBasics(t *testing.T) {
+	t.Parallel()
+
 	deps := NewDeps()
 	err := deps.Provide(func() *a {
 		return &a{val: 1}
@@ -50,5 +52,39 @@ func TestDepsBasics(t *testing.T) {
 	require.Equal(t, params{
 		A: &a{val: 1},
 		B: &b{inner: &a{val: 1}},
+	}, p)
+}
+
+func TestDepsFillInterface(t *testing.T) {
+	t.Parallel()
+
+	deps := NewDeps()
+
+	type base struct {
+		i int
+	}
+	type BaseIface interface{}
+
+	type impl struct {
+		BaseIface
+	}
+	type ImplIface interface{}
+
+	err := deps.Provide(func() *base {
+		return &base{1}
+	})
+	require.NoError(t, err)
+
+	var p impl
+	var iface ImplIface
+	iface = &p
+	//err = deps.container.Invoke(func(input *base) {
+	//	i := iface.(*impl)
+	//	i.BaseIface = input
+	//})
+	err = deps.FillInner(new(base), iface, "BaseIface")
+	require.NoError(t, err)
+	require.Equal(t, impl{
+		&base{1},
 	}, p)
 }
