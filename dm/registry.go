@@ -49,17 +49,11 @@ type jobMasterFactory struct{}
 func (j jobMasterFactory) NewWorker(ctx *context.Context, workerID lib.WorkerID, masterID lib.MasterID, config registry.WorkerConfig) (lib.Worker, error) {
 	ret := newSubTaskMaster(nil, config)
 
-	deps := ctx.Dependencies
 	base := lib.NewBaseJobMaster(
 		ctx,
 		ret,
 		masterID,
 		workerID,
-		deps.MessageHandlerManager,
-		deps.MessageRouter,
-		deps.MetaKVClient,
-		deps.ExecutorClientManager,
-		deps.ServerMasterClient,
 	)
 	ret.BaseJobMaster = base
 	return ret, nil
