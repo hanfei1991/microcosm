@@ -22,9 +22,10 @@ var _ lib.JobMasterImpl = &SubTaskMaster{}
 type SubTaskMaster struct {
 	lib.BaseJobMaster
 
-	cfg       *config.SubTaskConfig
-	workerSeq []lib.WorkerType
-	workerID  lib.WorkerID
+	cfg *config.SubTaskConfig
+	// workerSeq are different WorkerTypes that should be run one after another
+	workerSeq    []lib.WorkerType
+	currWorkerID lib.WorkerID
 }
 
 func newSubTaskMaster(
@@ -92,7 +93,7 @@ func (s *SubTaskMaster) InitImpl(ctx context.Context) error {
 	}
 	log.L().Info("workerSequence", zap.Any("workerSeq", s.workerSeq))
 	var err error
-	s.workerID, err = s.CreateWorker(s.workerSeq[0], s.cfg, 0)
+	s.currWorkerID, err = s.CreateWorker(s.workerSeq[0], s.cfg, 0)
 	return errors.Trace(err)
 }
 
@@ -112,15 +113,15 @@ func (s *SubTaskMaster) buildDMUnit(tp lib.WorkerType) unit.Unit {
 }
 
 func (s *SubTaskMaster) Tick(ctx context.Context) error {
-	status := s.GetWorkers()[s.workerID].Status()
+	status := s.GetWorkers()[s.currWorkerID].Status()
 	switch status.Code {
 	case lib.WorkerStatusFinished:
-		log.L().Info("worker finished", zap.String("workerID", s.workerID))
+		log.L().Info("worker finished", zap.String("currWorkerID", s.currWorkerID))
 		if len(s.workerSeq) > 0 {
 			s.workerSeq = s.workerSeq[1:]
 			if len(s.workerSeq) > 0 {
 				var err error
-				s.workerID, err = s.CreateWorker(s.workerSeq[0], s.cfg, 0)
+				s.currWorkerID, err = s.CreateWorker(s.workerSeq[0], s.cfg, 0)
 				if err != nil {
 					return errors.Trace(err)
 				}
