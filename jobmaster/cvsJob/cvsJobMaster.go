@@ -12,6 +12,7 @@ import (
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
+	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
@@ -114,18 +115,15 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 			continue
 		}
 		status := worker.handle.Status()
-		if status.Code == lib.WorkerStatusNormal {
+		if status.Code == lib.WorkerStatusNormal || status.Code == lib.WorkerStatusFinished {
 			num, err := strconv.ParseInt(string(status.ExtBytes), 10, 64)
 			if err != nil {
 				return err
 			}
 			worker.curLoc = num
 			jm.counter += num
-			log.L().Debug("cvs job tmp num ", zap.Any("id :", worker.handle.ID()), zap.Int64("counter: ", num))
+			log.L().Debug("cvs job tmp num ", zap.Any("id", worker.handle.ID()), zap.Int64("counter", num), zap.Any("status", status.Code))
 			// todo : store the sync progress into the meta store for each file
-		} else if status.Code == lib.WorkerStatusFinished {
-			// todo : handle error case here
-			log.L().Info("sync file finished ", zap.Any("message", worker.file))
 		} else if status.Code == lib.WorkerStatusError {
 			log.L().Error("sync file failed ", zap.Any("message", worker.file))
 		} else {
@@ -133,7 +131,12 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 		}
 	}
 	log.L().Info("cvs job master status  ", zap.Any("id :", jm.workerID), zap.Int64("counter: ", jm.counter))
-	return nil
+	err := jm.BaseJobMaster.UpdateJobStatus(ctx, jm.Status())
+	if errors.ErrWorkerUpdateStatusTryAgain.Equal(err) {
+		log.L().Warn("update status try again later", zap.String("error", err.Error()))
+		return nil
+	}
+	return err
 }
 
 func (jm *JobMaster) OnMasterRecovered(ctx context.Context) error {

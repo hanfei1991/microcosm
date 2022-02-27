@@ -281,6 +281,7 @@ func (s *DataRWServer) ReadLines(req *pb.ReadLinesRequest, stream pb.DataRWServi
 		case <-s.ctx.Done():
 			return nil
 		default:
+			time.Sleep(time.Millisecond * 5)
 			reply, err := reader.ReadString('\n')
 			if err == io.EOF {
 				log.L().Info("reach the end of the file")
