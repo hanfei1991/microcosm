@@ -16,10 +16,11 @@ import (
 	"google.golang.org/grpc"
 )
 
-var DemoAddress = "127.0.0.1:1234"
-var MasterAddressList = []string{"127.0.0.1:10245", "127.0.0.1:10246", "127.0.0.1:10247"}
-var RecordNum int64 = 10000
-var DemoConfig = `
+var (
+	DemoAddress             = "127.0.0.1:1234"
+	MasterAddressList       = []string{"127.0.0.1:10245", "127.0.0.1:10246", "127.0.0.1:10247"}
+	RecordNum         int64 = 10000
+	DemoConfig              = `
 {
    "srcHost":"demo-server:1234",
    "srcDir":"/data",
@@ -27,6 +28,7 @@ var DemoConfig = `
    "dstDir":"/data1"
 }
 `
+)
 
 type DemoClient struct {
 	conn   *grpc.ClientConn
