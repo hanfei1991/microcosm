@@ -78,24 +78,24 @@ func (r *registryImpl) CreateWorker(
 		return nil, errors.Trace(err)
 	}
 
-	if implHasMember(impl, getTypeNameOfVarPtr(new(lib.BaseWorker))) {
+	if implHasMember(impl, nameOfBaseWorker) {
 		base := lib.NewBaseWorker(
 			ctx,
 			impl,
 			workerID,
 			masterID,
 		)
-		setImplMember(impl, getTypeNameOfVarPtr(new(lib.BaseWorker)), base)
+		setImplMember(impl, nameOfBaseWorker, base)
 		return base, nil
 	}
-	if implHasMember(impl, getTypeNameOfVarPtr(new(lib.BaseJobMaster))) {
+	if implHasMember(impl, nameOfBaseJobMaster) {
 		base := lib.NewBaseJobMaster(
 			ctx,
 			impl.(lib.JobMasterImpl),
 			workerID,
 			masterID,
 		)
-		setImplMember(impl, getTypeNameOfVarPtr(new(lib.BaseJobMaster)), base)
+		setImplMember(impl, nameOfBaseJobMaster, base)
 		return base, nil
 	}
 	log.L().Panic("wrong use of CreateWorker",
@@ -111,6 +111,11 @@ func (r *registryImpl) getWorkerFactory(tp lib.WorkerType) (factory WorkerFactor
 	factory, ok = r.factoryMap[tp]
 	return
 }
+
+var (
+	nameOfBaseWorker    = getTypeNameOfVarPtr(new(lib.BaseWorker))
+	nameOfBaseJobMaster = getTypeNameOfVarPtr(new(lib.BaseJobMaster))
+)
 
 func getTypeNameOfVarPtr(v interface{}) string {
 	return reflect.TypeOf(v).Elem().Name()
