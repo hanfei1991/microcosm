@@ -5,6 +5,21 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanfei1991/microcosm/pkg/deps"
+
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	p2pImpl "github.com/pingcap/tiflow/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/tcpserver"
+	"go.etcd.io/etcd/clientv3"
+	"go.etcd.io/etcd/pkg/logutil"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"golang.org/x/sync/errgroup"
+	"golang.org/x/time/rate"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
+
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/executor/runtime"
 	"github.com/hanfei1991/microcosm/executor/worker"
@@ -20,18 +35,6 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/serverutils"
 	"github.com/hanfei1991/microcosm/test"
 	"github.com/hanfei1991/microcosm/test/mock"
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	p2pImpl "github.com/pingcap/tiflow/pkg/p2p"
-	"github.com/pingcap/tiflow/pkg/security"
-	"github.com/pingcap/tiflow/pkg/tcpserver"
-	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/pkg/logutil"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-	"golang.org/x/sync/errgroup"
-	"golang.org/x/time/rate"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/backoff"
 )
 
 type Server struct {
@@ -130,6 +133,46 @@ func (s *Server) ResumeBatchTasks(ctx context.Context, req *pb.PauseBatchTasksRe
 	return &pb.PauseBatchTasksResponse{}, nil
 }
 
+func (s *Server) buildDeps() (*deps.Deps, error) {
+	deps := deps.NewDeps()
+	err := deps.Provide(func() p2p.MessageHandlerManager {
+		return s.msgServer.MakeHandlerManager()
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	err = deps.Provide(func() p2p.MessageSender {
+		return p2p.NewMessageSender(s.p2pMsgRouter)
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	err = deps.Provide(func() metadata.MetaKV {
+		return s.metastore
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	err = deps.Provide(func() client.ClientsManager {
+		return client.NewClientManager()
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	err = deps.Provide(func() client.MasterClient {
+		return s.cli
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return deps, nil
+}
+
 func (s *Server) DispatchTask(ctx context.Context, req *pb.DispatchTaskRequest) (*pb.DispatchTaskResponse, error) {
 	log.L().Info("dispatch task", zap.String("req", req.String()))
 
@@ -142,6 +185,12 @@ func (s *Server) DispatchTask(ctx context.Context, req *pb.DispatchTaskRequest) 
 		ExecutorClientManager: client.NewClientManager(),
 		ServerMasterClient:    s.cli,
 	}
+
+	dp, err := s.buildDeps()
+	if err != nil {
+		return nil, err
+	}
+	dctx = dctx.WithDeps(dp)
 	dctx.Environ.NodeID = p2p.NodeID(s.info.ID)
 	dctx.Environ.Addr = s.info.Addr
 	masterMeta := &lib.MasterMetaExt{
@@ -407,7 +456,7 @@ func (s *Server) selfRegister(ctx context.Context) (err error) {
 	log.L().Logger.Info("master client init successful")
 	registerReq := &pb.RegisterExecutorRequest{
 		Address:    s.cfg.AdvertiseAddr,
-		Capability: 100,
+		Capability: defaultCapability,
 	}
 
 	resp, err := s.cli.RegisterExecutor(ctx, registerReq, s.cfg.RPCTimeout)
@@ -415,9 +464,10 @@ func (s *Server) selfRegister(ctx context.Context) (err error) {
 		return err
 	}
 	s.info = &model.NodeInfo{
-		Type: model.NodeTypeExecutor,
-		ID:   model.ExecutorID(resp.ExecutorId),
-		Addr: s.cfg.AdvertiseAddr,
+		Type:       model.NodeTypeExecutor,
+		ID:         model.ExecutorID(resp.ExecutorId),
+		Addr:       s.cfg.AdvertiseAddr,
+		Capability: int(defaultCapability),
 	}
 	log.L().Logger.Info("register successful", zap.Any("info", s.info))
 	return nil

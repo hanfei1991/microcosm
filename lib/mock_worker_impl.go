@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"go.uber.org/atomic"
+	"go.uber.org/dig"
 
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
@@ -25,11 +26,20 @@ type mockWorkerImpl struct {
 	failoverCount atomic.Int64
 }
 
+type workerParamListForTest struct {
+	dig.Out
+
+	MessageHandlerManager p2p.MessageHandlerManager
+	MessageSender         p2p.MessageSender
+	MetaKVClient          metadata.MetaKV
+}
+
 //nolint:unparam
 func newMockWorkerImpl(workerID WorkerID, masterID MasterID) *mockWorkerImpl {
 	ret := &mockWorkerImpl{
 		id: workerID,
 	}
+
 	ret.DefaultBaseWorker = MockBaseWorker(workerID, masterID, ret)
 	ret.messageHandlerManager = ret.DefaultBaseWorker.messageHandlerManager.(*p2p.MockMessageHandlerManager)
 	ret.messageSender = ret.DefaultBaseWorker.messageSender.(*p2p.MockMessageSender)
@@ -59,14 +69,6 @@ func (w *mockWorkerImpl) Status() WorkerStatus {
 
 	args := w.Called()
 	return args.Get(0).(WorkerStatus)
-}
-
-func (w *mockWorkerImpl) GetWorkerStatusExtTypeInfo() interface{} {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	args := w.Called()
-	return args.Get(0)
 }
 
 func (w *mockWorkerImpl) OnMasterFailover(reason MasterFailoverReason) error {

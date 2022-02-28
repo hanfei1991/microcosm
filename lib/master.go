@@ -1,10 +1,19 @@
 package lib
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"sync"
 	"time"
+
+	"github.com/BurntSushi/toml"
+	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/pkg/workerpool"
+	"go.uber.org/atomic"
+	"go.uber.org/dig"
+	"go.uber.org/zap"
 
 	"github.com/hanfei1991/microcosm/client"
 	runtime "github.com/hanfei1991/microcosm/executor/worker"
@@ -17,12 +26,6 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
-
-	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/pkg/workerpool"
-	"go.uber.org/atomic"
-	"go.uber.org/zap"
 )
 
 type Master interface {
@@ -57,11 +60,6 @@ type MasterImpl interface {
 
 	// CloseImpl is called when the master is being closed
 	CloseImpl(ctx context.Context) error
-
-	// GetWorkerStatusExtTypeInfo returns an empty object that described the actual type
-	// of the `Ext` field in WorkerStatus.
-	// The returned type's kind must be Array, Chan, Map, Ptr, or Slice.
-	GetWorkerStatusExtTypeInfo() interface{}
 }
 
 const (
@@ -121,20 +119,26 @@ type DefaultBaseMaster struct {
 	createWorkerQuota quota.ConcurrencyQuota
 }
 
+type masterParams struct {
+	dig.In
+
+	MessageHandlerManager p2p.MessageHandlerManager
+	MessageSender         p2p.MessageSender
+	MetaKVClient          metadata.MetaKV
+	ExecutorClientManager client.ClientsManager
+	ServerMasterClient    client.MasterClient
+}
+
 func NewBaseMaster(
 	ctx *dcontext.Context,
 	impl MasterImpl,
 	id MasterID,
-	messageHandlerManager p2p.MessageHandlerManager,
-	messageSender p2p.MessageSender,
-	metaKVClient metadata.MetaKV,
-	executorClientManager client.ClientsManager,
-	serverMasterClient client.MasterClient,
 ) BaseMaster {
 	var (
 		nodeID        p2p.NodeID
 		advertiseAddr string
 		masterMetaExt = &MasterMetaExt{}
+		params        masterParams
 	)
 	if ctx != nil {
 		nodeID = ctx.Environ.NodeID
@@ -145,13 +149,19 @@ func NewBaseMaster(
 			log.L().Warn("invalid master meta", zap.ByteString("data", metaBytes), zap.Error(err))
 		}
 	}
+
+	if err := ctx.Deps().Fill(&params); err != nil {
+		// TODO more elegant error handling
+		log.L().Panic("failed to provide dependencies", zap.Error(err))
+	}
+
 	return &DefaultBaseMaster{
 		Impl:                  impl,
-		messageHandlerManager: messageHandlerManager,
-		messageSender:         messageSender,
-		metaKVClient:          metaKVClient,
-		executorClientManager: executorClientManager,
-		serverMasterClient:    serverMasterClient,
+		messageHandlerManager: params.MessageHandlerManager,
+		messageSender:         params.MessageSender,
+		metaKVClient:          params.MetaKVClient,
+		executorClientManager: params.ExecutorClientManager,
+		serverMasterClient:    params.ServerMasterClient,
 		pool:                  workerpool.NewDefaultAsyncPool(4),
 		id:                    id,
 		clock:                 clock.New(),
@@ -211,7 +221,6 @@ func (m *DefaultBaseMaster) doInit(ctx context.Context) (isFirstStartUp bool, er
 		m.messageHandlerManager,
 		m.metaKVClient,
 		m.pool,
-		m.Impl.GetWorkerStatusExtTypeInfo(),
 		&m.timeoutConfig)
 
 	m.startBackgroundTasks()
@@ -476,7 +485,7 @@ func (m *DefaultBaseMaster) prepareWorkerConfig(
 	workerType WorkerType, config WorkerConfig,
 ) (rawConfig []byte, workerID string, err error) {
 	switch workerType {
-	case CvsJobMaster, FakeJobMaster:
+	case CvsJobMaster, FakeJobMaster, DMJobMaster:
 		masterCfg, ok := config.(*MasterMetaExt)
 		if !ok {
 			err = derror.ErrMasterInvalidMeta.GenWithStackByArgs(config)
@@ -484,6 +493,14 @@ func (m *DefaultBaseMaster) prepareWorkerConfig(
 		}
 		rawConfig = masterCfg.Config
 		workerID = masterCfg.ID
+	case WorkerDMDump, WorkerDMLoad, WorkerDMSync:
+		var b bytes.Buffer
+		err = toml.NewEncoder(&b).Encode(config)
+		if err != nil {
+			return
+		}
+		rawConfig = b.Bytes()
+		workerID = m.uuidGen.NewString()
 	default:
 		rawConfig, err = json.Marshal(config)
 		if err != nil {
@@ -619,11 +636,4 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 	}()
 
 	return workerID, nil
-}
-
-func (m *DefaultBaseMaster) GetWorkerStatusExtTypeInfo() interface{} {
-	// This function provides a trivial default implementation of
-	// GetWorkerStatusExtTypeInfo.
-	info := int64(0)
-	return &info
 }

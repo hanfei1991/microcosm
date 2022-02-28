@@ -6,7 +6,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 
-	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/executor/worker"
 	"github.com/hanfei1991/microcosm/model"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
@@ -44,8 +43,13 @@ type DefaultBaseJobMaster struct {
 	impl   JobMasterImpl
 }
 
+// JobMasterImpl is the implementation of a job master of dataflow engine.
+// the implementation struct must embed the lib.BaseJobMaster interface, this
+// interface will be initialized by the framework.
 type JobMasterImpl interface {
 	InitImpl(ctx context.Context) error
+	// Tick is called on a fixed interval. When an error is returned, the worker
+	// will be stopped.
 	Tick(ctx context.Context) error
 	CloseImpl(ctx context.Context) error
 
@@ -54,8 +58,6 @@ type JobMasterImpl interface {
 	OnWorkerOnline(worker WorkerHandle) error
 	OnWorkerOffline(worker WorkerHandle, reason error) error
 	OnWorkerMessage(worker WorkerHandle, topic p2p.Topic, message interface{}) error
-	GetWorkerStatusExtTypeInfo() interface{}
-	GetJobMasterStatusExtTypeInfo() interface{}
 
 	Workload() model.RescUnit
 	OnJobManagerFailover(reason MasterFailoverReason) error
@@ -70,22 +72,15 @@ func NewBaseJobMaster(
 	jobMasterImpl JobMasterImpl,
 	masterID MasterID,
 	workerID WorkerID,
-	messageHandlerManager p2p.MessageHandlerManager,
-	messageRouter p2p.MessageSender,
-	metaKVClient metadata.MetaKV,
-	executorClientManager client.ClientsManager,
-	serverMasterClient client.MasterClient,
 ) BaseJobMaster {
 	// master-worker pair: job manager <-> job master(`baseWorker` following)
 	// master-worker pair: job master(`baseMaster` following) <-> real workers
 	// `masterID` is always the ID of master role, against current object
 	// `workerID` is the ID of current object
 	baseMaster := NewBaseMaster(
-		ctx, &jobMasterImplAsMasterImpl{jobMasterImpl}, workerID, messageHandlerManager,
-		messageRouter, metaKVClient, executorClientManager, serverMasterClient)
+		ctx, &jobMasterImplAsMasterImpl{jobMasterImpl}, workerID)
 	baseWorker := NewBaseWorker(
-		&jobMasterImplAsWorkerImpl{jobMasterImpl}, messageHandlerManager, messageRouter, metaKVClient,
-		workerID, masterID)
+		ctx, &jobMasterImplAsWorkerImpl{jobMasterImpl}, workerID, masterID)
 	return &DefaultBaseJobMaster{
 		master: baseMaster.(*DefaultBaseMaster),
 		worker: baseWorker.(*DefaultBaseWorker),
@@ -226,10 +221,6 @@ func (j *jobMasterImplAsWorkerImpl) CloseImpl(ctx context.Context) error {
 	return nil
 }
 
-func (j *jobMasterImplAsWorkerImpl) GetWorkerStatusExtTypeInfo() interface{} {
-	return j.inner.GetWorkerStatusExtTypeInfo()
-}
-
 type jobMasterImplAsMasterImpl struct {
 	inner JobMasterImpl
 }
@@ -267,8 +258,4 @@ func (j *jobMasterImplAsMasterImpl) OnWorkerMessage(worker WorkerHandle, topic p
 func (j *jobMasterImplAsMasterImpl) CloseImpl(ctx context.Context) error {
 	log.L().Panic("unexpected Close call")
 	return nil
-}
-
-func (j *jobMasterImplAsMasterImpl) GetWorkerStatusExtTypeInfo() interface{} {
-	return j.inner.GetJobMasterStatusExtTypeInfo()
 }

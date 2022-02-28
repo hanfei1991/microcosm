@@ -6,6 +6,9 @@ import (
 	"testing"
 	"time"
 
+	dcontext "github.com/hanfei1991/microcosm/pkg/context"
+	"github.com/hanfei1991/microcosm/pkg/deps"
+
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
@@ -89,22 +92,6 @@ func (m *testJobMasterImpl) OnWorkerMessage(worker WorkerHandle, topic p2p.Topic
 	return args.Error(0)
 }
 
-func (m *testJobMasterImpl) GetWorkerStatusExtTypeInfo() interface{} {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	args := m.Called()
-	return args.Get(0)
-}
-
-func (m *testJobMasterImpl) GetJobMasterStatusExtTypeInfo() interface{} {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	args := m.Called()
-	return args.Get(0)
-}
-
 func (m *testJobMasterImpl) Workload() model.RescUnit {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -126,16 +113,29 @@ func (m *testJobMasterImpl) IsJobMasterImpl() {
 }
 
 func newBaseJobMasterForTests(impl JobMasterImpl) *DefaultBaseJobMaster {
+	params := masterParamListForTest{
+		MessageHandlerManager: p2p.NewMockMessageHandlerManager(),
+		MessageSender:         p2p.NewMockMessageSender(),
+		MetaKVClient:          metadata.NewMetaMock(),
+		ExecutorClientManager: client.NewClientManager(),
+		ServerMasterClient:    &client.MockServerMasterClient{},
+	}
+	dp := deps.NewDeps()
+	err := dp.Provide(func() masterParamListForTest {
+		return params
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	ctx := dcontext.Background()
+	ctx = ctx.WithDeps(dp)
+
 	return NewBaseJobMaster(
-		nil,
+		ctx,
 		impl,
 		masterName,
 		workerID1,
-		p2p.NewMockMessageHandlerManager(),
-		p2p.NewMockMessageSender(),
-		metadata.NewMetaMock(),
-		client.NewClientManager(),
-		&client.MockServerMasterClient{},
 	).(*DefaultBaseJobMaster)
 }
 
@@ -148,8 +148,6 @@ func TestBaseJobMasterBasics(t *testing.T) {
 	defer cancel()
 
 	jobMaster.mu.Lock()
-	jobMaster.On("GetWorkerStatusExtTypeInfo").Return(&dummyStatus{})
-	jobMaster.On("GetJobMasterStatusExtTypeInfo").Return(&dummyStatus{})
 	jobMaster.On("InitImpl", mock.Anything).Return(nil)
 	jobMaster.mu.Unlock()
 

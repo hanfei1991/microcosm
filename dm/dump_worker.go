@@ -5,7 +5,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/dm/config"
-	"github.com/pingcap/tiflow/dm/dm/unit"
 	"github.com/pingcap/tiflow/dm/dumpling"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 
@@ -22,41 +21,22 @@ type dumpWorker struct {
 	unitHolder *unitHolder
 }
 
-func newDumpWorker(base lib.BaseWorker, cfg lib.WorkerConfig) lib.WorkerImpl {
+func newDumpWorker(cfg lib.WorkerConfig) lib.WorkerImpl {
 	subtaskCfg := cfg.(*config.SubTaskConfig)
 	return &dumpWorker{
-		BaseWorker: base,
-		cfg:        subtaskCfg,
+		cfg: subtaskCfg,
 	}
 }
 
 func (d *dumpWorker) InitImpl(ctx context.Context) error {
+	log.L().Info("init dump worker")
 	d.unitHolder = newUnitHolder(dumpling.NewDumpling(d.cfg))
 	return errors.Trace(d.unitHolder.init(ctx))
 }
 
 func (d *dumpWorker) Tick(ctx context.Context) error {
 	d.unitHolder.lazyProcess()
-
-	return nil
-}
-
-func (d *dumpWorker) Status() lib.WorkerStatus {
-	hasResult, result := d.unitHolder.getResult()
-	if !hasResult {
-		return lib.WorkerStatus{Code: lib.WorkerStatusNormal}
-	}
-	if len(result.Errors) > 0 {
-		return lib.WorkerStatus{
-			Code:         lib.WorkerStatusError,
-			ErrorMessage: unit.JoinProcessErrors(result.Errors),
-		}
-	}
-	return lib.WorkerStatus{Code: lib.WorkerStatusFinished}
-}
-
-func (d *dumpWorker) GetWorkerStatusExtTypeInfo() interface{} {
-	return &struct{}{}
+	return d.unitHolder.tryUpdateStatus(ctx, d.BaseWorker)
 }
 
 func (d *dumpWorker) Workload() model.RescUnit {

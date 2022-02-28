@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/hanfei1991/microcosm/client"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/zap"
+
 	cvs "github.com/hanfei1991/microcosm/jobmaster/cvsJob"
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/pb"
@@ -13,8 +15,6 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	"go.uber.org/zap"
 )
 
 // JobManager defines manager of job master
@@ -40,17 +40,8 @@ type JobManagerImplV2 struct {
 	lib.BaseMaster
 	*JobFsm
 
-	messageHandlerManager p2p.MessageHandlerManager
-	messageSender         p2p.MessageSender
-	metaKVClient          metadata.MetaKV
-	executorClientManager client.ClientsManager
-	serverMasterClient    client.MasterClient
-	uuidGen               uuid.Generator
-	masterMetaClient      *lib.MasterMetadataClient
-}
-
-func (jm *JobManagerImplV2) GetWorkerStatusExtTypeInfo() interface{} {
-	return struct{}{}
+	masterMetaClient *lib.MasterMetadataClient
+	uuidGen          uuid.Generator
 }
 
 func (jm *JobManagerImplV2) PauseJob(ctx context.Context, req *pb.PauseJobRequest) *pb.PauseJobResponse {
@@ -91,6 +82,8 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 		}
 		job.Tp = lib.CvsJobMaster
 		job.Config = req.Config
+	case pb.JobType_DM:
+		job.Tp = lib.DMJobMaster
 	case pb.JobType_FakeJob:
 		job.Tp = lib.FakeJobMaster
 	default:
@@ -120,34 +113,27 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 // NewJobManagerImplV2 creates a new JobManagerImplV2 instance
 func NewJobManagerImplV2(
 	dctx *dcontext.Context,
-	masterID lib.MasterID,
 	id lib.MasterID,
-	messageHandlerManager p2p.MessageHandlerManager,
-	messageSender p2p.MessageSender,
-	clients client.ClientsManager,
-	metaKVClient metadata.MetaKV,
 ) (*JobManagerImplV2, error) {
+	masterMetaClient, err := dctx.Deps().Construct(func(metaKV metadata.MetaKV) (*lib.MasterMetadataClient, error) {
+		return lib.NewMasterMetadataClient(id, metaKV), nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	impl := &JobManagerImplV2{
-		messageHandlerManager: messageHandlerManager,
-		messageSender:         messageSender,
-		executorClientManager: clients,
-		serverMasterClient:    clients.MasterClient(),
-		metaKVClient:          metaKVClient,
-		JobFsm:                NewJobFsm(),
-		uuidGen:               uuid.NewGenerator(),
-		masterMetaClient:      lib.NewMasterMetadataClient(id, metaKVClient),
+		JobFsm:           NewJobFsm(),
+		uuidGen:          uuid.NewGenerator(),
+		masterMetaClient: masterMetaClient.(*lib.MasterMetadataClient),
 	}
 	impl.BaseMaster = lib.NewBaseMaster(
 		dctx,
 		impl,
 		id,
-		impl.messageHandlerManager,
-		impl.messageSender,
-		impl.metaKVClient,
-		impl.executorClientManager,
-		impl.serverMasterClient,
 	)
-	err := impl.BaseMaster.Init(dctx.Context())
+
+	err = impl.BaseMaster.Init(dctx.Context())
 	if err != nil {
 		return nil, err
 	}

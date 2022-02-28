@@ -156,32 +156,11 @@ func (m *Master) Status() lib.WorkerStatus {
 	return lib.WorkerStatus{Code: lib.WorkerStatusNormal}
 }
 
-func (m *Master) GetWorkerStatusExtTypeInfo() interface{} {
-	return &dummyStatus{}
-}
-
-func (m *Master) GetJobMasterStatusExtTypeInfo() interface{} {
-	return &dummyStatus{}
-}
-
 func NewFakeMaster(ctx *dcontext.Context, workerID lib.WorkerID, masterID lib.MasterID, config lib.WorkerConfig) *Master {
 	log.L().Info("new fake master", zap.Any("config", config))
 	ret := &Master{
 		pendingWorkerSet: make(map[lib.WorkerID]int),
 		config:           config.(*Config),
 	}
-	deps := ctx.Dependencies
-	base := lib.NewBaseJobMaster(
-		ctx,
-		ret,
-		masterID,
-		workerID,
-		deps.MessageHandlerManager,
-		deps.MessageRouter,
-		deps.MetaKVClient,
-		deps.ExecutorClientManager,
-		deps.ServerMasterClient,
-	)
-	ret.BaseJobMaster = base
 	return ret
 }
