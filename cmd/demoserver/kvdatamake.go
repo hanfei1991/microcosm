@@ -132,7 +132,7 @@ func generateData(folderName string, recorders int) int {
 			shouldFlush = true
 		}
 		index := k % fileNum
-		_, err2 := fileWriterMap[index].WriteString(strconv.Itoa(k) + "," + "value \r\n")
+		_, err2 := fileWriterMap[index].WriteString(strconv.Itoa(k) + "," + "value\n")
 		if err2 != nil {
 			continue
 		}
@@ -232,6 +232,7 @@ func openFileAndReadString(path string) (content []byte, err error) {
 }
 
 func (s *DataRWServer) compareTwoFiles(path1, path2 string) error {
+	log.L().Info("compare two files", zap.String("p1", path1), zap.String("p2", path2))
 	str1, err := openFileAndReadString(path1)
 	if err != nil {
 		return err
@@ -243,8 +244,10 @@ func (s *DataRWServer) compareTwoFiles(path1, path2 string) error {
 	dmp := diffmatchpatch.New()
 
 	diffs := dmp.DiffMain(string(str1), string(str2), false)
-	if len(diffs) != 0 {
-		return errors.New(dmp.DiffPrettyText(diffs))
+	for i, diff := range diffs {
+		if diff.Type != diffmatchpatch.DiffEqual {
+			return errors.New(dmp.DiffPrettyText(diffs[i:]))
+		}
 	}
 	return nil
 }
