@@ -99,8 +99,6 @@ func testSubmitTest(t *testing.T, cfg *cvsTask.Config) {
 	for {
 		queryResp, err := masterclient.QueryJob(ctx, queryReq)
 		require.Nil(t, err)
-		time.Sleep(10 * time.Millisecond)
-		require.Nil(t, err)
 		require.Nil(t, queryResp.Err)
 		require.Equal(t, queryResp.Tp, int64(lib.CvsJobMaster))
 		if queryResp.Status == pb.QueryJobResponse_online {

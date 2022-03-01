@@ -347,17 +347,21 @@ func (s *DataRWServer) WriteLines(stream pb.DataRWService_WriteLinesServer) erro
 								err = os.Mkdir(folder, os.ModePerm)
 							}
 							if err != nil {
-								return &ErrorInfo{info: "create the folder " + folder + " failed"}
+								log.L().Warn("create folder failed", zap.String("folder", folder), zap.Error(err))
+								// may be folder has been created
+								time.Sleep(10 * time.Millisecond)
+							} else {
+								log.L().Info("create the folder ",
+									zap.String("folder  ", folder))
 							}
-							log.L().Error("create the folder ",
-								zap.String("folder  ", folder))
 						}
 						// create the file
 						file, err = os.OpenFile(fileName, os.O_CREATE|os.O_WRONLY, 0o666)
 					}
 					defer file.Close()
 					if err != nil {
-						return &ErrorInfo{info: "create file " + fileName + " failed"}
+						log.L().Error("create file failed", zap.String("file", fileName), zap.Error(err))
+						return err
 					}
 					writer = bufio.NewWriter(file)
 					defer writer.Flush()
