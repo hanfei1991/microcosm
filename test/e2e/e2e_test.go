@@ -106,21 +106,18 @@ func testSubmitTest(t *testing.T, cfg *cvsTask.Config) {
 			status := &lib.WorkerStatus{}
 			err = json.Unmarshal(statusBytes, status)
 			require.Nil(t, err)
-			if status.Code == lib.WorkerStatusNormal {
+			if status.Code == lib.WorkerStatusFinished {
 				ext, err := strconv.ParseInt(string(status.ExtBytes), 10, 64)
 				require.Nil(t, err, string(status.ExtBytes), string(statusBytes))
-				if ext == RecordNum {
-					break
-				}
+				require.Equal(t, ext, RecordNum)
+				break
 			}
-		} else {
-			require.Equal(t, queryResp.Status, pb.QueryJobResponse_dispatched)
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
 	// check files
 	demoResp, err := democlient.client.CheckDir(ctx, &pb.CheckDirRequest{
-		Dir: "/data1",
+		Dir: cfg.DstDir,
 	})
 	require.Nil(t, err)
 	require.Empty(t, demoResp.ErrFileName, demoResp.ErrMsg)
