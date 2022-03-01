@@ -5,17 +5,19 @@ import (
 	"sync"
 	"time"
 
-	runtime "github.com/hanfei1991/microcosm/executor/worker"
-	"github.com/hanfei1991/microcosm/model"
-	"github.com/hanfei1991/microcosm/pkg/clock"
-	derror "github.com/hanfei1991/microcosm/pkg/errors"
-	"github.com/hanfei1991/microcosm/pkg/metadata"
-	"github.com/hanfei1991/microcosm/pkg/p2p"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/pkg/workerpool"
+	"go.uber.org/dig"
 	"go.uber.org/zap"
+
+	runtime "github.com/hanfei1991/microcosm/executor/worker"
+	"github.com/hanfei1991/microcosm/model"
+	"github.com/hanfei1991/microcosm/pkg/clock"
+	dcontext "github.com/hanfei1991/microcosm/pkg/context"
+	derror "github.com/hanfei1991/microcosm/pkg/errors"
+	"github.com/hanfei1991/microcosm/pkg/metadata"
+	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
 type Worker interface {
@@ -27,11 +29,15 @@ type Worker interface {
 	runtime.Closer
 }
 
+// WorkerImpl is the implementation of a worker of dataflow engine.
+// the implementation struct must embed the lib.BaseWorker interface, this
+// interface will be initialized by the framework.
 type WorkerImpl interface {
 	// InitImpl provides customized logic for the business logic to initialize.
 	InitImpl(ctx context.Context) error
 
-	// Tick is called on a fixed interval.
+	// Tick is called on a fixed interval. When an error is returned, the worker
+	// will be stopped.
 	Tick(ctx context.Context) error
 
 	// Workload returns the current workload of the worker.
@@ -83,19 +89,31 @@ type DefaultBaseWorker struct {
 	clock clock.Clock
 }
 
+type workerParams struct {
+	dig.In
+
+	MessageHandlerManager p2p.MessageHandlerManager
+	MessageSender         p2p.MessageSender
+	MetaKVClient          metadata.MetaKV
+}
+
 func NewBaseWorker(
+	ctx *dcontext.Context,
 	impl WorkerImpl,
-	messageHandlerManager p2p.MessageHandlerManager,
-	messageSender p2p.MessageSender,
-	metaKVClient metadata.MetaKV,
 	workerID WorkerID,
 	masterID MasterID,
 ) BaseWorker {
+	var params workerParams
+	if err := ctx.Deps().Fill(&params); err != nil {
+		log.L().Panic("Failed to fill dependencies for BaseWorker",
+			zap.Error(err))
+	}
+
 	return &DefaultBaseWorker{
 		Impl:                  impl,
-		messageHandlerManager: messageHandlerManager,
-		messageSender:         messageSender,
-		metaKVClient:          metaKVClient,
+		messageHandlerManager: params.MessageHandlerManager,
+		messageSender:         params.MessageSender,
+		metaKVClient:          params.MetaKVClient,
 
 		masterID:      masterID,
 		id:            workerID,
@@ -317,7 +335,7 @@ func (w *DefaultBaseWorker) runWatchDog(ctx context.Context) error {
 			return errors.Trace(err)
 		}
 		if !isNormal {
-			return derror.ErrWorkerSuicide.GenWithStackByArgs()
+			return derror.ErrWorkerSuicide.GenWithStackByArgs(w.masterClient.MasterID())
 		}
 	}
 }
@@ -407,7 +425,7 @@ func (m *masterClient) MasterNodeID() p2p.NodeID {
 	return m.masterID
 }
 
-func (m *masterClient) refreshMasterInfo(ctx context.Context) error {
+func (m *masterClient) refreshMasterInfo(ctx context.Context, clock clock.Clock) error {
 	metaClient := NewMasterMetadataClient(m.masterID, m.metaKVClient)
 	masterMeta, err := metaClient.Load(ctx)
 	if err != nil {
@@ -417,7 +435,13 @@ func (m *masterClient) refreshMasterInfo(ctx context.Context) error {
 	m.mu.Lock()
 	m.masterNode = masterMeta.NodeID
 	if m.masterEpoch < masterMeta.Epoch {
+		log.L().Info("refresh master info", zap.String("masterID", m.masterID),
+			zap.Int64("oldEpoch", m.masterEpoch), zap.Int64("newEpoch", masterMeta.Epoch),
+		)
 		m.masterEpoch = masterMeta.Epoch
+		// if worker finds master is transferred, reset the master last ack time
+		// to now in case of a false positive detection of master timeout.
+		m.lastMasterAckedPingTime = clock.Mono()
 		m.mu.Unlock()
 		if err := m.onMasterFailOver(); err != nil {
 			return errors.Trace(err)
@@ -480,7 +504,7 @@ func (m *masterClient) CheckMasterTimeout(ctx context.Context, clock clock.Clock
 	if sinceLastAcked > 2*m.timeoutConfig.workerHeartbeatInterval &&
 		sinceLastAcked < m.timeoutConfig.workerTimeoutDuration {
 
-		if err := m.refreshMasterInfo(ctx); err != nil {
+		if err := m.refreshMasterInfo(ctx, clock); err != nil {
 			return false, errors.Trace(err)
 		}
 		return true, nil
@@ -512,4 +536,11 @@ func (m *masterClient) SendHeartBeat(ctx context.Context, clock clock.Clock) err
 		log.L().Warn("sending heartbeat ping encountered ErrPeerMessageSendTryAgain")
 	}
 	return nil
+}
+
+// used in unit test only
+func (m *masterClient) getLastMasterAckedPingTime() clock.MonotonicTime {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.lastMasterAckedPingTime
 }

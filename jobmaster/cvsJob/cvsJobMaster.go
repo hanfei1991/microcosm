@@ -5,6 +5,10 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/zap"
+	"google.golang.org/grpc"
+
 	cvsTask "github.com/hanfei1991/microcosm/executor/cvsTask"
 	"github.com/hanfei1991/microcosm/executor/worker"
 	"github.com/hanfei1991/microcosm/lib"
@@ -14,9 +18,6 @@ import (
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	"go.uber.org/zap"
-	"google.golang.org/grpc"
 )
 
 type Config struct {
@@ -49,7 +50,7 @@ type JobMaster struct {
 }
 
 func RegisterWorker() {
-	constructor := func(ctx *dcontext.Context, id lib.WorkerID, masterID lib.MasterID, config lib.WorkerConfig) lib.Worker {
+	constructor := func(ctx *dcontext.Context, id lib.WorkerID, masterID lib.MasterID, config lib.WorkerConfig) lib.WorkerImpl {
 		return NewCVSJobMaster(ctx, id, masterID, config)
 	}
 	factory := registry.NewSimpleWorkerFactory(constructor, &Config{})
@@ -61,20 +62,6 @@ func NewCVSJobMaster(ctx *dcontext.Context, workerID lib.WorkerID, masterID lib.
 	jm.workerID = workerID
 	jm.syncInfo = conf.(*Config)
 	jm.syncFilesInfo = make(map[lib.WorkerID]*workerInfo)
-	deps := ctx.Dependencies
-
-	base := lib.NewBaseJobMaster(
-		ctx,
-		jm,
-		masterID,
-		workerID,
-		deps.MessageHandlerManager,
-		deps.MessageRouter,
-		deps.MetaKVClient,
-		deps.ExecutorClientManager,
-		deps.ServerMasterClient,
-	)
-	jm.BaseJobMaster = base
 	log.L().Info("new cvs jobmaster ", zap.Any("id :", jm.workerID))
 	return jm
 }
