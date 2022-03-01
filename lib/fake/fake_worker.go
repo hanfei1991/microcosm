@@ -6,11 +6,12 @@ import (
 	"fmt"
 	"sync/atomic"
 
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/zap"
+
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/model"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	"go.uber.org/zap"
 )
 
 var _ lib.Worker = (*dummyWorker)(nil)
@@ -72,16 +73,6 @@ func (d *dummyWorker) CloseImpl(ctx context.Context) error {
 	return nil
 }
 
-func NewDummyWorker(ctx *dcontext.Context, id lib.WorkerID, masterID lib.MasterID, _ lib.WorkerConfig) lib.Worker {
-	ret := &dummyWorker{}
-	dependencies := ctx.Dependencies
-	ret.BaseWorker = lib.NewBaseWorker(
-		ret,
-		dependencies.MessageHandlerManager,
-		dependencies.MessageRouter,
-		dependencies.MetaKVClient,
-		id,
-		masterID)
-
-	return ret
+func NewDummyWorker(ctx *dcontext.Context, id lib.WorkerID, masterID lib.MasterID, _ lib.WorkerConfig) lib.WorkerImpl {
+	return &dummyWorker{}
 }
