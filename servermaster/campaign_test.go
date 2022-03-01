@@ -90,7 +90,9 @@ func TestLeaderLoopMeetStaleData(t *testing.T) {
 	cfg := NewConfig()
 	cfg.Etcd.Name = name
 	cfg.AdvertiseAddr = addr
+	id := genServerMasterUUID(name)
 	s := &Server{
+		id:              id,
 		cfg:             cfg,
 		etcd:            etcd,
 		etcdClient:      client,
@@ -141,6 +143,7 @@ func TestLeaderLoopWatchLeader(t *testing.T) {
 	cfg.Etcd.Name = name
 	cfg.AdvertiseAddr = addr
 	s := &Server{
+		id:         genServerMasterUUID(name),
 		cfg:        cfg,
 		etcd:       etcd,
 		etcdClient: client,
@@ -154,6 +157,7 @@ func TestLeaderLoopWatchLeader(t *testing.T) {
 	cfg2.Etcd.Name = name + "-node-copy"
 	cfg2.AdvertiseAddr = addr
 	s2 := &Server{
+		id:  genServerMasterUUID(cfg2.Etcd.Name),
 		cfg: cfg2,
 	}
 	sess, err := concurrency.NewSession(client, concurrency.WithTTL(10))
