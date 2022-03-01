@@ -183,6 +183,41 @@ func (m *workerManagerImpl) asyncLoadAllWorkers(ctx context.Context) error {
 	return nil
 }
 
+func (m *workerManagerImpl) asyncDeleteTombstone(ctx context.Context, id WorkerID) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if _, exists := m.tombstones[id]; !exists {
+		return nil
+	}
+
+	err := m.pool.Go(ctx, func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+
+		workerMetaClient := NewWorkerMetadataClient(m.masterID, m.metaClient)
+		ok, err := workerMetaClient.Remove(ctx, id)
+		if err != nil {
+			select {
+			case m.errCh <- errors.Trace(err):
+			default:
+			}
+			m.fsmState.Store(workerManagerFailed)
+			return
+		}
+		if !ok {
+			log.L().Warn("Could not remove tombstone state for worker",
+				zap.String("master-id", m.masterID),
+				zap.String("worker-id", id))
+			return
+		}
+	})
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
 func (m *workerManagerImpl) CheckStatusUpdate(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -437,10 +472,7 @@ func (m *workerManagerImpl) GetWorkerHandle(id WorkerID) WorkerHandle {
 			id:      id,
 		}
 	} else if status, exists := m.tombstones[id]; exists {
-		return &tombstoneWorkerHandleImpl{
-			id:     id,
-			status: *status,
-		}
+		return NewTombstoneWorkerHandle(id, *status, m)
 	}
 	return nil
 }
@@ -459,7 +491,7 @@ func (m *workerManagerImpl) GetWorkers() map[WorkerID]WorkerHandle {
 	}
 
 	for workerID, status := range m.tombstones {
-		ret[workerID] = NewTombstoneWorkerHandle(workerID, *status)
+		ret[workerID] = NewTombstoneWorkerHandle(workerID, *status, m)
 	}
 	return ret
 }
@@ -506,6 +538,12 @@ type WorkerHandle interface {
 	ID() WorkerID
 	IsTombStone() bool
 	ToPB() (*pb.WorkerInfo, error)
+
+	// DeleteTombStone attempts to remove the persisted status
+	// if the WorkerHandler is a tombstone.
+	// If the handle does not represent a deletable tombstone,
+	// a call to DeleteTombStone will return false.
+	DeleteTombStone(ctx context.Context) (bool, error)
 }
 
 type workerHandleImpl struct {
@@ -575,15 +613,21 @@ func (w *workerHandleImpl) IsTombStone() bool {
 	return false
 }
 
-type tombstoneWorkerHandleImpl struct {
-	id     WorkerID
-	status WorkerStatus
+func (w *workerHandleImpl) DeleteTombStone(_ context.Context) (bool, error) {
+	return false, nil
 }
 
-func NewTombstoneWorkerHandle(id WorkerID, status WorkerStatus) WorkerHandle {
+type tombstoneWorkerHandleImpl struct {
+	id      WorkerID
+	status  WorkerStatus
+	manager workerManager
+}
+
+func NewTombstoneWorkerHandle(id WorkerID, status WorkerStatus, manager workerManager) WorkerHandle {
 	return &tombstoneWorkerHandleImpl{
-		id:     id,
-		status: status,
+		id:      id,
+		status:  status,
+		manager: manager,
 	}
 }
 
@@ -610,4 +654,19 @@ func (h *tombstoneWorkerHandleImpl) ID() WorkerID {
 
 func (h *tombstoneWorkerHandleImpl) IsTombStone() bool {
 	return true
+}
+
+func (h *tombstoneWorkerHandleImpl) DeleteTombStone(ctx context.Context) (bool, error) {
+	if h.manager == nil {
+		return false, nil
+	}
+	managerImpl, ok := h.manager.(*workerManagerImpl)
+	if !ok {
+		return false, nil
+	}
+
+	if err := managerImpl.asyncDeleteTombstone(ctx, h.id); err != nil {
+		return false, errors.Trace(err)
+	}
+	return true, nil
 }

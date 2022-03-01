@@ -363,7 +363,7 @@ func (m *DefaultBaseMaster) runWorkerCheck(ctx context.Context) error {
 					zap.Any("worker-info", workerInfo),
 				)
 			}
-			tombstoneHandle := NewTombstoneWorkerHandle(workerInfo.ID, *status)
+			tombstoneHandle := NewTombstoneWorkerHandle(workerInfo.ID, *status, nil)
 			err := m.unregisterMessageHandler(ctx, workerInfo.ID)
 			if err != nil {
 				return err
@@ -570,7 +570,7 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 		// When CreateWorker failed, we need to pass the worker id to
 		// OnWorkerDispatched, so we use a dummy WorkerHandle.
 		dispatchFailedDummyHandler := NewTombstoneWorkerHandle(
-			workerID, WorkerStatus{Code: WorkerStatusError})
+			workerID, WorkerStatus{Code: WorkerStatusError}, nil)
 		requestCtx, cancel := context.WithTimeout(context.Background(), createWorkerTimeout)
 		defer cancel()
 		// This following API should be refined.

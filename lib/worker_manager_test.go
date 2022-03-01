@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	derror "github.com/hanfei1991/microcosm/pkg/errors"
+
 	"github.com/pingcap/tiflow/pkg/workerpool"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/dig"
@@ -620,6 +622,17 @@ func TestWorkerTombstones(t *testing.T) {
 			require.True(t, handle.IsTombStone(), "worker-%d", i)
 		}
 	}
+
+	handle := manager.GetWorkerHandle("worker-5")
+	ok, err := handle.DeleteTombStone(ctx)
+	require.NoError(t, err)
+	require.True(t, ok)
+
+	require.Eventually(t, func() bool {
+		workerMetaClient := NewWorkerMetadataClient(masterName, suite.MetaClient)
+		_, err := workerMetaClient.Load(ctx, "worker-5")
+		return derror.ErrWorkerNoMeta.Equal(err)
+	}, 1*time.Second, 10*time.Millisecond)
 
 	cancel()
 	suite.Close()

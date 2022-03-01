@@ -162,6 +162,23 @@ func (c *WorkerMetadataClient) Load(ctx context.Context, workerID WorkerID) (*Wo
 	return &workerMeta, nil
 }
 
+func (c *WorkerMetadataClient) Remove(ctx context.Context, id WorkerID) (bool, error) {
+	raw, err := c.metaKVClient.Delete(ctx, c.workerMetaKey(id))
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	if raw == nil {
+		// This is in order to be compatible with MetaMock.
+		// TODO remove this check when we migrate to the new metaclient.
+		return true, nil
+	}
+	resp := raw.(*clientv3.DeleteResponse)
+	if resp.Deleted != 1 {
+		return false, nil
+	}
+	return true, nil
+}
+
 func (c *WorkerMetadataClient) Store(ctx context.Context, workerID WorkerID, data *WorkerStatus) error {
 	dataBytes, err := json.Marshal(data)
 	if err != nil {
