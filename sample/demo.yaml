@@ -4,9 +4,6 @@ services:
                 image: dataflow:test
                 ports:
                         - "1234:1234"
-                volumes:
-                        - /tmp/data:/data
-                        - /tmp/data1:/data1
                 command:
                         - ./bin/demoserver
                         - "/data"

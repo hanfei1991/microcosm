@@ -3,11 +3,15 @@ package e2e_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"os"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/hanfei1991/microcosm/client"
+	cvsTask "github.com/hanfei1991/microcosm/executor/cvsTask"
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/stretchr/testify/require"
@@ -18,14 +22,6 @@ var (
 	DemoAddress             = "127.0.0.1:1234"
 	MasterAddressList       = []string{"127.0.0.1:10245", "127.0.0.1:10246", "127.0.0.1:10247"}
 	RecordNum         int64 = 10000
-	DemoConfig              = `
-{
-   "srcHost":"demo-server:1234",
-   "srcDir":"/data",
-   "dstHost":"demo-server:1234",
-   "dstDir":"/data1"
-}
-`
 )
 
 type DemoClient struct {
@@ -44,8 +40,33 @@ func NewDemoClient(ctx context.Context, addr string) (*DemoClient, error) {
 	}, err
 }
 
-// run this test after docker-compose has been up
 func TestSubmitTest(t *testing.T) {
+	cvsJobNum := os.Getenv("CVSJOBNUM")
+	jobNum := 2
+	if cvsJobNum != "" {
+		var err error
+		jobNum, err = strconv.Atoi(cvsJobNum)
+		require.Nil(t, err)
+	}
+	var wg sync.WaitGroup
+	wg.Add(jobNum)
+	for i := 1; i <= jobNum; i++ {
+		go func(idx int) {
+			cfg := &cvsTask.Config{
+				SrcDir:  "/data",
+				DstDir:  fmt.Sprintf("/data%d", idx),
+				SrcHost: "demo-server:1234",
+				DstHost: "demo-server:1234",
+			}
+			testSubmitTest(t, cfg)
+			wg.Done()
+		}(i)
+	}
+	wg.Wait()
+}
+
+// run this test after docker-compose has been up
+func testSubmitTest(t *testing.T, cfg *cvsTask.Config) {
 	ctx := context.Background()
 	democlient, err := NewDemoClient(ctx, DemoAddress)
 	require.Nil(t, err)
@@ -61,9 +82,12 @@ func TestSubmitTest(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 
+	configBytes, err := json.Marshal(cfg)
+	require.Nil(t, err)
+
 	resp, err := masterclient.SubmitJob(ctx, &pb.SubmitJobRequest{
 		Tp:     pb.JobType_CVSDemo,
-		Config: []byte(DemoConfig),
+		Config: configBytes,
 	})
 	require.Nil(t, err)
 	require.Nil(t, resp.Err)
