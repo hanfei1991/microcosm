@@ -111,6 +111,38 @@ func NewWorkerMetadataClient(
 	}
 }
 
+func (c *WorkerMetadataClient) LoadAllWorkers(ctx context.Context) (map[WorkerID]*WorkerStatus, error) {
+	loadPrefix := adapter.WorkerKeyAdapter.Encode(c.masterID)
+	raw, err := c.metaKVClient.Get(ctx, loadPrefix, clientv3.WithPrefix())
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	resp := raw.(*clientv3.GetResponse)
+	ret := make(map[WorkerID]*WorkerStatus, len(resp.Kvs))
+	for _, kv := range resp.Kvs {
+		decoded, err := adapter.WorkerKeyAdapter.Decode(string(kv.Key))
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		if len(decoded) != 2 {
+			// TODO add an error type
+			return nil, errors.Errorf("unexpected key: %s", string(kv.Key))
+		}
+
+		// NOTE decoded[0] is the master ID.
+		workerID := decoded[1]
+
+		workerMetaBytes := kv.Value
+		var workerMeta WorkerStatus
+		if err := json.Unmarshal(workerMetaBytes, &workerMeta); err != nil {
+			// TODO wrap the error
+			return nil, errors.Trace(err)
+		}
+		ret[workerID] = &workerMeta
+	}
+	return ret, nil
+}
+
 func (c *WorkerMetadataClient) Load(ctx context.Context, workerID WorkerID) (*WorkerStatus, error) {
 	rawResp, err := c.metaKVClient.Get(ctx, c.workerMetaKey(workerID))
 	if err != nil {

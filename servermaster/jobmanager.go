@@ -137,11 +137,11 @@ func NewJobManagerImplV2(
 		id,
 	)
 
-	err = lib.StoreMasterMeta(dctx.Context(), impl.MetaKVClient(), impl.MasterMeta())
+	err = lib.StoreMasterMeta(dctx, impl.MetaKVClient(), impl.MasterMeta())
 	if err != nil {
 		return nil, err
 	}
-	err = impl.BaseMaster.Init(dctx.Context())
+	err = impl.BaseMaster.Init(dctx)
 	if err != nil {
 		return nil, err
 	}

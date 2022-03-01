@@ -7,6 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hanfei1991/microcosm/pkg/deps"
+
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -74,6 +76,7 @@ type BaseMaster interface {
 	MasterMeta() *MasterMetaKVData
 	MasterID() MasterID
 	GetWorkers() map[WorkerID]WorkerHandle
+	IsMasterReady() bool
 	Close(ctx context.Context) error
 	OnError(err error)
 	// RegisterWorker registers worker handler only, the worker is expected to be running
@@ -118,6 +121,9 @@ type DefaultBaseMaster struct {
 
 	// TODO use a shared quota for all masters.
 	createWorkerQuota quota.ConcurrencyQuota
+
+	// deps is a container for injected dependencies
+	deps *deps.Deps
 }
 
 type masterParams struct {
@@ -179,6 +185,7 @@ func NewBaseMaster(
 		advertiseAddr: advertiseAddr,
 
 		createWorkerQuota: quota.NewConcurrencyQuota(maxCreateWorkerConcurrency),
+		deps:              ctx.Deps(),
 	}
 }
 
@@ -214,18 +221,23 @@ func (m *DefaultBaseMaster) doInit(ctx context.Context) (isFirstStartUp bool, er
 		return false, errors.Trace(err)
 	}
 	m.currentEpoch.Store(epoch)
+
+	if err := m.deps.Provide(func() workerpool.AsyncPool {
+		return m.pool
+	}); err != nil {
+		return false, errors.Trace(err)
+	}
+
+	// TODO refactor context use when we can replace stdContext with dcontext.
+	dctx := dcontext.NewContext(ctx, log.L()).WithDeps(m.deps)
 	m.workerManager = newWorkerManager(
+		dctx,
 		m.id,
 		!isInit,
 		epoch,
-		m.messageSender,
-		m.messageHandlerManager,
-		m.metaKVClient,
-		m.pool,
 		&m.timeoutConfig)
 
 	m.startBackgroundTasks()
-
 	return isInit, nil
 }
 
@@ -330,7 +342,7 @@ func (m *DefaultBaseMaster) runWorkerCheck(ctx context.Context) error {
 		case <-ticker.C:
 		}
 
-		offlinedWorkers, onlinedWorkers := m.workerManager.Tick(ctx, m.messageSender)
+		offlinedWorkers, onlinedWorkers := m.workerManager.Tick(ctx)
 		// It is logical to call `OnWorkerOnline` first and then call `OnWorkerOffline`.
 		// In case that these two events for the same worker is detected in the same tick.
 		for _, workerInfo := range onlinedWorkers {
@@ -637,4 +649,8 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 	}()
 
 	return workerID, nil
+}
+
+func (m *DefaultBaseMaster) IsMasterReady() bool {
+	return m.workerManager.IsInitialized()
 }
