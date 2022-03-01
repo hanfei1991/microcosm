@@ -109,6 +109,7 @@ func (jm *JobMaster) InitImpl(ctx context.Context) error {
 }
 
 func (jm *JobMaster) Tick(ctx context.Context) error {
+	lastCounter := jm.counter
 	jm.counter = 0
 	for _, worker := range jm.syncFilesInfo {
 		if worker.handle == nil {
@@ -130,7 +131,10 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 			log.L().Info("worker status abnormal", zap.Any("status", status))
 		}
 	}
-	log.L().Info("cvs job master status  ", zap.Any("id :", jm.workerID), zap.Int64("counter: ", jm.counter))
+	log.L().Info("cvs job master status  ", zap.Any("id", jm.workerID), zap.Int64("counter", jm.counter))
+	if jm.counter == lastCounter {
+		return nil
+	}
 	err := jm.BaseJobMaster.UpdateJobStatus(ctx, jm.Status())
 	if errors.ErrWorkerUpdateStatusTryAgain.Equal(err) {
 		log.L().Warn("update status try again later", zap.String("error", err.Error()))

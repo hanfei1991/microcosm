@@ -10,9 +10,7 @@ import (
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/pb"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
 
@@ -86,11 +84,12 @@ func TestSubmitTest(t *testing.T) {
 			status := &lib.WorkerStatus{}
 			err = json.Unmarshal(statusBytes, status)
 			require.Nil(t, err)
-			ext, err := strconv.ParseInt(string(status.ExtBytes), 10, 64)
-			require.Nil(t, err)
-			log.L().Info("worker online", zap.Int64("ext", ext))
-			if ext == RecordNum {
-				break
+			if status.Code == lib.WorkerStatusNormal {
+				ext, err := strconv.ParseInt(string(status.ExtBytes), 10, 64)
+				require.Nil(t, err, string(status.ExtBytes), string(statusBytes))
+				if ext == RecordNum {
+					break
+				}
 			}
 		} else {
 			require.Equal(t, queryResp.Status, pb.QueryJobResponse_dispatched)
