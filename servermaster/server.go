@@ -11,6 +11,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/hanfei1991/microcosm/pkg/deps"
+	"github.com/hanfei1991/microcosm/pkg/metadata"
+
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/model"
@@ -19,7 +23,6 @@ import (
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/etcdutils"
-	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/pkg/serverutils"
 	"github.com/hanfei1991/microcosm/servermaster/cluster"
@@ -68,6 +71,9 @@ type Server struct {
 	cfg     *Config
 	info    *model.NodeInfo
 	metrics *serverMasterMetric
+	// id contains etcd name plus an uuid, each server master has a unique id
+	// and the id changes after it restarts.
+	id string
 
 	msgService      *p2p.MessageRPCService
 	p2pMsgRouter    p2p.MessageRouter
@@ -107,6 +113,10 @@ func newServerMasterMetric() *serverMasterMetric {
 	}
 }
 
+func genServerMasterUUID(etcdName string) string {
+	return etcdName + "-" + uuid.New().String()
+}
+
 // NewServer creates a new master-server.
 func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 	executorManager := NewExecutorManagerImpl(cfg.KeepAliveTTL, cfg.KeepAliveInterval, ctx)
@@ -120,14 +130,16 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 		masterAddrs = append(masterAddrs, u.Host)
 	}
 
+	id := genServerMasterUUID(cfg.Etcd.Name)
 	info := &model.NodeInfo{
 		Type: model.NodeTypeServerMaster,
-		ID:   model.DeployNodeID(cfg.Etcd.Name),
+		ID:   model.DeployNodeID(id),
 		Addr: cfg.AdvertiseAddr,
 	}
 	p2pMsgRouter := p2p.NewMessageRouter(p2p.NodeID(info.ID), info.Addr)
 
 	server := &Server{
+		id:              id,
 		cfg:             cfg,
 		info:            info,
 		executorManager: executorManager,
@@ -483,7 +495,7 @@ func (s *Server) member() string {
 
 // name is a shortcut to etcd name
 func (s *Server) name() string {
-	return s.cfg.Etcd.Name
+	return s.id
 }
 
 func (s *Server) reset(ctx context.Context) error {
@@ -538,18 +550,49 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	dctx := dcontext.NewContext(ctx, log.L())
 	dctx.Environ.Addr = s.cfg.AdvertiseAddr
 	dctx.Environ.NodeID = s.name()
-	masterMetaExt := &lib.MasterMetaExt{
+	masterMeta := &lib.MasterMetaKVData{
 		ID: lib.JobManagerUUID,
 		Tp: lib.JobManager,
 	}
-	masterMetaExtBytes, err := masterMetaExt.Marshal()
+	masterMetaBytes, err := masterMeta.Marshal()
 	if err != nil {
 		return
 	}
-	dctx.Environ.MasterMetaExt = masterMetaExtBytes
-	s.jobManager, err = NewJobManagerImplV2(dctx, "", lib.JobManagerUUID,
-		s.msgService.MakeHandlerManager(), p2p.NewMessageSender(s.p2pMsgRouter),
-		clients, metadata.NewMetaEtcd(s.etcdClient))
+	dctx.Environ.MasterMetaBytes = masterMetaBytes
+
+	dp := deps.NewDeps()
+	if err := dp.Provide(func() metadata.MetaKV {
+		return metadata.NewMetaEtcd(s.etcdClient)
+	}); err != nil {
+		return err
+	}
+
+	if err := dp.Provide(func() client.ClientsManager {
+		return clients
+	}); err != nil {
+		return err
+	}
+
+	if err := dp.Provide(func() client.MasterClient {
+		return clients.MasterClient()
+	}); err != nil {
+		return err
+	}
+
+	if err := dp.Provide(func() p2p.MessageSender {
+		return p2p.NewMessageSender(s.p2pMsgRouter)
+	}); err != nil {
+		return err
+	}
+
+	if err := dp.Provide(func() p2p.MessageHandlerManager {
+		return s.msgService.MakeHandlerManager()
+	}); err != nil {
+		return err
+	}
+
+	dctx = dctx.WithDeps(dp)
+	s.jobManager, err = NewJobManagerImplV2(dctx, lib.JobManagerUUID)
 	if err != nil {
 		return
 	}

@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.etcd.io/etcd/clientv3"
+	"go.uber.org/zap"
 
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
@@ -77,7 +79,7 @@ func (c *MasterMetadataClient) LoadAllMasters(ctx context.Context) ([]*MasterMet
 		if err := json.Unmarshal(kv.Value, masterMeta); err != nil {
 			return nil, errors.Trace(err)
 		}
-		if masterMeta.MasterMetaExt.Tp != JobManager {
+		if masterMeta.Tp != JobManager {
 			meta = append(meta, masterMeta)
 		}
 	}
@@ -109,6 +111,38 @@ func NewWorkerMetadataClient(
 	}
 }
 
+func (c *WorkerMetadataClient) LoadAllWorkers(ctx context.Context) (map[WorkerID]*WorkerStatus, error) {
+	loadPrefix := adapter.WorkerKeyAdapter.Encode(c.masterID)
+	raw, err := c.metaKVClient.Get(ctx, loadPrefix, clientv3.WithPrefix())
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	resp := raw.(*clientv3.GetResponse)
+	ret := make(map[WorkerID]*WorkerStatus, len(resp.Kvs))
+	for _, kv := range resp.Kvs {
+		decoded, err := adapter.WorkerKeyAdapter.Decode(string(kv.Key))
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		if len(decoded) != 2 {
+			// TODO add an error type
+			return nil, errors.Errorf("unexpected key: %s", string(kv.Key))
+		}
+
+		// NOTE decoded[0] is the master ID.
+		workerID := decoded[1]
+
+		workerMetaBytes := kv.Value
+		var workerMeta WorkerStatus
+		if err := json.Unmarshal(workerMetaBytes, &workerMeta); err != nil {
+			// TODO wrap the error
+			return nil, errors.Trace(err)
+		}
+		ret[workerID] = &workerMeta
+	}
+	return ret, nil
+}
+
 func (c *WorkerMetadataClient) Load(ctx context.Context, workerID WorkerID) (*WorkerStatus, error) {
 	rawResp, err := c.metaKVClient.Get(ctx, c.workerMetaKey(workerID))
 	if err != nil {
@@ -126,6 +160,23 @@ func (c *WorkerMetadataClient) Load(ctx context.Context, workerID WorkerID) (*Wo
 	}
 
 	return &workerMeta, nil
+}
+
+func (c *WorkerMetadataClient) Remove(ctx context.Context, id WorkerID) (bool, error) {
+	raw, err := c.metaKVClient.Delete(ctx, c.workerMetaKey(id))
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	if raw == nil {
+		// This is in order to be compatible with MetaMock.
+		// TODO remove this check when we migrate to the new metaclient.
+		return true, nil
+	}
+	resp := raw.(*clientv3.DeleteResponse)
+	if resp.Deleted != 1 {
+		return false, nil
+	}
+	return true, nil
 }
 
 func (c *WorkerMetadataClient) Store(ctx context.Context, workerID WorkerID, data *WorkerStatus) error {
@@ -148,4 +199,29 @@ func (c *WorkerMetadataClient) MasterID() MasterID {
 
 func (c *WorkerMetadataClient) workerMetaKey(id WorkerID) string {
 	return adapter.WorkerKeyAdapter.Encode(c.masterID, id)
+}
+
+// StoreMasterMeta is exposed to job manager for job master meta persistence
+func StoreMasterMeta(
+	ctx context.Context,
+	metaKVClient metadata.MetaKV,
+	meta *MasterMetaKVData,
+) error {
+	metaClient := NewMasterMetadataClient(meta.ID, metaKVClient)
+	masterMeta, err := metaClient.Load(ctx)
+	if err != nil {
+		if !derror.ErrMasterNotFound.Equal(err) {
+			return err
+		}
+	} else {
+		log.L().Warn("master meta exits, will be overwritten", zap.Any("meta", masterMeta))
+	}
+
+	epoch, err := metaClient.GenerateEpoch(ctx)
+	if err != nil {
+		return err
+	}
+	meta.Epoch = epoch
+
+	return metaClient.Store(ctx, meta)
 }

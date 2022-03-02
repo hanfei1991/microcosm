@@ -3,7 +3,7 @@ PARALLEL=3
 GOTEST := CGO_ENABLED=1 go test -p $(PARALLEL) --race
 FAIL_ON_STDOUT := awk '{ print  } END { if (NR > 0) { exit 1  }  }'
 
-PACKAGE_LIST := go list ./... | grep -vE 'proto|pb'
+PACKAGE_LIST := go list ./... | grep -vE 'proto|pb' | grep -v 'e2e'
 PACKAGES := $$($(PACKAGE_LIST))
 GOFILES := $$(find . -name '*.go' -type f | grep -vE 'proto|pb\.go')
 
@@ -51,3 +51,7 @@ tidy:
 lint:
 	echo "golangci-lint"; \
 	tools/bin/golangci-lint run --config=./.golangci.yml --timeout 10m0s --skip-files "pb"
+
+kvmock: tools_setup
+	tools/bin/mockgen github.com/hanfei1991/microcosm/pkg/metaclient KVClient \
+	> pkg/metaclient/kvclient/mock/mockclient.go

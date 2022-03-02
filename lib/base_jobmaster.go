@@ -6,7 +6,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 
-	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/executor/worker"
 	"github.com/hanfei1991/microcosm/model"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
@@ -33,6 +32,11 @@ type BaseJobMaster interface {
 	ID() worker.RunnableID
 	UpdateJobStatus(ctx context.Context, status WorkerStatus) error
 
+	// IsMasterReady returns whether the master has received heartbeats for all
+	// workers after a fail-over. If this is the first time the JobMaster started up,
+	// the return value is always true.
+	IsMasterReady() bool
+
 	// IsBaseJobMaster is an empty function used to prevent accidental implementation
 	// of this interface.
 	IsBaseJobMaster()
@@ -44,8 +48,13 @@ type DefaultBaseJobMaster struct {
 	impl   JobMasterImpl
 }
 
+// JobMasterImpl is the implementation of a job master of dataflow engine.
+// the implementation struct must embed the lib.BaseJobMaster interface, this
+// interface will be initialized by the framework.
 type JobMasterImpl interface {
 	InitImpl(ctx context.Context) error
+	// Tick is called on a fixed interval. When an error is returned, the worker
+	// will be stopped.
 	Tick(ctx context.Context) error
 	CloseImpl(ctx context.Context) error
 
@@ -68,22 +77,15 @@ func NewBaseJobMaster(
 	jobMasterImpl JobMasterImpl,
 	masterID MasterID,
 	workerID WorkerID,
-	messageHandlerManager p2p.MessageHandlerManager,
-	messageRouter p2p.MessageSender,
-	metaKVClient metadata.MetaKV,
-	executorClientManager client.ClientsManager,
-	serverMasterClient client.MasterClient,
 ) BaseJobMaster {
 	// master-worker pair: job manager <-> job master(`baseWorker` following)
 	// master-worker pair: job master(`baseMaster` following) <-> real workers
 	// `masterID` is always the ID of master role, against current object
 	// `workerID` is the ID of current object
 	baseMaster := NewBaseMaster(
-		ctx, &jobMasterImplAsMasterImpl{jobMasterImpl}, workerID, messageHandlerManager,
-		messageRouter, metaKVClient, executorClientManager, serverMasterClient)
+		ctx, &jobMasterImplAsMasterImpl{jobMasterImpl}, workerID)
 	baseWorker := NewBaseWorker(
-		&jobMasterImplAsWorkerImpl{jobMasterImpl}, messageHandlerManager, messageRouter, metaKVClient,
-		workerID, masterID)
+		ctx, &jobMasterImplAsWorkerImpl{jobMasterImpl}, workerID, masterID)
 	return &DefaultBaseJobMaster{
 		master: baseMaster.(*DefaultBaseMaster),
 		worker: baseWorker.(*DefaultBaseWorker),
@@ -195,6 +197,10 @@ func (d *DefaultBaseJobMaster) IsBaseJobMaster() {
 func (d *DefaultBaseJobMaster) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) (bool, error) {
 	// master will use WorkerHandle to send message
 	return d.worker.SendMessage(ctx, topic, message)
+}
+
+func (d *DefaultBaseJobMaster) IsMasterReady() bool {
+	return d.master.IsMasterReady()
 }
 
 type jobMasterImplAsWorkerImpl struct {

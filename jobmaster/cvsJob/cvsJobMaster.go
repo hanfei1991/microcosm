@@ -5,6 +5,10 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/zap"
+	"google.golang.org/grpc"
+
 	cvsTask "github.com/hanfei1991/microcosm/executor/cvsTask"
 	"github.com/hanfei1991/microcosm/executor/worker"
 	"github.com/hanfei1991/microcosm/lib"
@@ -12,10 +16,8 @@ import (
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
+	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	"go.uber.org/zap"
-	"google.golang.org/grpc"
 )
 
 type Config struct {
@@ -45,10 +47,12 @@ type JobMaster struct {
 	syncFilesInfo map[lib.WorkerID]*workerInfo
 	counter       int64
 	workerID      lib.WorkerID
+	status        lib.WorkerStatusCode
+	filesNum      int
 }
 
 func RegisterWorker() {
-	constructor := func(ctx *dcontext.Context, id lib.WorkerID, masterID lib.MasterID, config lib.WorkerConfig) lib.Worker {
+	constructor := func(ctx *dcontext.Context, id lib.WorkerID, masterID lib.MasterID, config lib.WorkerConfig) lib.WorkerImpl {
 		return NewCVSJobMaster(ctx, id, masterID, config)
 	}
 	factory := registry.NewSimpleWorkerFactory(constructor, &Config{})
@@ -60,20 +64,6 @@ func NewCVSJobMaster(ctx *dcontext.Context, workerID lib.WorkerID, masterID lib.
 	jm.workerID = workerID
 	jm.syncInfo = conf.(*Config)
 	jm.syncFilesInfo = make(map[lib.WorkerID]*workerInfo)
-	deps := ctx.Dependencies
-
-	base := lib.NewBaseJobMaster(
-		ctx,
-		jm,
-		masterID,
-		workerID,
-		deps.MessageHandlerManager,
-		deps.MessageRouter,
-		deps.MetaKVClient,
-		deps.ExecutorClientManager,
-		deps.ServerMasterClient,
-	)
-	jm.BaseJobMaster = base
 	log.L().Info("new cvs jobmaster ", zap.Any("id :", jm.workerID))
 	return jm
 }
@@ -83,15 +73,16 @@ func (jm *JobMaster) InitImpl(ctx context.Context) error {
 		return &errorInfo{info: "bad configure file ,make sure the source address is not the same as the destination"}
 	}
 	log.L().Info("initializing the cvs jobmaster  ", zap.Any("id :", jm.workerID))
+	jm.status = lib.WorkerStatusInit
 	fileNames, err := jm.listSrcFiles(ctx)
 	if err != nil {
 		return err
 	}
-	filesNum := len(fileNames)
-	if filesNum == 0 {
+	jm.filesNum = len(fileNames)
+	if jm.filesNum == 0 {
 		log.L().Info("no file found under the folder ", zap.Any("message", jm.syncInfo.DstDir))
 	}
-	log.L().Info(" cvs jobmaster list file success", zap.Any("id :", jm.workerID), zap.Any(" file number :", filesNum))
+	log.L().Info(" cvs jobmaster list file success", zap.Any("id :", jm.workerID), zap.Any(" file number :", jm.filesNum))
 	// todo: store the jobmaster information into the metastore
 	for _, file := range fileNames {
 		dstDir := jm.syncInfo.DstDir + "/" + file
@@ -104,35 +95,45 @@ func (jm *JobMaster) InitImpl(ctx context.Context) error {
 		}
 		jm.syncFilesInfo[workerID] = &workerInfo{file: file, curLoc: 0, handle: nil}
 	}
-	return nil
+	jm.status = lib.WorkerStatusNormal
+	return jm.UpdateJobStatus(ctx, jm.Status())
 }
 
 func (jm *JobMaster) Tick(ctx context.Context) error {
+	filesNum := 0
 	jm.counter = 0
 	for _, worker := range jm.syncFilesInfo {
 		if worker.handle == nil {
 			continue
 		}
 		status := worker.handle.Status()
-		if status.Code == lib.WorkerStatusNormal {
+		if status.Code == lib.WorkerStatusNormal || status.Code == lib.WorkerStatusFinished {
 			num, err := strconv.ParseInt(string(status.ExtBytes), 10, 64)
 			if err != nil {
 				return err
 			}
 			worker.curLoc = num
 			jm.counter += num
-			log.L().Debug("cvs job tmp num ", zap.Any("id :", worker.handle.ID()), zap.Int64("counter: ", num))
+			log.L().Debug("cvs job tmp num ", zap.Any("id", worker.handle.ID()), zap.Int64("counter", num), zap.Any("status", status.Code))
 			// todo : store the sync progress into the meta store for each file
-		} else if status.Code == lib.WorkerStatusFinished {
-			// todo : handle error case here
-			log.L().Info("sync file finished ", zap.Any("message", worker.file))
+			if status.Code == lib.WorkerStatusFinished {
+				filesNum++
+			}
 		} else if status.Code == lib.WorkerStatusError {
 			log.L().Error("sync file failed ", zap.Any("message", worker.file))
 		} else {
 			log.L().Info("worker status abnormal", zap.Any("status", status))
 		}
 	}
-	log.L().Info("cvs job master status  ", zap.Any("id :", jm.workerID), zap.Int64("counter: ", jm.counter))
+	log.L().Info("cvs job master status", zap.Any("id", jm.workerID), zap.Int64("counter", jm.counter), zap.Any("status", jm.status))
+	if filesNum == jm.filesNum && jm.status != lib.WorkerStatusFinished {
+		jm.status = lib.WorkerStatusFinished
+		err := jm.BaseJobMaster.UpdateJobStatus(ctx, jm.Status())
+		if errors.ErrWorkerUpdateStatusTryAgain.Equal(err) {
+			log.L().Warn("update status try again later", zap.String("error", err.Error()))
+			return nil
+		}
+	}
 	return nil
 }
 
@@ -204,7 +205,7 @@ func (jm *JobMaster) OnJobManagerFailover(reason lib.MasterFailoverReason) error
 
 func (jm *JobMaster) Status() lib.WorkerStatus {
 	return lib.WorkerStatus{
-		Code:     lib.WorkerStatusNormal,
+		Code:     jm.status,
 		ExtBytes: []byte(fmt.Sprintf("%d", jm.counter)),
 	}
 }
