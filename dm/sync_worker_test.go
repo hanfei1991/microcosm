@@ -65,11 +65,11 @@ func TestSyncWorker(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	workerWrapped, err := registry.GlobalWorkerRegistry().CreateWorker(
-		dcontext.Background(), WorkerDMSync, workerID, masterID, mockWorkerConfigIncremental())
+		dcontext.Background(), lib.WorkerDMSync, workerID, masterID, mockWorkerConfigIncremental())
 	require.NoError(t, err)
 
 	worker := workerWrapped.(*syncWorker)
-	worker.DefaultBaseWorker = lib.MockBaseWorker(workerID, masterID, worker)
+	worker.BaseWorker = lib.MockBaseWorker(workerID, masterID, worker)
 
 	putMasterMeta(context.Background(), t, worker.MetaKVClient(), &lib.MasterMetaKVData{
 		ID:          masterID,

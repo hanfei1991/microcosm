@@ -2,14 +2,18 @@ package lib
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/mock"
 	"go.uber.org/atomic"
+	"go.uber.org/dig"
 	"go.uber.org/zap"
 
 	"github.com/hanfei1991/microcosm/client"
+	dcontext "github.com/hanfei1991/microcosm/pkg/context"
+	"github.com/hanfei1991/microcosm/pkg/deps"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
@@ -52,6 +56,16 @@ func NewMockMasterImpl(masterID, id MasterID) *MockMasterImpl {
 	return ret
 }
 
+type masterParamListForTest struct {
+	dig.Out
+
+	MessageHandlerManager p2p.MessageHandlerManager
+	MessageSender         p2p.MessageSender
+	MetaKVClient          metadata.MetaKV
+	ExecutorClientManager client.ClientsManager
+	ServerMasterClient    client.MasterClient
+}
+
 func (m *MockMasterImpl) Reset() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -59,15 +73,26 @@ func (m *MockMasterImpl) Reset() {
 	m.Mock.ExpectedCalls = nil
 	m.Mock.Calls = nil
 
+	ctx := dcontext.Background()
+	dp := deps.NewDeps()
+	err := dp.Provide(func() masterParamListForTest {
+		return masterParamListForTest{
+			MessageHandlerManager: m.messageHandlerManager,
+			MessageSender:         m.messageSender,
+			MetaKVClient:          m.metaKVClient,
+			ExecutorClientManager: m.executorClientManager,
+			ServerMasterClient:    m.serverMasterClient,
+		}
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	ctx = ctx.WithDeps(dp)
 	m.DefaultBaseMaster = NewBaseMaster(
-		nil,
+		ctx,
 		m,
-		m.id,
-		m.messageHandlerManager,
-		m.messageSender,
-		m.metaKVClient,
-		m.executorClientManager,
-		m.serverMasterClient).(*DefaultBaseMaster)
+		m.id).(*DefaultBaseMaster)
 }
 
 func (m *MockMasterImpl) TickCount() int64 {
@@ -157,6 +182,10 @@ type dummyStatus struct {
 	Val int
 }
 
-func (m *MockMasterImpl) GetWorkerStatusExtTypeInfo() interface{} {
-	return &dummyStatus{}
+func (s *dummyStatus) Marshal() ([]byte, error) {
+	return json.Marshal(s)
+}
+
+func (s *dummyStatus) Unmarshal(data []byte) error {
+	return json.Unmarshal(data, s)
 }

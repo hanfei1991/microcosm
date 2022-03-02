@@ -49,7 +49,6 @@ func TestWorkerInitAndClose(t *testing.T) {
 		Code: WorkerStatusNormal,
 	}, nil)
 	worker.On("Tick", mock.Anything).Return(nil)
-	worker.On("GetWorkerStatusExtTypeInfo").Return(&dummyStatus{})
 
 	err := worker.Init(ctx)
 	require.NoError(t, err)
@@ -115,7 +114,6 @@ func TestWorkerHeartbeatPingPong(t *testing.T) {
 	worker.On("Status").Return(WorkerStatus{
 		Code: WorkerStatusNormal,
 	}, nil)
-	worker.On("GetWorkerStatusExtTypeInfo").Return(&dummyStatus{})
 
 	err := worker.Init(ctx)
 	require.NoError(t, err)
@@ -172,7 +170,6 @@ func TestWorkerMasterFailover(t *testing.T) {
 	worker.On("Status").Return(WorkerStatus{
 		Code: WorkerStatusNormal,
 	}, nil)
-	worker.On("GetWorkerStatusExtTypeInfo").Return(&dummyStatus{})
 	err := worker.Init(ctx)
 	require.NoError(t, err)
 
@@ -195,6 +192,7 @@ func TestWorkerMasterFailover(t *testing.T) {
 	}
 	err = worker.messageHandlerManager.InvokeHandler(t, HeartbeatPongTopic(masterName, workerID1), masterNodeName, pongMsg)
 	require.NoError(t, err)
+	masterAckedTimeAfterPing := worker.masterClient.getLastMasterAckedPingTime()
 
 	worker.clock.(*clock.Mock).Add(time.Second * 1)
 	putMasterMeta(ctx, t, worker.metaKVClient, &MasterMetaKVData{
@@ -211,6 +209,9 @@ func TestWorkerMasterFailover(t *testing.T) {
 	require.Eventually(t, func() bool {
 		return worker.failoverCount.Load() == 1
 	}, time.Second*1, time.Millisecond*10)
+
+	masterAckedTimeAfterFailover := worker.masterClient.getLastMasterAckedPingTime()
+	require.Greater(t, masterAckedTimeAfterFailover, masterAckedTimeAfterPing)
 }
 
 func TestWorkerStatus(t *testing.T) {
@@ -229,13 +230,10 @@ func TestWorkerStatus(t *testing.T) {
 
 	worker.On("InitImpl", mock.Anything).Return(nil)
 	worker.On("Status").Return(WorkerStatus{
-		Code: WorkerStatusNormal,
-		Ext: &dummyStatus{
-			Val: 1,
-		},
+		Code:     WorkerStatusNormal,
+		ExtBytes: fastMarshalDummyStatus(t, 1),
 	}, nil)
 	worker.On("Tick", mock.Anything).Return(nil)
-	worker.On("GetWorkerStatusExtTypeInfo").Return(&dummyStatus{})
 	worker.On("CloseImpl", mock.Anything).Return(nil)
 
 	err := worker.Init(ctx)
@@ -243,8 +241,8 @@ func TestWorkerStatus(t *testing.T) {
 
 	require.Eventually(t, func() bool {
 		err := worker.UpdateStatus(ctx, WorkerStatus{
-			Code: WorkerStatusNormal,
-			Ext:  &dummyStatus{Val: 6},
+			Code:     WorkerStatusNormal,
+			ExtBytes: fastMarshalDummyStatus(t, 6),
 		})
 		if err == nil {
 			return true
@@ -267,12 +265,12 @@ func TestWorkerStatus(t *testing.T) {
 		Epoch: 1,
 	}, status)
 
-	workerMetaClient := NewWorkerMetadataClient(masterName, worker.metaKVClient, &dummyStatus{})
+	workerMetaClient := NewWorkerMetadataClient(masterName, worker.metaKVClient)
 	actualStatus, err := workerMetaClient.Load(ctx, workerID1)
 	require.NoError(t, err)
 	require.Equal(t, &WorkerStatus{
-		Code: WorkerStatusNormal,
-		Ext:  &dummyStatus{Val: 6},
+		Code:     WorkerStatusNormal,
+		ExtBytes: fastMarshalDummyStatus(t, 6),
 	},
 		actualStatus)
 
@@ -298,7 +296,6 @@ func TestWorkerSuicide(t *testing.T) {
 	worker.On("Status").Return(WorkerStatus{
 		Code: WorkerStatusNormal,
 	}, nil)
-	worker.On("GetWorkerStatusExtTypeInfo").Return(&dummyStatus{})
 
 	err := worker.Init(ctx)
 	require.NoError(t, err)

@@ -2,17 +2,21 @@ package cvstask
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
+
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/zap"
+	"golang.org/x/time/rate"
+	"google.golang.org/grpc"
 
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/lib/registry"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	"go.uber.org/zap"
-	"google.golang.org/grpc"
+	"github.com/hanfei1991/microcosm/pkg/errors"
 )
 
 const (
@@ -44,10 +48,12 @@ type cvsTask struct {
 	cancelFn func()
 	buffer   chan strPair
 	isEOF    bool
+
+	statusRateLimiter *rate.Limiter
 }
 
 func RegisterWorker() {
-	constructor := func(ctx *dcontext.Context, id lib.WorkerID, masterID lib.MasterID, config lib.WorkerConfig) lib.Worker {
+	constructor := func(ctx *dcontext.Context, id lib.WorkerID, masterID lib.MasterID, config lib.WorkerConfig) lib.WorkerImpl {
 		return NewCvsTask(ctx, id, masterID, config)
 	}
 	factory := registry.NewSimpleWorkerFactory(constructor, &Config{})
@@ -57,23 +63,14 @@ func RegisterWorker() {
 func NewCvsTask(ctx *dcontext.Context, _workerID lib.WorkerID, masterID lib.MasterID, conf lib.WorkerConfig) *cvsTask {
 	cfg := conf.(*Config)
 	task := &cvsTask{
-		srcHost: cfg.SrcHost,
-		srcDir:  cfg.SrcDir,
-		dstHost: cfg.DstHost,
-		dstDir:  cfg.DstDir,
-		index:   cfg.StartLoc,
-		buffer:  make(chan strPair, BUFFERSIZE),
+		srcHost:           cfg.SrcHost,
+		srcDir:            cfg.SrcDir,
+		dstHost:           cfg.DstHost,
+		dstDir:            cfg.DstDir,
+		index:             cfg.StartLoc,
+		buffer:            make(chan strPair, BUFFERSIZE),
+		statusRateLimiter: rate.NewLimiter(rate.Every(time.Second), 1),
 	}
-	deps := ctx.Dependencies
-	base := lib.NewBaseWorker(
-		task,
-		deps.MessageHandlerManager,
-		deps.MessageRouter,
-		deps.MetaKVClient,
-		_workerID,
-		masterID,
-	)
-	task.BaseWorker = base
 	return task
 }
 
@@ -95,19 +92,30 @@ func (task *cvsTask) InitImpl(ctx context.Context) error {
 			task.status = lib.WorkerStatusError
 		}
 	}()
+
 	return nil
 }
 
 // Tick is called on a fixed interval.
 func (task *cvsTask) Tick(ctx context.Context) error {
 	// log.L().Info("cvs task tick", zap.Any(" task id ", string(task.ID())+" -- "+strconv.FormatInt(task.counter, 10)))
-
+	if task.statusRateLimiter.Allow() {
+		err := task.BaseWorker.UpdateStatus(ctx, task.Status())
+		if errors.ErrWorkerUpdateStatusTryAgain.Equal(err) {
+			log.L().Warn("update status try again later", zap.String("error", err.Error()))
+			return nil
+		}
+		return err
+	}
 	return nil
 }
 
 // Status returns a short worker status to be periodically sent to the master.
 func (task *cvsTask) Status() lib.WorkerStatus {
-	return lib.WorkerStatus{Code: task.status, ErrorMessage: "", Ext: task.counter}
+	return lib.WorkerStatus{
+		Code: task.status, ErrorMessage: "",
+		ExtBytes: []byte(fmt.Sprintf("%d", task.counter)),
+	}
 }
 
 // Workload returns the current workload of the worker.
@@ -206,9 +214,4 @@ func (task *cvsTask) Send(ctx context.Context) error {
 
 		}
 	}
-}
-
-func (task *cvsTask) GetWorkerStatusExtTypeInfo() interface{} {
-	var dummy int64
-	return &dummy
 }

@@ -3,13 +3,13 @@ package lib
 import (
 	"encoding/json"
 	"fmt"
-	"reflect"
 	"time"
+
+	"github.com/pingcap/errors"
 
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
-	"github.com/pingcap/errors"
 )
 
 type (
@@ -25,6 +25,7 @@ type (
 // Among these statuses, only WorkerStatusCreated is used by the framework
 // for now. The rest are for the business logic to use.
 // TODO think about whether to manage the transition of the statuses.
+// TODO: need a FSM graph
 const (
 	WorkerStatusNormal = WorkerStatusCode(iota + 1)
 	WorkerStatusCreated
@@ -38,13 +39,17 @@ const (
 	// job master
 	CvsJobMaster
 	FakeJobMaster
-	DmJobMaster
+	DMJobMaster
 	CdcJobMaster
 	// task
 	CvsTask
 	FakeTask
 	DmTask
 	CdcTask
+	// worker
+	WorkerDMDump
+	WorkerDMLoad
+	WorkerDMSync
 )
 
 type TimeoutConfig struct {
@@ -61,59 +66,30 @@ var defaultTimeoutConfig TimeoutConfig = TimeoutConfig{
 	workerHeartbeatInterval:          time.Second * 3,
 	workerReportStatusInterval:       time.Second * 3,
 	masterHeartbeatCheckLoopInterval: time.Second * 1,
+}.Adjust()
+
+// Adjust validates the TimeoutConfig and adjusts it
+func (config TimeoutConfig) Adjust() TimeoutConfig {
+	var tc TimeoutConfig = config
+	// worker timeout duration must be 2 times larger than worker heartbeat interval
+	if tc.workerTimeoutDuration < 2*tc.workerHeartbeatInterval+time.Second*3 {
+		tc.workerTimeoutDuration = 2*tc.workerHeartbeatInterval + time.Second*3
+	}
+	return tc
 }
 
 type WorkerStatus struct {
 	Code         WorkerStatusCode `json:"code"`
 	ErrorMessage string           `json:"error-message"`
 
-	// ExtBytes carries the serialized form of the Ext field.
-	// See below for more information.
-	// DO NOT access ExtBytes from business logic.
+	// ExtBytes carries the serialized form of the Ext field, which is used in
+	// business logic only.
+	// Business logic can parse the raw bytes and decode into business Go object
 	ExtBytes []byte `json:"ext-bytes"`
-
-	// Ext should be an object of a type specified by the
-	// business logic. But since Go does not support generics yet,
-	// we have to put `interface{}` as the type, which fails to tell
-	// the json library the actual type the data needs to be deserialized into.
-	// So we use ExtBytes to carry raw bytes of the Ext object, and deserialize
-	// the object by ourselves, rather than rely on any library.
-	Ext interface{} `json:"-"`
-}
-
-func (s *WorkerStatus) fillExt(tpi interface{}) (err error) {
-	defer func() {
-		// ExtBytes is no longer useful after this function returns.
-		s.ExtBytes = nil
-		if r := recover(); r != nil {
-			err = errors.Errorf("Fill ext field of worker status failed: %v", r)
-		}
-	}()
-	obj := reflect.New(reflect.TypeOf(tpi).Elem()).Interface()
-	err = json.Unmarshal(s.ExtBytes, obj)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	s.Ext = obj
-	return nil
 }
 
 func (s *WorkerStatus) Marshal() ([]byte, error) {
-	err := s.marshalExt()
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
 	return json.Marshal(s)
-}
-
-func (s *WorkerStatus) marshalExt() error {
-	bytes, err := json.Marshal(s.Ext)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	s.ExtBytes = bytes
-	return nil
 }
 
 func HeartbeatPingTopic(masterID MasterID, workerID WorkerID) p2p.Topic {
@@ -158,11 +134,21 @@ type (
 		NodeID      p2p.NodeID `json:"node-id"`
 		Epoch       Epoch      `json:"epoch"`
 		Initialized bool       `json:"initialized"`
+		Tp          WorkerType `json:"type"`
 
-		// Ext holds business-specific data
-		MasterMetaExt *MasterMetaExt `json:"meta-ext"`
+		// Config holds business-specific data
+		Config []byte `json:"config"`
+		// TODO: add master status and checkpoint data
 	}
 )
+
+func (m *MasterMetaKVData) Marshal() ([]byte, error) {
+	return json.Marshal(m)
+}
+
+func (m *MasterMetaKVData) Unmarshal(data []byte) error {
+	return json.Unmarshal(data, m)
+}
 
 type WorkerMetaKVData struct {
 	MasterID   Master           `json:"id"`
@@ -182,3 +168,6 @@ type MasterFailoverReason struct {
 	Code         MasterFailoverReasonCode
 	ErrorMessage string
 }
+
+// nolint:revive
+var StopAfterTick = errors.New("stop after tick")

@@ -11,6 +11,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hanfei1991/microcosm/pkg/deps"
+	"github.com/hanfei1991/microcosm/pkg/metadata"
+
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/model"
@@ -19,7 +22,6 @@ import (
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/etcdutils"
-	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/pkg/serverutils"
 	"github.com/hanfei1991/microcosm/servermaster/cluster"
@@ -65,8 +67,9 @@ type Server struct {
 	executorManager ExecutorManager
 	jobManager      JobManager
 	//
-	cfg  *Config
-	info *model.NodeInfo
+	cfg     *Config
+	info    *model.NodeInfo
+	metrics *serverMasterMetric
 
 	msgService      *p2p.MessageRPCService
 	p2pMsgRouter    p2p.MessageRouter
@@ -79,6 +82,31 @@ type Server struct {
 	mockGrpcServer mock.GrpcServer
 
 	testCtx *test.Context
+}
+
+type serverMasterMetric struct {
+	metricJobNum      map[pb.QueryJobResponse_JobStatus]prometheus.Gauge
+	metricExecutorNum map[model.ExecutorStatus]prometheus.Gauge
+}
+
+func newServerMasterMetric() *serverMasterMetric {
+	// Following are leader only metrics
+	metricJobNum := make(map[pb.QueryJobResponse_JobStatus]prometheus.Gauge)
+	for status, name := range pb.QueryJobResponse_JobStatus_name {
+		metric := serverJobNumGauge.WithLabelValues(name)
+		metricJobNum[pb.QueryJobResponse_JobStatus(status)] = metric
+	}
+
+	metricExecutorNum := make(map[model.ExecutorStatus]prometheus.Gauge)
+	for status, name := range model.ExecutorStatusNameMapping {
+		metric := serverExecutorNumGauge.WithLabelValues(name)
+		metricExecutorNum[status] = metric
+	}
+
+	return &serverMasterMetric{
+		metricJobNum:      metricJobNum,
+		metricExecutorNum: metricExecutorNum,
+	}
 }
 
 // NewServer creates a new master-server.
@@ -110,6 +138,7 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 		leader:          atomic.Value{},
 		p2pMsgRouter:    p2pMsgRouter,
 		rpcLogRL:        rate.NewLimiter(rate.Every(time.Second*5), 3 /*burst*/),
+		metrics:         newServerMasterMetric(),
 	}
 	server.leaderServiceFn = server.runLeaderService
 	return server, nil
@@ -394,10 +423,6 @@ func (s *Server) Run(ctx context.Context) (err error) {
 		return s.discoveryKeeper.Keepalive(ctx)
 	})
 
-	wg.Go(func() error {
-		return s.collectMetricLoop(ctx, defaultMetricInterval)
-	})
-
 	return wg.Wait()
 }
 
@@ -515,18 +540,49 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	dctx := dcontext.NewContext(ctx, log.L())
 	dctx.Environ.Addr = s.cfg.AdvertiseAddr
 	dctx.Environ.NodeID = s.name()
-	masterMetaExt := &lib.MasterMetaExt{
+	masterMeta := &lib.MasterMetaKVData{
 		ID: lib.JobManagerUUID,
 		Tp: lib.JobManager,
 	}
-	masterMetaExtBytes, err := masterMetaExt.Marshal()
+	masterMetaBytes, err := masterMeta.Marshal()
 	if err != nil {
 		return
 	}
-	dctx.Environ.MasterMetaExt = masterMetaExtBytes
-	s.jobManager, err = NewJobManagerImplV2(dctx, "", lib.JobManagerUUID,
-		s.msgService.MakeHandlerManager(), p2p.NewMessageSender(s.p2pMsgRouter),
-		clients, metadata.NewMetaEtcd(s.etcdClient))
+	dctx.Environ.MasterMetaBytes = masterMetaBytes
+
+	dp := deps.NewDeps()
+	if err := dp.Provide(func() metadata.MetaKV {
+		return metadata.NewMetaEtcd(s.etcdClient)
+	}); err != nil {
+		return err
+	}
+
+	if err := dp.Provide(func() client.ClientsManager {
+		return clients
+	}); err != nil {
+		return err
+	}
+
+	if err := dp.Provide(func() client.MasterClient {
+		return clients.MasterClient()
+	}); err != nil {
+		return err
+	}
+
+	if err := dp.Provide(func() p2p.MessageSender {
+		return p2p.NewMessageSender(s.p2pMsgRouter)
+	}); err != nil {
+		return err
+	}
+
+	if err := dp.Provide(func() p2p.MessageHandlerManager {
+		return s.msgService.MakeHandlerManager()
+	}); err != nil {
+		return err
+	}
+
+	dctx = dctx.WithDeps(dp)
+	s.jobManager, err = NewJobManagerImplV2(dctx, lib.JobManagerUUID)
 	if err != nil {
 		return
 	}
@@ -542,6 +598,8 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		s.resign()
 	}()
 
+	metricTicker := time.NewTicker(defaultMetricInterval)
+	defer metricTicker.Stop()
 	leaderTicker := time.NewTicker(time.Millisecond * 200)
 	defer leaderTicker.Stop()
 	for {
@@ -559,6 +617,8 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 			if err != nil {
 				return err
 			}
+		case <-leaderTicker.C:
+			s.collectLeaderMetric()
 		}
 	}
 }
@@ -691,33 +751,12 @@ func (s *Server) memberLoop(ctx context.Context) error {
 	}
 }
 
-func (s *Server) collectMetricLoop(ctx context.Context, tickInterval time.Duration) error {
-	metricJobNum := make(map[pb.QueryJobResponse_JobStatus]prometheus.Gauge)
-	for status, name := range pb.QueryJobResponse_JobStatus_name {
-		metric := serverJobNumGauge.WithLabelValues(name)
-		metricJobNum[pb.QueryJobResponse_JobStatus(status)] = metric
+func (s *Server) collectLeaderMetric() {
+	for status := range pb.QueryJobResponse_JobStatus_name {
+		pbStatus := pb.QueryJobResponse_JobStatus(status)
+		s.metrics.metricJobNum[pbStatus].Set(float64(s.jobManager.JobCount(pbStatus)))
 	}
-
-	metricExecutorNum := make(map[model.ExecutorStatus]prometheus.Gauge)
-	for status, name := range model.ExecutorStatusNameMapping {
-		metric := serverExecutorNumGauge.WithLabelValues(name)
-		metricExecutorNum[status] = metric
-	}
-
-	ticker := time.NewTicker(tickInterval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case <-ticker.C:
-			for status := range pb.QueryJobResponse_JobStatus_name {
-				pbStatus := pb.QueryJobResponse_JobStatus(status)
-				metricJobNum[pbStatus].Set(float64(s.jobManager.JobCount(pbStatus)))
-			}
-			for status := range model.ExecutorStatusNameMapping {
-				metricExecutorNum[status].Set(float64(s.executorManager.ExecutorCount(status)))
-			}
-		}
+	for status := range model.ExecutorStatusNameMapping {
+		s.metrics.metricExecutorNum[status].Set(float64(s.executorManager.ExecutorCount(status)))
 	}
 }

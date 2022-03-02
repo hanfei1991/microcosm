@@ -5,17 +5,19 @@ import (
 	"sync"
 	"time"
 
-	runtime "github.com/hanfei1991/microcosm/executor/worker"
-	"github.com/hanfei1991/microcosm/model"
-	"github.com/hanfei1991/microcosm/pkg/clock"
-	derror "github.com/hanfei1991/microcosm/pkg/errors"
-	"github.com/hanfei1991/microcosm/pkg/metadata"
-	"github.com/hanfei1991/microcosm/pkg/p2p"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/pkg/workerpool"
+	"go.uber.org/dig"
 	"go.uber.org/zap"
+
+	runtime "github.com/hanfei1991/microcosm/executor/worker"
+	"github.com/hanfei1991/microcosm/model"
+	"github.com/hanfei1991/microcosm/pkg/clock"
+	dcontext "github.com/hanfei1991/microcosm/pkg/context"
+	derror "github.com/hanfei1991/microcosm/pkg/errors"
+	"github.com/hanfei1991/microcosm/pkg/metadata"
+	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
 type Worker interface {
@@ -27,11 +29,15 @@ type Worker interface {
 	runtime.Closer
 }
 
+// WorkerImpl is the implementation of a worker of dataflow engine.
+// the implementation struct must embed the lib.BaseWorker interface, this
+// interface will be initialized by the framework.
 type WorkerImpl interface {
 	// InitImpl provides customized logic for the business logic to initialize.
 	InitImpl(ctx context.Context) error
 
-	// Tick is called on a fixed interval.
+	// Tick is called on a fixed interval. When an error is returned, the worker
+	// will be stopped.
 	Tick(ctx context.Context) error
 
 	// Workload returns the current workload of the worker.
@@ -42,11 +48,6 @@ type WorkerImpl interface {
 
 	// CloseImpl tells the WorkerImpl to quit running StatusWorker and release resources.
 	CloseImpl(ctx context.Context) error
-
-	// GetWorkerStatusExtTypeInfo returns an empty object that described the actual type
-	// of the `Ext` field in WorkerStatus.
-	// The returned type's kind must be Array, Chan, Map, Ptr, or Slice.
-	GetWorkerStatusExtTypeInfo() interface{}
 }
 
 type BaseWorker interface {
@@ -57,6 +58,7 @@ type BaseWorker interface {
 	ID() runtime.RunnableID
 	MetaKVClient() metadata.MetaKV
 	UpdateStatus(ctx context.Context, status WorkerStatus) error
+	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) (bool, error)
 }
 
 type DefaultBaseWorker struct {
@@ -87,19 +89,31 @@ type DefaultBaseWorker struct {
 	clock clock.Clock
 }
 
+type workerParams struct {
+	dig.In
+
+	MessageHandlerManager p2p.MessageHandlerManager
+	MessageSender         p2p.MessageSender
+	MetaKVClient          metadata.MetaKV
+}
+
 func NewBaseWorker(
+	ctx *dcontext.Context,
 	impl WorkerImpl,
-	messageHandlerManager p2p.MessageHandlerManager,
-	messageSender p2p.MessageSender,
-	metaKVClient metadata.MetaKV,
 	workerID WorkerID,
 	masterID MasterID,
 ) BaseWorker {
+	var params workerParams
+	if err := ctx.Deps().Fill(&params); err != nil {
+		log.L().Panic("Failed to fill dependencies for BaseWorker",
+			zap.Error(err))
+	}
+
 	return &DefaultBaseWorker{
 		Impl:                  impl,
-		messageHandlerManager: messageHandlerManager,
-		messageSender:         messageSender,
-		metaKVClient:          metaKVClient,
+		messageHandlerManager: params.MessageHandlerManager,
+		messageSender:         params.MessageSender,
+		metaKVClient:          params.MetaKVClient,
 
 		masterID:      masterID,
 		id:            workerID,
@@ -117,6 +131,22 @@ func (w *DefaultBaseWorker) Workload() model.RescUnit {
 }
 
 func (w *DefaultBaseWorker) Init(ctx context.Context) error {
+	if err := w.doPreInit(ctx); err != nil {
+		return errors.Trace(err)
+	}
+
+	if err := w.Impl.InitImpl(ctx); err != nil {
+		return errors.Trace(err)
+	}
+
+	if err := w.doPostInit(ctx); err != nil {
+		return errors.Trace(err)
+	}
+
+	return nil
+}
+
+func (w *DefaultBaseWorker) doPreInit(ctx context.Context) error {
 	// TODO refine this part
 	poolCtx, cancelPool := context.WithCancel(context.TODO())
 	w.cancelMu.Lock()
@@ -145,7 +175,7 @@ func (w *DefaultBaseWorker) Init(ctx context.Context) error {
 			}))
 		})
 
-	w.workerMetaClient = NewWorkerMetadataClient(w.masterID, w.metaKVClient, w.Impl.GetWorkerStatusExtTypeInfo())
+	w.workerMetaClient = NewWorkerMetadataClient(w.masterID, w.metaKVClient)
 
 	w.statusSender = NewStatusSender(w.id, w.masterClient, w.workerMetaClient, w.messageSender, w.pool)
 
@@ -157,10 +187,10 @@ func (w *DefaultBaseWorker) Init(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	if err := w.Impl.InitImpl(ctx); err != nil {
-		return errors.Trace(err)
-	}
+	return nil
+}
 
+func (w *DefaultBaseWorker) doPostInit(ctx context.Context) error {
 	if err := w.UpdateStatus(ctx, WorkerStatus{
 		Code: WorkerStatusInit,
 	}); err != nil {
@@ -171,7 +201,7 @@ func (w *DefaultBaseWorker) Init(ctx context.Context) error {
 	return nil
 }
 
-func (w *DefaultBaseWorker) Poll(ctx context.Context) error {
+func (w *DefaultBaseWorker) doPoll(ctx context.Context) error {
 	if err := w.messageHandlerManager.CheckError(ctx); err != nil {
 		return errors.Trace(err)
 	}
@@ -188,13 +218,21 @@ func (w *DefaultBaseWorker) Poll(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
+	return nil
+}
+
+func (w *DefaultBaseWorker) Poll(ctx context.Context) error {
+	if err := w.doPoll(ctx); err != nil {
+		return errors.Trace(err)
+	}
+
 	if err := w.Impl.Tick(ctx); err != nil {
 		return errors.Trace(err)
 	}
 	return nil
 }
 
-func (w *DefaultBaseWorker) Close(ctx context.Context) error {
+func (w *DefaultBaseWorker) doClose() {
 	w.cancelMu.Lock()
 	w.cancelBgTasks()
 	w.cancelPool()
@@ -209,11 +247,15 @@ func (w *DefaultBaseWorker) Close(ctx context.Context) error {
 	}
 
 	w.wg.Wait()
+}
 
+func (w *DefaultBaseWorker) Close(ctx context.Context) error {
 	if err := w.Impl.CloseImpl(ctx); err != nil {
 		log.L().Error("Failed to close WorkerImpl", zap.Error(err))
 		return errors.Trace(err)
 	}
+
+	w.doClose()
 	return nil
 }
 
@@ -231,6 +273,14 @@ func (w *DefaultBaseWorker) UpdateStatus(ctx context.Context, status WorkerStatu
 		return errors.Trace(err)
 	}
 	return nil
+}
+
+func (w *DefaultBaseWorker) SendMessage(
+	ctx context.Context,
+	topic p2p.Topic,
+	message interface{},
+) (bool, error) {
+	return w.messageSender.SendToNode(ctx, w.masterClient.MasterNode(), topic, message)
 }
 
 func (w *DefaultBaseWorker) startBackgroundTasks() {
@@ -285,7 +335,7 @@ func (w *DefaultBaseWorker) runWatchDog(ctx context.Context) error {
 			return errors.Trace(err)
 		}
 		if !isNormal {
-			return derror.ErrWorkerSuicide.GenWithStackByArgs()
+			return derror.ErrWorkerSuicide.GenWithStackByArgs(w.masterClient.MasterID())
 		}
 	}
 }
@@ -375,7 +425,7 @@ func (m *masterClient) MasterNodeID() p2p.NodeID {
 	return m.masterID
 }
 
-func (m *masterClient) refreshMasterInfo(ctx context.Context) error {
+func (m *masterClient) refreshMasterInfo(ctx context.Context, clock clock.Clock) error {
 	metaClient := NewMasterMetadataClient(m.masterID, m.metaKVClient)
 	masterMeta, err := metaClient.Load(ctx)
 	if err != nil {
@@ -385,7 +435,13 @@ func (m *masterClient) refreshMasterInfo(ctx context.Context) error {
 	m.mu.Lock()
 	m.masterNode = masterMeta.NodeID
 	if m.masterEpoch < masterMeta.Epoch {
+		log.L().Info("refresh master info", zap.String("masterID", m.masterID),
+			zap.Int64("oldEpoch", m.masterEpoch), zap.Int64("newEpoch", masterMeta.Epoch),
+		)
 		m.masterEpoch = masterMeta.Epoch
+		// if worker finds master is transferred, reset the master last ack time
+		// to now in case of a false positive detection of master timeout.
+		m.lastMasterAckedPingTime = clock.Mono()
 		m.mu.Unlock()
 		if err := m.onMasterFailOver(); err != nil {
 			return errors.Trace(err)
@@ -448,7 +504,7 @@ func (m *masterClient) CheckMasterTimeout(ctx context.Context, clock clock.Clock
 	if sinceLastAcked > 2*m.timeoutConfig.workerHeartbeatInterval &&
 		sinceLastAcked < m.timeoutConfig.workerTimeoutDuration {
 
-		if err := m.refreshMasterInfo(ctx); err != nil {
+		if err := m.refreshMasterInfo(ctx, clock); err != nil {
 			return false, errors.Trace(err)
 		}
 		return true, nil
@@ -480,4 +536,11 @@ func (m *masterClient) SendHeartBeat(ctx context.Context, clock clock.Clock) err
 		log.L().Warn("sending heartbeat ping encountered ErrPeerMessageSendTryAgain")
 	}
 	return nil
+}
+
+// used in unit test only
+func (m *masterClient) getLastMasterAckedPingTime() clock.MonotonicTime {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.lastMasterAckedPingTime
 }

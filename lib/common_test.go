@@ -2,36 +2,26 @@ package lib
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
 
-type dummyExtField struct {
-	ID   int    `json:"id"`
-	Name string `json:"name"`
-}
-
-func TestWorkerStatusFillExt(t *testing.T) {
-	t.Parallel()
-
-	ws := &WorkerStatus{
-		ExtBytes: []byte(`{"id":10,"name":"test"}`),
+func TestAdjustTimeoutConfig(t *testing.T) {
+	tc := TimeoutConfig{
+		workerTimeoutDuration:            time.Second * 3,
+		workerTimeoutGracefulDuration:    time.Second * 5,
+		workerHeartbeatInterval:          time.Second * 3,
+		workerReportStatusInterval:       time.Second * 3,
+		masterHeartbeatCheckLoopInterval: time.Second * 1,
 	}
-	err := ws.fillExt(&dummyExtField{})
-	require.Nil(t, err)
-	require.Equal(t, &dummyExtField{ID: 10, Name: "test"}, ws.Ext)
-
-	ws = &WorkerStatus{
-		ExtBytes: []byte("10"),
+	expected := TimeoutConfig{
+		workerTimeoutDuration:            time.Second * 9,
+		workerTimeoutGracefulDuration:    time.Second * 5,
+		workerHeartbeatInterval:          time.Second * 3,
+		workerReportStatusInterval:       time.Second * 3,
+		masterHeartbeatCheckLoopInterval: time.Second * 1,
 	}
-	emptyInt := int64(0)
-	err = ws.fillExt(&emptyInt)
-	require.Nil(t, err)
-	require.Equal(t, int64(10), *ws.Ext.(*int64))
-
-	ws = &WorkerStatus{
-		ExtBytes: []byte("10"),
-	}
-	err = ws.fillExt(int64(0))
-	require.Regexp(t, ".*reflect: Elem of invalid type int64", err)
+	tc = tc.Adjust()
+	require.Equal(t, expected, tc)
 }

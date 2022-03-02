@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/hanfei1991/microcosm/client"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/zap"
+
 	cvs "github.com/hanfei1991/microcosm/jobmaster/cvsJob"
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/pb"
@@ -13,8 +15,6 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	"go.uber.org/zap"
 )
 
 // JobManager defines manager of job master
@@ -40,13 +40,8 @@ type JobManagerImplV2 struct {
 	lib.BaseMaster
 	*JobFsm
 
-	messageHandlerManager p2p.MessageHandlerManager
-	messageSender         p2p.MessageSender
-	metaKVClient          metadata.MetaKV
-	executorClientManager client.ClientsManager
-	serverMasterClient    client.MasterClient
-	uuidGen               uuid.Generator
-	masterMetaClient      *lib.MasterMetadataClient
+	masterMetaClient *lib.MasterMetadataClient
+	uuidGen          uuid.Generator
 }
 
 func (jm *JobManagerImplV2) PauseJob(ctx context.Context, req *pb.PauseJobRequest) *pb.PauseJobResponse {
@@ -69,7 +64,7 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 		id  lib.WorkerID
 		err error
 	)
-	job := &lib.MasterMetaExt{
+	meta := &lib.MasterMetaKVData{
 		// TODO: we can use job name provided from user, but we must check the
 		// job name is unique before using it.
 		ID:     jm.uuidGen.NewString(),
@@ -85,29 +80,35 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 			resp.Err = errors.ToPBError(err)
 			return resp
 		}
-		job.Tp = lib.CvsJobMaster
-		job.Config = req.Config
+		meta.Tp = lib.CvsJobMaster
+	case pb.JobType_DM:
+		meta.Tp = lib.DMJobMaster
 	case pb.JobType_FakeJob:
-		job.Tp = lib.FakeJobMaster
+		meta.Tp = lib.FakeJobMaster
 	default:
 		err := errors.ErrBuildJobFailed.GenWithStack("unknown job type: %s", req.Tp)
 		resp.Err = errors.ToPBError(err)
 		return resp
 	}
 
-	// TODO: data persistence for masterConfig
+	// Store job master meta data before creating it
+	err = lib.StoreMasterMeta(ctx, jm.BaseMaster.MetaKVClient(), meta)
+	if err != nil {
+		resp.Err = errors.ToPBError(err)
+		return resp
+	}
 
 	// CreateWorker here is to create job master actually
-	// TODO: use correct worker type and worker cost
+	// TODO: use correct worker cost
 	id, err = jm.BaseMaster.CreateWorker(
-		job.Tp, job, defaultJobMasterCost)
+		meta.Tp, meta, defaultJobMasterCost)
 
 	if err != nil {
 		log.L().Error("create job master met error", zap.Error(err))
 		resp.Err = errors.ToPBError(err)
 		return resp
 	}
-	jm.JobFsm.JobDispatched(job)
+	jm.JobFsm.JobDispatched(meta)
 
 	resp.JobIdStr = id
 	return resp
@@ -116,34 +117,36 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 // NewJobManagerImplV2 creates a new JobManagerImplV2 instance
 func NewJobManagerImplV2(
 	dctx *dcontext.Context,
-	masterID lib.MasterID,
 	id lib.MasterID,
-	messageHandlerManager p2p.MessageHandlerManager,
-	messageSender p2p.MessageSender,
-	clients client.ClientsManager,
-	metaKVClient metadata.MetaKV,
 ) (*JobManagerImplV2, error) {
+	masterMetaClient, err := dctx.Deps().Construct(func(metaKV metadata.MetaKV) (*lib.MasterMetadataClient, error) {
+		return lib.NewMasterMetadataClient(id, metaKV), nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	impl := &JobManagerImplV2{
-		messageHandlerManager: messageHandlerManager,
-		messageSender:         messageSender,
-		executorClientManager: clients,
-		serverMasterClient:    clients.MasterClient(),
-		metaKVClient:          metaKVClient,
-		JobFsm:                NewJobFsm(),
-		uuidGen:               uuid.NewGenerator(),
-		masterMetaClient:      lib.NewMasterMetadataClient(id, metaKVClient),
+		JobFsm:           NewJobFsm(),
+		uuidGen:          uuid.NewGenerator(),
+		masterMetaClient: masterMetaClient.(*lib.MasterMetadataClient),
 	}
 	impl.BaseMaster = lib.NewBaseMaster(
 		dctx,
 		impl,
 		id,
-		impl.messageHandlerManager,
-		impl.messageSender,
-		impl.metaKVClient,
-		impl.executorClientManager,
-		impl.serverMasterClient,
 	)
-	err := impl.BaseMaster.Init(dctx.Context())
+
+	// Note the meta data of job manager is not used, it is safe to overwrite it
+	// every time a new server master leader is elected. And we always mark the
+	// Initialized to true in order to trigger OnMasterRecovered of job manager.
+	meta := impl.MasterMeta()
+	meta.Initialized = true
+	err = lib.StoreMasterMeta(dctx, impl.MetaKVClient(), meta)
+	if err != nil {
+		return nil, err
+	}
+	err = impl.BaseMaster.Init(dctx)
 	if err != nil {
 		return nil, err
 	}
@@ -158,7 +161,7 @@ func (jm *JobManagerImplV2) InitImpl(ctx context.Context) error {
 // Tick implements lib.MasterImpl.Tick
 func (jm *JobManagerImplV2) Tick(ctx context.Context) error {
 	return jm.JobFsm.IterPendingJobs(
-		func(job *lib.MasterMetaExt) (string, error) {
+		func(job *lib.MasterMetaKVData) (string, error) {
 			return jm.BaseMaster.CreateWorker(
 				job.Tp, job, defaultJobMasterCost)
 		})
@@ -171,7 +174,7 @@ func (jm *JobManagerImplV2) OnMasterRecovered(ctx context.Context) error {
 		return err
 	}
 	for _, job := range jobs {
-		jm.JobFsm.JobDispatched(job.MasterMetaExt)
+		jm.JobFsm.JobDispatched(job)
 		if err := jm.BaseMaster.RegisterWorker(ctx, job.ID); err != nil {
 			return err
 		}
