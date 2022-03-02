@@ -388,15 +388,6 @@ func (m *DefaultBaseMaster) UnregisterWorker(ctx context.Context, workerID Worke
 		log.L().Warn("heartbeat message handler is not removed", zap.String("topic", topic))
 	}
 
-	topic = StatusUpdateTopic(m.id, workerID)
-	removed, err = m.messageHandlerManager.UnregisterHandler(ctx, topic)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if !removed {
-		log.L().Warn("status update message handler is not removed", zap.String("topic", topic))
-	}
-
 	return m.workerManager.OnWorkerOffline(ctx, workerID)
 }
 
