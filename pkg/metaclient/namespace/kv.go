@@ -24,6 +24,18 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/metaclient/internal"
 )
 
+type prefixError struct {
+	cause error
+}
+
+func (p *prefixError) IsRetryable() bool {
+	return false
+}
+
+func (p *prefixError) Error() string {
+	return p.cause.Error()
+}
+
 type kvPrefix struct {
 	internal.KVEx
 	pfx string
@@ -35,9 +47,9 @@ func NewPrefixKV(kv internal.KVEx, prefix string) metaclient.KV {
 	return &kvPrefix{kv, prefix}
 }
 
-func (kv *kvPrefix) Put(ctx context.Context, key, val string) (*metaclient.PutResponse, error) {
+func (kv *kvPrefix) Put(ctx context.Context, key, val string) (*metaclient.PutResponse, metaclient.Error) {
 	if len(key) == 0 {
-		return nil, cerrors.ErrMetaEmptyKey.GenWithStackByArgs()
+		return nil, prefixErrorFromOpFail(cerrors.ErrMetaEmptyKey.GenWithStackByArgs())
 	}
 	op := kv.prefixOp(metaclient.OpPut(key, val))
 	r, err := kv.KVEx.Do(ctx, op)
@@ -48,10 +60,10 @@ func (kv *kvPrefix) Put(ctx context.Context, key, val string) (*metaclient.PutRe
 	return put, nil
 }
 
-func (kv *kvPrefix) Get(ctx context.Context, key string, opts ...metaclient.OpOption) (*metaclient.GetResponse, error) {
+func (kv *kvPrefix) Get(ctx context.Context, key string, opts ...metaclient.OpOption) (*metaclient.GetResponse, metaclient.Error) {
 	// Forbid empty key to protect the namespace prefix key
 	if len(key) == 0 && !(metaclient.IsOptsWithFromKey(opts) || metaclient.IsOptsWithPrefix(opts) || metaclient.IsOptsWithRange(opts)) {
-		return nil, cerrors.ErrMetaEmptyKey.GenWithStackByArgs()
+		return nil, prefixErrorFromOpFail(cerrors.ErrMetaEmptyKey.GenWithStackByArgs())
 	}
 	r, err := kv.KVEx.Do(ctx, kv.prefixOp(metaclient.OpGet(key, opts...)))
 	if err != nil {
@@ -62,10 +74,10 @@ func (kv *kvPrefix) Get(ctx context.Context, key string, opts ...metaclient.OpOp
 	return get, nil
 }
 
-func (kv *kvPrefix) Delete(ctx context.Context, key string, opts ...metaclient.OpOption) (*metaclient.DeleteResponse, error) {
+func (kv *kvPrefix) Delete(ctx context.Context, key string, opts ...metaclient.OpOption) (*metaclient.DeleteResponse, metaclient.Error) {
 	// Forbid empty key to protect the namespace prefix key
 	if len(key) == 0 && !(metaclient.IsOptsWithFromKey(opts) || metaclient.IsOptsWithPrefix(opts) || metaclient.IsOptsWithRange(opts)) {
-		return nil, cerrors.ErrMetaEmptyKey.GenWithStackByArgs()
+		return nil, prefixErrorFromOpFail(cerrors.ErrMetaEmptyKey.GenWithStackByArgs())
 	}
 	r, err := kv.KVEx.Do(ctx, kv.prefixOp(metaclient.OpDelete(key, opts...)))
 	if err != nil {
@@ -76,9 +88,9 @@ func (kv *kvPrefix) Delete(ctx context.Context, key string, opts ...metaclient.O
 }
 
 // [TODO] check the empty key
-func (kv *kvPrefix) Do(ctx context.Context, op metaclient.Op) (metaclient.OpResponse, error) {
+func (kv *kvPrefix) Do(ctx context.Context, op metaclient.Op) (metaclient.OpResponse, metaclient.Error) {
 	if len(op.KeyBytes()) == 0 && !op.IsTxn() {
-		return metaclient.OpResponse{}, cerrors.ErrMetaEmptyKey.GenWithStackByArgs()
+		return metaclient.OpResponse{}, prefixErrorFromOpFail(cerrors.ErrMetaEmptyKey.GenWithStackByArgs())
 	}
 	r, err := kv.KVEx.Do(ctx, kv.prefixOp(op))
 	if err != nil {
@@ -108,7 +120,7 @@ func (txn *txnPrefix) Do(ops ...metaclient.Op) metaclient.Txn {
 	return txn
 }
 
-func (txn *txnPrefix) Commit() (*metaclient.TxnResponse, error) {
+func (txn *txnPrefix) Commit() (*metaclient.TxnResponse, metaclient.Error) {
 	resp, err := txn.Txn.Commit()
 	if err != nil {
 		return nil, err

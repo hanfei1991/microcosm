@@ -46,3 +46,9 @@ func prefixInterval(pfx string, key, end []byte) (pfxKey []byte, pfxEnd []byte) 
 
 	return pfxKey, pfxEnd
 }
+
+func prefixErrorFromOpFail(err error) *prefixError {
+	return &prefixError{
+		cause: err,
+	}
+}
