@@ -38,6 +38,7 @@ type Master struct {
 	pendingWorkerSet  map[lib.WorkerID]int
 	statusRateLimiter *rate.Limiter
 	status            map[lib.WorkerID]int64
+	finishedSet       map[lib.WorkerID]int
 	config            *Config
 }
 
@@ -64,6 +65,18 @@ func (m *Master) InitImpl(ctx context.Context) error {
 	return m.createWorkers()
 }
 
+func (m *Master) createWorker(index int) error {
+	workerID, err := m.CreateWorker(lib.FakeTask, &Config{}, 1)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	log.L().Info("CreateWorker called",
+		zap.Int("index", index),
+		zap.String("worker-id", workerID))
+	m.pendingWorkerSet[workerID] = index
+	return nil
+}
+
 func (m *Master) createWorkers() error {
 	m.workerListMu.Lock()
 	defer m.workerListMu.Unlock()
@@ -75,15 +88,10 @@ OUT:
 					continue OUT
 				}
 			}
-
-			workerID, err := m.CreateWorker(lib.FakeTask, &Config{}, 1)
+			err := m.createWorker(i)
 			if err != nil {
-				return errors.Trace(err)
+				return err
 			}
-			log.L().Info("CreateWorker called",
-				zap.Int("index", i),
-				zap.String("worker-id", workerID))
-			m.pendingWorkerSet[workerID] = i
 		}
 	}
 	return nil
@@ -158,9 +166,21 @@ func (m *Master) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
 	log.L().Info("FakeMaster: OnWorkerOffline",
 		zap.String("worker-id", worker.ID()),
 		zap.Error(reason))
-
-	// TODO handle offlined workers
-	return nil
+	status := worker.Status()
+	index := -1
+	for i, handle := range m.workerList {
+		if handle.ID() == worker.ID() {
+			index = i
+			break
+		}
+	}
+	if index < 0 {
+		return errors.Errorf("worker is not found in worker list", zap.String("id", worker.ID()))
+	}
+	if status.Code == lib.WorkerStatusFinished {
+		m.finishedSet[worker.ID()] = index
+	}
+	return m.createWorker(index)
 }
 
 func (m *Master) OnWorkerMessage(worker lib.WorkerHandle, topic p2p.Topic, message interface{}) error {
@@ -198,6 +218,7 @@ func NewFakeMaster(ctx *dcontext.Context, workerID lib.WorkerID, masterID lib.Ma
 		config:            config.(*Config),
 		statusRateLimiter: rate.NewLimiter(rate.Every(time.Second*3), 1),
 		status:            make(map[lib.WorkerID]int64),
+		finishedSet:       make(map[lib.WorkerID]int),
 	}
 	return ret
 }
