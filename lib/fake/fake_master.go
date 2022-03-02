@@ -2,16 +2,20 @@ package fake
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
+	"golang.org/x/time/rate"
 
 	"github.com/hanfei1991/microcosm/executor/worker"
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/model"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
+	derrors "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
@@ -29,11 +33,12 @@ type Master struct {
 	// workerID stores the ID of the Master AS A WORKER.
 	workerID lib.WorkerID
 
-	workerListMu     sync.Mutex
-	workerList       []lib.WorkerHandle
-	pendingWorkerSet map[lib.WorkerID]int
-	tick             int64
-	config           *Config
+	workerListMu      sync.Mutex
+	workerList        []lib.WorkerHandle
+	pendingWorkerSet  map[lib.WorkerID]int
+	statusRateLimiter *rate.Limiter
+	status            map[lib.WorkerID]int64
+	config            *Config
 }
 
 func (m *Master) OnJobManagerFailover(reason lib.MasterFailoverReason) error {
@@ -56,15 +61,10 @@ func (m *Master) Workload() model.RescUnit {
 func (m *Master) InitImpl(ctx context.Context) error {
 	log.L().Info("FakeMaster: Init", zap.Any("config", m.config))
 	m.workerList = make([]lib.WorkerHandle, m.config.WorkerCount)
-	return nil
+	return m.createWorkers()
 }
 
-func (m *Master) Tick(ctx context.Context) error {
-	m.tick++
-	if m.tick%200 == 0 {
-		log.L().Info("FakeMaster: Tick", zap.Int64("tick", m.tick))
-	}
-
+func (m *Master) createWorkers() error {
 	m.workerListMu.Lock()
 	defer m.workerListMu.Unlock()
 OUT:
@@ -85,6 +85,34 @@ OUT:
 				zap.String("worker-id", workerID))
 			m.pendingWorkerSet[workerID] = i
 		}
+	}
+	return nil
+}
+
+func (m *Master) Tick(ctx context.Context) error {
+	m.workerListMu.Lock()
+	defer m.workerListMu.Unlock()
+	for _, worker := range m.workerList {
+		if worker != nil {
+			status := worker.Status()
+			dws := &dummyWorkerStatus{}
+			if status.ExtBytes != nil {
+				err := dws.Unmarshal(status.ExtBytes)
+				if err != nil {
+					return err
+				}
+			}
+			m.status[worker.ID()] = dws.Tick
+		}
+	}
+	if m.statusRateLimiter.Allow() {
+		log.L().Info("FakeMaster: Tick", zap.Any("status", m.status))
+		err := m.BaseJobMaster.UpdateJobStatus(ctx, m.Status())
+		if derrors.ErrWorkerUpdateStatusTryAgain.Equal(err) {
+			log.L().Warn("update status try again later", zap.String("error", err.Error()))
+			return nil
+		}
+		return err
 	}
 
 	return nil
@@ -153,14 +181,23 @@ func (m *Master) OnMasterFailover(reason lib.MasterFailoverReason) error {
 }
 
 func (m *Master) Status() lib.WorkerStatus {
-	return lib.WorkerStatus{Code: lib.WorkerStatusNormal}
+	bytes, err := json.Marshal(m.status)
+	if err != nil {
+		log.L().Panic("unexpected marshal error", zap.Error(err))
+	}
+	return lib.WorkerStatus{
+		Code:     lib.WorkerStatusNormal,
+		ExtBytes: bytes,
+	}
 }
 
 func NewFakeMaster(ctx *dcontext.Context, workerID lib.WorkerID, masterID lib.MasterID, config lib.WorkerConfig) *Master {
 	log.L().Info("new fake master", zap.Any("config", config))
 	ret := &Master{
-		pendingWorkerSet: make(map[lib.WorkerID]int),
-		config:           config.(*Config),
+		pendingWorkerSet:  make(map[lib.WorkerID]int),
+		config:            config.(*Config),
+		statusRateLimiter: rate.NewLimiter(rate.Every(time.Second*3), 1),
+		status:            make(map[lib.WorkerID]int64),
 	}
 	return ret
 }
