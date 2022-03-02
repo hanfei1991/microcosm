@@ -175,7 +175,7 @@ func (m *Master) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
 		}
 	}
 	if index < 0 {
-		return errors.Errorf("worker is not found in worker list", zap.String("id", worker.ID()))
+		return errors.Errorf("worker(%s) is not found in worker list", worker.ID())
 	}
 	if status.Code == lib.WorkerStatusFinished {
 		m.finishedSet[worker.ID()] = index
