@@ -37,6 +37,7 @@ type workerManager interface {
 	GetWorkers() map[WorkerID]WorkerHandle
 	GetStatus(id WorkerID) (*WorkerStatus, bool)
 	CheckStatusUpdate(ctx context.Context) error
+	RegisterHandler(ctx context.Context, workerID WorkerID) error
 }
 
 type workerManagerFsmState = int32
@@ -51,14 +52,13 @@ const (
 
 type workerManagerImpl struct {
 	mu              sync.Mutex
-	initialized     bool
-	initStartTime   time.Time
 	workerInfos     map[WorkerID]*WorkerInfo
 	tombstones      map[WorkerID]*WorkerStatus
 	statusReceivers map[WorkerID]*StatusReceiver
 
-	fsmState atomic.Int32
-	errCh    chan error
+	fsmState      atomic.Int32
+	initStartTime atomic.Time
+	errCh         chan error
 
 	// read-only
 	masterEpoch   Epoch
@@ -89,6 +89,7 @@ func newWorkerManager(
 	needWait bool,
 	curEpoch Epoch,
 	timeoutConfig *TimeoutConfig,
+	clock clock.Clock,
 ) workerManager {
 	var params workerManagerParams
 	if err := ctx.Deps().Fill(&params); err != nil {
@@ -103,19 +104,19 @@ func newWorkerManager(
 	}
 
 	return &workerManagerImpl{
-		initialized:     !needWait,
 		workerInfos:     make(map[WorkerID]*WorkerInfo),
 		tombstones:      make(map[WorkerID]*WorkerStatus),
 		statusReceivers: make(map[WorkerID]*StatusReceiver),
 
-		fsmState: *atomic.NewInt32(initFsmState),
-		errCh:    make(chan error, 1),
+		fsmState:      *atomic.NewInt32(initFsmState),
+		initStartTime: *atomic.NewTime(time.Time{}),
+		errCh:         make(chan error, 1),
 
 		masterEpoch:   curEpoch,
 		masterID:      id,
 		timeoutConfig: *timeoutConfig,
 
-		clock: clock.New(),
+		clock: clock,
 
 		messageSender:        params.MessageSender,
 		messageHandleManager: params.MessageHandleManager,
@@ -130,19 +131,34 @@ func (m *workerManagerImpl) IsInitialized() bool {
 
 func (m *workerManagerImpl) checkGracefulPeriodFinished() {
 	if st := m.fsmState.Load(); st != workerManagerWaitingHeartbeats {
+		if st == workerManagerFailed {
+			return
+		}
 		log.L().Panic("unexpected workerManager FSM state", zap.Int32("state", st))
 	}
 
-	if m.initStartTime.IsZero() {
-		m.initStartTime = m.clock.Now()
-	}
-
 	thresholdDuration := m.timeoutConfig.workerTimeoutDuration + m.timeoutConfig.workerTimeoutGracefulDuration
-	duration := m.clock.Since(m.initStartTime)
+	duration := m.clock.Since(m.initStartTime.Load())
 	if duration > thresholdDuration {
 		if old := m.fsmState.Swap(workerManagerNormal); old != workerManagerWaitingHeartbeats {
 			log.L().Panic("unexpected workerManager FSM state", zap.Int32("state", old))
 		}
+		// We here are transitioning to workerManagerNormal
+		func() {
+			m.mu.Lock()
+			defer m.mu.Unlock()
+
+			for workerID := range m.tombstones {
+				if err := m.unregisterHandler(workerID); err != nil {
+					select {
+					case m.errCh <- errors.Trace(err):
+					default:
+					}
+					m.fsmState.Store(workerManagerFailed)
+					return
+				}
+			}
+		}()
 	}
 }
 
@@ -173,6 +189,17 @@ func (m *workerManagerImpl) asyncLoadAllWorkers(ctx context.Context) error {
 			// If the worker is proven alive, it will be removed from the
 			// tombstone list.
 			m.tombstones[workerID] = workerStatus
+			if err := m.RegisterHandler(ctx, workerID); err != nil {
+				select {
+				case m.errCh <- errors.Trace(err):
+				default:
+				}
+				m.fsmState.Store(workerManagerFailed)
+				return
+			}
+		}
+		if m.initStartTime.Load().IsZero() {
+			m.initStartTime.Store(m.clock.Now())
 		}
 		if old := m.fsmState.Swap(workerManagerWaitingHeartbeats); old != workerManagerLoadingAllWorkers {
 			log.L().Panic("unexpected workerManager FSM state", zap.Int32("state", old))
@@ -181,6 +208,55 @@ func (m *workerManagerImpl) asyncLoadAllWorkers(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	return nil
+}
+
+func (m *workerManagerImpl) RegisterHandler(ctx context.Context, workerID WorkerID) error {
+	topic := HeartbeatPingTopic(m.masterID, workerID)
+	ok, err := m.messageHandleManager.RegisterHandler(
+		ctx,
+		topic,
+		&HeartbeatPingMessage{},
+		func(sender p2p.NodeID, value p2p.MessageValue) error {
+			heartBeatMsg := value.(*HeartbeatPingMessage)
+			curEpoch := m.masterEpoch
+			if heartBeatMsg.Epoch < curEpoch {
+				log.L().Info("stale message dropped",
+					zap.Any("message", heartBeatMsg),
+					zap.Int64("cur-epoch", curEpoch))
+				return nil
+			}
+			if err := m.HandleHeartbeat(heartBeatMsg, sender); err != nil {
+				log.L().Error("HandleHeartbeat failed", zap.Error(err))
+				return errors.Trace(err)
+			}
+			return nil
+		})
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if !ok {
+		log.L().Panic("duplicate handler",
+			zap.String("topic", topic))
+	}
+	return nil
+}
+
+func (m *workerManagerImpl) unregisterHandler(workerID WorkerID) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	topic := HeartbeatPingTopic(m.masterID, workerID)
+	ok, err := m.messageHandleManager.UnregisterHandler(ctx, topic)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if ok {
+		log.L().Debug("unregister handler successful", zap.String("topic", topic))
+		return nil
+	}
+
+	log.L().Debug("handler not found", zap.String("topic", topic))
 	return nil
 }
 
@@ -311,7 +387,7 @@ func (m *workerManagerImpl) HandleHeartbeat(msg *HeartbeatPingMessage, fromNode 
 	log.L().Debug("received heartbeat", zap.Any("msg", msg))
 	workerInfo, ok := m.workerInfos[msg.FromWorkerID]
 	if !ok {
-		if m.initialized {
+		if m.fsmState.Load() != workerManagerWaitingHeartbeats {
 			log.L().Info("discarding heartbeat from non-existing worker, probably zombie?",
 				zap.Any("msg", msg),
 				zap.String("node-id", fromNode))

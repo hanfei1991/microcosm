@@ -234,7 +234,8 @@ func (m *DefaultBaseMaster) doInit(ctx context.Context) (isFirstStartUp bool, er
 		m.id,
 		!isInit,
 		epoch,
-		&m.timeoutConfig)
+		&m.timeoutConfig,
+		m.clock)
 
 	m.startBackgroundTasks()
 	return isInit, nil
@@ -386,15 +387,6 @@ func (m *DefaultBaseMaster) unregisterMessageHandler(ctx context.Context, worker
 		log.L().Warn("heartbeat message handler is not removed", zap.String("topic", topic))
 	}
 
-	topic = StatusUpdateTopic(m.id, workerID)
-	removed, err = m.messageHandlerManager.UnregisterHandler(ctx, topic)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if !removed {
-		log.L().Warn("status update message handler is not removed", zap.String("topic", topic))
-	}
-
 	return m.workerManager.OnWorkerOffline(ctx, workerID)
 }
 
@@ -457,37 +449,6 @@ func (m *DefaultBaseMaster) markInitializedInMetadata(ctx context.Context) error
 	return nil
 }
 
-func (m *DefaultBaseMaster) registerHandlerForWorker(ctx context.Context, workerID WorkerID) error {
-	topic := HeartbeatPingTopic(m.id, workerID)
-	ok, err := m.messageHandlerManager.RegisterHandler(
-		ctx,
-		topic,
-		&HeartbeatPingMessage{},
-		func(sender p2p.NodeID, value p2p.MessageValue) error {
-			heartBeatMsg := value.(*HeartbeatPingMessage)
-			curEpoch := m.currentEpoch.Load()
-			if heartBeatMsg.Epoch < curEpoch {
-				log.L().Info("stale message dropped",
-					zap.Any("message", heartBeatMsg),
-					zap.Int64("cur-epoch", curEpoch))
-				return nil
-			}
-			if err := m.workerManager.HandleHeartbeat(heartBeatMsg, sender); err != nil {
-				log.L().Error("HandleHeartbeat failed", zap.Error(err))
-				m.OnError(err)
-			}
-			return nil
-		})
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if !ok {
-		log.L().Panic("duplicate handler",
-			zap.String("topic", topic))
-	}
-	return nil
-}
-
 // prepareWorkerConfig extracts information from WorkerConfig into detail fields.
 // - If workerType is master type, the config is a `*MasterMetaKVData` struct and
 //   contains pre allocated maseter ID, and json marshalled config.
@@ -526,7 +487,7 @@ func (m *DefaultBaseMaster) prepareWorkerConfig(
 func (m *DefaultBaseMaster) RegisterWorker(ctx context.Context, workerID WorkerID) error {
 	registerHandlerCtx, cancelRegisterHandler := context.WithTimeout(ctx, time.Second*1)
 	defer cancelRegisterHandler()
-	return m.registerHandlerForWorker(registerHandlerCtx, workerID)
+	return m.workerManager.RegisterHandler(registerHandlerCtx, workerID)
 }
 
 func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error) {

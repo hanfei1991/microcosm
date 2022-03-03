@@ -3,6 +3,7 @@ package lib
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"go.etcd.io/etcd/clientv3"
 
 	"github.com/hanfei1991/microcosm/pkg/adapter"
+	"github.com/hanfei1991/microcosm/pkg/clock"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
@@ -38,6 +40,19 @@ func prepareMeta(ctx context.Context, t *testing.T, metaclient metadata.MetaKV) 
 	masterInfo := &MasterMetaKVData{
 		ID:     masterName,
 		NodeID: masterNodeName,
+	}
+	masterInfoBytes, err := json.Marshal(masterInfo)
+	require.NoError(t, err)
+	_, err = metaclient.Put(ctx, masterKey, string(masterInfoBytes))
+	require.NoError(t, err)
+}
+
+func simulateFailedOverMeta(ctx context.Context, t *testing.T, metaclient metadata.MetaKV) {
+	masterKey := adapter.MasterMetaKey.Encode(masterName)
+	masterInfo := &MasterMetaKVData{
+		ID:          masterName,
+		NodeID:      masterNodeName,
+		Initialized: true,
 	}
 	masterInfoBytes, err := json.Marshal(masterInfo)
 	require.NoError(t, err)
@@ -240,6 +255,77 @@ func TestMasterCreateWorkerMetError(t *testing.T) {
 	<-master.dispatchedWorkers
 	err = <-master.dispatchedResult
 	require.Regexp(t, ".*ErrClusterResourceNotEnough.*", err)
+}
+
+func TestMasterFailover(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
+	master := NewMockMasterImpl("", masterName)
+	master.timeoutConfig.masterHeartbeatCheckLoopInterval = time.Millisecond * 10
+	master.uuidGen = uuid.NewMock()
+	master.clock = clock.NewMock()
+	master.clock.(*clock.Mock).Set(time.Now())
+	simulateFailedOverMeta(ctx, t, master.metaKVClient)
+
+	workerMetaClient := NewWorkerMetadataClient(masterName, master.metaKVClient)
+	for i := 0; i < 10; i++ {
+		err := workerMetaClient.Store(
+			ctx,
+			fmt.Sprintf("worker-%d", i),
+			&WorkerStatus{Code: WorkerStatusNormal})
+		require.NoError(t, err)
+	}
+
+	master.On("OnMasterRecovered", mock.Anything).Return(nil)
+	err := master.Init(ctx)
+	require.NoError(t, err)
+	master.AssertNumberOfCalls(t, "OnMasterRecovered", 1)
+	require.False(t, master.IsMasterReady())
+
+	master.clock.(*clock.Mock).Add(defaultTimeoutConfig.workerHeartbeatInterval + time.Second)
+	master.On("Tick", mock.Anything).Return(nil)
+	require.Eventually(t, func() bool {
+		err := master.Poll(ctx)
+		require.NoError(t, err)
+		return master.workerManager.(*workerManagerImpl).fsmState.Load() == workerManagerWaitingHeartbeats
+	}, 1*time.Second, 10*time.Millisecond)
+
+	master.clock.(*clock.Mock).Add(defaultTimeoutConfig.workerTimeoutDuration)
+
+	master.On("OnWorkerOnline", mock.Anything, mock.Anything).Return(nil)
+	for i := 0; i < 5; i++ {
+		workerID := fmt.Sprintf("worker-%d", i)
+		topic := HeartbeatPingTopic(masterName, workerID)
+		err := master.messageHandlerManager.InvokeHandler(t, topic, executorNodeID1, &HeartbeatPingMessage{
+			SendTime:     master.clock.Mono(),
+			FromWorkerID: workerID,
+			Epoch:        master.currentEpoch.Load(),
+		})
+		require.NoError(t, err)
+	}
+
+	master.clock.(*clock.Mock).Add(defaultTimeoutConfig.workerTimeoutGracefulDuration)
+	master.clock.(*clock.Mock).Add(defaultTimeoutConfig.workerHeartbeatInterval + time.Second)
+	require.Eventually(t, func() bool {
+		err := master.Poll(ctx)
+		require.NoError(t, err)
+		return master.IsMasterReady()
+	}, 1*time.Second, 10*time.Millisecond)
+
+	master.AssertNumberOfCalls(t, "OnWorkerOnline", 5)
+
+	workerHandles := master.GetWorkers()
+	require.Len(t, workerHandles, 10)
+
+	for i := 0; i < 5; i++ {
+		require.False(t, workerHandles[fmt.Sprintf("worker-%d", i)].IsTombStone())
+	}
+	for i := 5; i < 10; i++ {
+		require.True(t, workerHandles[fmt.Sprintf("worker-%d", i)].IsTombStone())
+	}
 }
 
 func TestPrepareWorkerConfig(t *testing.T) {

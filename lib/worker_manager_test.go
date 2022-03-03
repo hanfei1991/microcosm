@@ -7,8 +7,6 @@ import (
 	"testing"
 	"time"
 
-	derror "github.com/hanfei1991/microcosm/pkg/errors"
-
 	"github.com/pingcap/tiflow/pkg/workerpool"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/dig"
@@ -16,6 +14,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/deps"
+	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
@@ -94,9 +93,9 @@ func TestHeartBeatPingPongAfterCreateWorker(t *testing.T) {
 		false,
 		1,
 		&defaultTimeoutConfig,
+		clock.NewMock(),
 	).(*workerManagerImpl)
 
-	manager.clock = clock.NewMock()
 	manager.clock.(*clock.Mock).Set(time.Now())
 
 	err := manager.OnWorkerCreated(ctx, workerID1, executorNodeID1)
@@ -147,9 +146,10 @@ func TestHeartBeatPingPongAfterFailover(t *testing.T) {
 		masterName,
 		true,
 		1,
-		&defaultTimeoutConfig).(*workerManagerImpl)
+		&defaultTimeoutConfig,
+		clock.NewMock(),
+	).(*workerManagerImpl)
 
-	manager.clock = clock.NewMock()
 	manager.clock.(*clock.Mock).Set(time.Now())
 
 	require.Eventually(t, func() bool {
@@ -201,9 +201,10 @@ func TestMultiplePendingHeartbeats(t *testing.T) {
 		masterName,
 		true,
 		1,
-		&defaultTimeoutConfig).(*workerManagerImpl)
+		&defaultTimeoutConfig,
+		clock.NewMock(),
+	).(*workerManagerImpl)
 
-	manager.clock = clock.NewMock()
 	manager.clock.(*clock.Mock).Set(time.Now())
 
 	require.Eventually(t, func() bool {
@@ -322,9 +323,10 @@ func TestWorkerManagerInitialization(t *testing.T) {
 		masterName,
 		true,
 		1,
-		&defaultTimeoutConfig).(*workerManagerImpl)
+		&defaultTimeoutConfig,
+		clock.NewMock(),
+	).(*workerManagerImpl)
 
-	manager.clock = clock.NewMock()
 	manager.clock.(*clock.Mock).Set(time.Now())
 
 	ok := manager.IsInitialized()
@@ -393,7 +395,9 @@ func TestUpdateStatus(t *testing.T) {
 		masterName,
 		true,
 		1,
-		&defaultTimeoutConfig).(*workerManagerImpl)
+		&defaultTimeoutConfig,
+		clock.New(),
+	).(*workerManagerImpl)
 
 	err = safeAddWorker(manager, workerID1, executorNodeID1)
 	require.NoError(t, err)
@@ -458,9 +462,9 @@ func TestWorkerTimedOut(t *testing.T) {
 		true,
 		1,
 		&defaultTimeoutConfig,
+		clock.NewMock(),
 	).(*workerManagerImpl)
 
-	manager.clock = clock.NewMock()
 	manager.clock.(*clock.Mock).Set(time.Now())
 
 	err := safeAddWorker(manager, workerID1, executorNodeID1)
@@ -508,8 +512,10 @@ func TestWorkerTimedOutWithPendingHeartbeat(t *testing.T) {
 		masterName,
 		true,
 		1,
-		&defaultTimeoutConfig).(*workerManagerImpl)
-	manager.clock = clock.NewMock()
+		&defaultTimeoutConfig,
+		clock.NewMock(),
+	).(*workerManagerImpl)
+
 	manager.clock.(*clock.Mock).Set(time.Now())
 
 	err := safeAddWorker(manager, workerID1, executorNodeID1)
@@ -566,8 +572,10 @@ func TestWorkerTombstones(t *testing.T) {
 		masterName,
 		true,
 		1,
-		&defaultTimeoutConfig).(*workerManagerImpl)
-	manager.clock = clock.NewMock()
+		&defaultTimeoutConfig,
+		clock.NewMock(),
+	).(*workerManagerImpl)
+
 	manager.clock.(*clock.Mock).Set(time.Now())
 
 	workerMetaClient := NewWorkerMetadataClient(masterName, suite.MetaClient)

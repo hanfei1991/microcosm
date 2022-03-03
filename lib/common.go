@@ -101,14 +101,6 @@ func HeartbeatPongTopic(masterID MasterID, workerID WorkerID) p2p.Topic {
 	return fmt.Sprintf("heartbeat-pong-%s-%s", masterID, workerID)
 }
 
-func WorkloadReportTopic(masterID MasterID) p2p.Topic {
-	return fmt.Sprintf("workload-report-%s", masterID)
-}
-
-func StatusUpdateTopic(masterID MasterID, workerID WorkerID) p2p.Topic {
-	return fmt.Sprintf("status-update-%s-%s", masterID, workerID)
-}
-
 type HeartbeatPingMessage struct {
 	SendTime     clock.MonotonicTime `json:"send-time"`
 	FromWorkerID WorkerID            `json:"from-worker-id"`
