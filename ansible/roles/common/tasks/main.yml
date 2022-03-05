@@ -9,7 +9,8 @@
   file: path={{ df_script_dir }} owner=root group=root state=directory
 
 - name: Copy bins
-  copy: src={{ item }} dest={{ df_bin_dir }} mode=0655
+  copy: src="{{ item }}.bin" dest="{{ df_bin_dir }}/{{ item }}-{{ cluster_name }}" mode=0655
   loop:
     - master
     - executor
+    - demoserver

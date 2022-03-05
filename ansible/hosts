@@ -3,8 +3,10 @@
 10.244.5.88    name=ip2
 10.244.4.74    name=ip3
 
-[df_execuctor_servers]
+[df_executor_servers]
 10.244.6.55
 10.244.5.88
 10.244.4.74
 
+[df_demo_servers]
+10.244.6.55
