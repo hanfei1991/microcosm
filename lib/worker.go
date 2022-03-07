@@ -528,7 +528,7 @@ func (m *masterClient) SendHeartBeat(ctx context.Context, clock clock.Clock) err
 		Epoch:        m.masterEpoch,
 	}
 
-	log.L().Info("sending heartbeat", zap.String("worker", m.workerID))
+	log.L().Debug("sending heartbeat", zap.String("worker", m.workerID))
 	ok, err := m.messageSender.SendToNode(ctx, m.masterNode, HeartbeatPingTopic(m.masterID, m.workerID), heartbeatMsg)
 	if err != nil {
 		return errors.Trace(err)
