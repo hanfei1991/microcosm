@@ -59,6 +59,11 @@ type BaseWorker interface {
 	MetaKVClient() metadata.MetaKV
 	UpdateStatus(ctx context.Context, status WorkerStatus) error
 	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) (bool, error)
+	// Exit should be called when worker (in user logic) wants to exit
+	// - If err is nil, it means worker exits normally
+	// - If err is not nil, it means worker meets error, and after worker exits
+	//   it will be failover.
+	Exit(ctx context.Context, status WorkerStatus, err error) error
 }
 
 type DefaultBaseWorker struct {
@@ -285,6 +290,23 @@ func (w *DefaultBaseWorker) SendMessage(
 	message interface{},
 ) (bool, error) {
 	return w.messageSender.SendToNode(ctx, w.masterClient.MasterNode(), topic, message)
+}
+
+func (w *DefaultBaseWorker) Exit(ctx context.Context, status WorkerStatus, err error) error {
+	if err != nil {
+		status.Code = WorkerStatusError
+		if err1 := w.UpdateStatus(ctx, status); err1 != nil {
+			return err1
+		}
+		return err
+	}
+
+	status.Code = WorkerStatusFinished
+	if err1 := w.UpdateStatus(ctx, status); err1 != nil {
+		return err1
+	}
+
+	return derror.ErrWorkerFinish.FastGenByArgs()
 }
 
 func (w *DefaultBaseWorker) startBackgroundTasks() {
