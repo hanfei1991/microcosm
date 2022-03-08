@@ -284,6 +284,17 @@ func (w *DefaultBaseWorker) UpdateStatus(ctx context.Context, status WorkerStatu
 	return nil
 }
 
+// safeUpdateStatus is used when worker exits, it first stores worker status
+// into metastore, and then tries to send status to master. We store status first
+// because SendStatus could fail when pending status exits.
+func (w *DefaultBaseWorker) safeUpdateStatus(ctx context.Context, status WorkerStatus) error {
+	err := w.statusSender.SafeSendStatus(ctx, status)
+	if err != nil && derror.ErrWorkerUpdateStatusTryAgain.NotEqual(err) {
+		return err
+	}
+	return nil
+}
+
 func (w *DefaultBaseWorker) SendMessage(
 	ctx context.Context,
 	topic p2p.Topic,
@@ -295,14 +306,14 @@ func (w *DefaultBaseWorker) SendMessage(
 func (w *DefaultBaseWorker) Exit(ctx context.Context, status WorkerStatus, err error) error {
 	if err != nil {
 		status.Code = WorkerStatusError
-		if err1 := w.UpdateStatus(ctx, status); err1 != nil {
+		if err1 := w.safeUpdateStatus(ctx, status); err1 != nil {
 			return err1
 		}
 		return err
 	}
 
 	status.Code = WorkerStatusFinished
-	if err1 := w.UpdateStatus(ctx, status); err1 != nil {
+	if err1 := w.safeUpdateStatus(ctx, status); err1 != nil {
 		return err1
 	}
 
