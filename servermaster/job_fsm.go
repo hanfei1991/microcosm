@@ -155,10 +155,7 @@ func (fsm *JobFsm) QueryJob(jobID lib.MasterID) *pb.QueryJobResponse {
 	if resp := checkWaitAckJob(); resp != nil {
 		return resp
 	}
-	if resp := checkOnlineJob(); resp != nil {
-		return resp
-	}
-	return nil
+	return checkOnlineJob()
 }
 
 func (fsm *JobFsm) JobDispatched(job *lib.MasterMetaKVData) {
