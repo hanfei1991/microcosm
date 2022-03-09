@@ -255,6 +255,7 @@ func (m *workerManagerImpl) Tick(
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	pendingWorkers := make([]*WorkerInfo, 0)
 	// TODO gracefully handle all errors that could occur in this function
 	// respond to worker heartbeats
 	for workerID, workerInfo := range m.workerInfos {
@@ -264,6 +265,9 @@ func (m *workerManagerImpl) Tick(
 		if workerInfo.justOnlined && workerInfo.hasPendingHeartbeat && workerInfo.statusInitialized.Load() {
 			workerInfo.justOnlined = false
 			onlinedWorkers = append(onlinedWorkers, workerInfo)
+		}
+		if workerInfo.justOnlined {
+			pendingWorkers = append(pendingWorkers, workerInfo)
 		}
 
 		if workerInfo.hasTimedOut(m.clock, &m.timeoutConfig) {
