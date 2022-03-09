@@ -12,8 +12,8 @@ import (
 
 func TestProxyConcurrent(t *testing.T) {
 	ctx := context.Background()
-	testId := "TestProxyConcurrent"
-	p, err := DefaultBroker.NewProxyForWorker(ctx, testId)
+	testID := "TestProxyConcurrent"
+	p, err := DefaultBroker.NewProxyForWorker(ctx, testID)
 	require.NoError(t, err)
 
 	var wg sync.WaitGroup
