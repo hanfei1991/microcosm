@@ -165,6 +165,8 @@ func (jm *JobMaster) OnWorkerOffline(worker lib.WorkerHandle, reason error) erro
 	if !exist {
 		log.L().Panic("bad worker found", zap.Any("message", worker.ID()))
 	}
+	// Force to set worker handle, in case of worker finishes before OnWorkerOnline
+	// is fired and worker handle is missing
 	syncInfo.handle = worker
 	if derrors.ErrWorkerFinish.Equal(reason) {
 		log.L().Info("worker finished", zap.String("worker-id", worker.ID()), zap.Any("status", worker.Status()))
