@@ -9,7 +9,7 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/clientv3"
+	clientv3 "go.etcd.io/etcd/client/v3"
 
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
@@ -36,8 +36,9 @@ type dummyConfig struct {
 func prepareMeta(ctx context.Context, t *testing.T, metaclient metadata.MetaKV) {
 	masterKey := adapter.MasterMetaKey.Encode(masterName)
 	masterInfo := &MasterMetaKVData{
-		ID:     masterName,
-		NodeID: masterNodeName,
+		ID:         masterName,
+		NodeID:     masterNodeName,
+		StatusCode: MasterStatusUninit,
 	}
 	masterInfoBytes, err := json.Marshal(masterInfo)
 	require.NoError(t, err)
@@ -66,7 +67,7 @@ func TestMasterInit(t *testing.T) {
 	var masterData MasterMetaKVData
 	err = json.Unmarshal(resp.Kvs[0].Value, &masterData)
 	require.NoError(t, err)
-	require.True(t, masterData.Initialized)
+	require.Equal(t, MasterStatusInit, masterData.StatusCode)
 
 	master.On("CloseImpl", mock.Anything).Return(nil)
 	err = master.Close(ctx)
@@ -186,9 +187,9 @@ func TestMasterCreateWorker(t *testing.T) {
 
 	err = master.messageHandlerManager.InvokeHandler(
 		t,
-		workerStatusUpdatedTopic(masterName, workerID1),
+		WorkerStatusUpdatedTopic(masterName),
 		masterName,
-		&workerStatusUpdatedMessage{Epoch: master.currentEpoch.Load()})
+		&WorkerStatusUpdatedMessage{FromWorkerID: workerID1, Epoch: master.currentEpoch.Load()})
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {

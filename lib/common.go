@@ -7,7 +7,6 @@ import (
 
 	"github.com/pingcap/errors"
 
-	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
@@ -15,6 +14,8 @@ import (
 type (
 	WorkerStatusCode int32
 	WorkerType       int64
+
+	MasterStatusCode int32
 
 	Epoch        = int64
 	WorkerConfig = interface{}
@@ -32,6 +33,13 @@ const (
 	WorkerStatusInit
 	WorkerStatusError
 	WorkerStatusFinished
+)
+
+// Job master statuses
+const (
+	MasterStatusUninit = MasterStatusCode(iota + 1)
+	MasterStatusInit
+	MasterStatusFinished
 )
 
 const (
@@ -92,8 +100,8 @@ func (s *WorkerStatus) Marshal() ([]byte, error) {
 	return json.Marshal(s)
 }
 
-func HeartbeatPingTopic(masterID MasterID, workerID WorkerID) p2p.Topic {
-	return fmt.Sprintf("heartbeat-ping-%s-%s", masterID, workerID)
+func HeartbeatPingTopic(masterID MasterID) p2p.Topic {
+	return fmt.Sprintf("heartbeat-ping-%s", masterID)
 }
 
 func HeartbeatPongTopic(masterID MasterID, workerID WorkerID) p2p.Topic {
@@ -101,8 +109,13 @@ func HeartbeatPongTopic(masterID MasterID, workerID WorkerID) p2p.Topic {
 	return fmt.Sprintf("heartbeat-pong-%s-%s", masterID, workerID)
 }
 
-func WorkloadReportTopic(masterID MasterID) p2p.Topic {
-	return fmt.Sprintf("workload-report-%s", masterID)
+func WorkerStatusUpdatedTopic(masterID MasterID) string {
+	return fmt.Sprintf("worker-status-updated-%s", masterID)
+}
+
+type WorkerStatusUpdatedMessage struct {
+	FromWorkerID WorkerID `json:"from-worker-id"`
+	Epoch        Epoch    `json:"epoch"`
 }
 
 type HeartbeatPingMessage struct {
@@ -118,19 +131,14 @@ type HeartbeatPongMessage struct {
 	Epoch      Epoch               `json:"epoch"`
 }
 
-type WorkloadReportMessage struct {
-	WorkerID WorkerID       `json:"worker-id"`
-	Workload model.RescUnit `json:"workload"`
-}
-
 type (
 	MasterMetaKVData struct {
-		ID          MasterID   `json:"id"`
-		Addr        string     `json:"addr"`
-		NodeID      p2p.NodeID `json:"node-id"`
-		Epoch       Epoch      `json:"epoch"`
-		Initialized bool       `json:"initialized"`
-		Tp          WorkerType `json:"type"`
+		ID         MasterID         `json:"id"`
+		Addr       string           `json:"addr"`
+		NodeID     p2p.NodeID       `json:"node-id"`
+		Epoch      Epoch            `json:"epoch"`
+		StatusCode MasterStatusCode `json:"status"`
+		Tp         WorkerType       `json:"type"`
 
 		// Config holds business-specific data
 		Config []byte `json:"config"`

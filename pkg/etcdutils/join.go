@@ -9,7 +9,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"go.etcd.io/etcd/embed"
+	"go.etcd.io/etcd/server/v3/embed"
 	"go.uber.org/zap"
 )
 
@@ -18,7 +18,7 @@ const (
 	privateDirMode os.FileMode = 0o700
 )
 
-// prepareJoinEtcd prepares config needed to join an existing cluster.
+// PrepareJoinEtcd prepares config needed to join an existing cluster.
 // learn from https://github.com/pingcap/pd/blob/37efcb05f397f26c70cda8dd44acaa3061c92159/server/join/join.go#L44.
 //
 // when setting `initial-cluster` explicitly to bootstrap a new cluster:

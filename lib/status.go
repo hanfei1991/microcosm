@@ -2,7 +2,6 @@ package lib
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -98,6 +97,14 @@ func (s *StatusSender) setLastUnsentStatus(status *WorkerStatus) {
 	s.lastUnsentStatus = status
 }
 
+// SafeSendStatus persists status before sending it
+func (s *StatusSender) SafeSendStatus(ctx context.Context, status WorkerStatus) error {
+	if err := s.workerMetaClient.Store(ctx, s.workerID, &status); err != nil {
+		return err
+	}
+	return s.SendStatus(ctx, status)
+}
+
 // SendStatus is used by the business logic in a worker to notify its master
 // of a status change.
 // This function is non-blocking and if any error occurred during or after network IO,
@@ -131,8 +138,8 @@ func (s *StatusSender) sendStatus(ctx context.Context) error {
 		ok, err := s.messageSender.SendToNode(
 			ctx,
 			s.masterClient.MasterNode(),
-			workerStatusUpdatedTopic(s.masterClient.MasterID(), s.masterClient.workerID),
-			&workerStatusUpdatedMessage{Epoch: s.masterClient.Epoch()})
+			WorkerStatusUpdatedTopic(s.masterClient.MasterID()),
+			&WorkerStatusUpdatedMessage{FromWorkerID: s.workerID, Epoch: s.masterClient.Epoch()})
 		if err != nil {
 			s.onError(err)
 		}
@@ -162,14 +169,6 @@ func (s *StatusSender) onError(err error) {
 		log.L().Warn("error is dropped because errCh is full",
 			zap.Error(err))
 	}
-}
-
-func workerStatusUpdatedTopic(masterID MasterID, workerID WorkerID) string {
-	return fmt.Sprintf("worker-status-updated-%s-%s", masterID, workerID)
-}
-
-type workerStatusUpdatedMessage struct {
-	Epoch Epoch
 }
 
 // StatusReceiver is used by a master to receive the latest status update from **a** worker.
@@ -222,31 +221,6 @@ func NewStatusReceiver(
 // Init should be called to initialize a StatusReceiver.
 // NOTE: this function can be blocked by IO to the metastore.
 func (r *StatusReceiver) Init(ctx context.Context) error {
-	topic := workerStatusUpdatedTopic(r.workerMetaClient.MasterID(), r.workerID)
-	ok, err := r.messageHandlerManager.RegisterHandler(
-		ctx,
-		topic,
-		&workerStatusUpdatedMessage{},
-		func(sender p2p.NodeID, value p2p.MessageValue) error {
-			log.L().Debug("Received workerStatusUpdatedMessage",
-				zap.String("sender", sender),
-				zap.Any("value", value))
-
-			msg := value.(*workerStatusUpdatedMessage)
-			if msg.Epoch != r.epoch {
-				return nil
-			}
-			r.hasPendingNotification.Store(true)
-			log.L().Debug("notification stored")
-			return nil
-		})
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if !ok {
-		log.L().Panic("duplicate handlers", zap.String("topic", topic))
-	}
-
 	initStatus, err := r.workerMetaClient.Load(ctx, r.workerID)
 	if err != nil {
 		return errors.Trace(err)
@@ -259,6 +233,13 @@ func (r *StatusReceiver) Init(ctx context.Context) error {
 	r.lastStatusUpdated.Store(r.clock.Now())
 
 	return nil
+}
+
+func (r *StatusReceiver) OnNotification(msg *WorkerStatusUpdatedMessage) {
+	if msg.Epoch != r.epoch {
+		return
+	}
+	r.hasPendingNotification.Store(true)
 }
 
 // Status returns the latest status of the worker.
@@ -306,19 +287,6 @@ func (r *StatusReceiver) Tick(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	return nil
-}
-
-func (r *StatusReceiver) Close(ctx context.Context) error {
-	topic := workerStatusUpdatedTopic(r.workerMetaClient.MasterID(), r.workerID)
-	ok, err := r.messageHandlerManager.UnregisterHandler(ctx, topic)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if !ok {
-		log.L().Warn("message handler for topic does not exist",
-			zap.String("topic", topic))
-	}
 	return nil
 }
 

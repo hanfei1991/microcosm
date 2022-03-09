@@ -6,7 +6,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"go.etcd.io/etcd/clientv3"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
 
 	"github.com/hanfei1991/microcosm/pkg/adapter"
@@ -38,7 +38,8 @@ func (c *MasterMetadataClient) Load(ctx context.Context) (*MasterMetaKVData, err
 	if len(resp.Kvs) == 0 {
 		// TODO refine handling the situation where the mata key does not exist at this point
 		masterMeta := &MasterMetaKVData{
-			ID: c.masterID,
+			ID:         c.masterID,
+			StatusCode: MasterStatusUninit,
 		}
 		return masterMeta, nil
 	}
