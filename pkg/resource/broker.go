@@ -2,6 +2,7 @@ package resource
 
 import (
 	"context"
+	"path/filepath"
 
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -25,12 +26,17 @@ type Proxy interface {
 	CreateFile(ctx context.Context, path string) (FileWriter, error)
 }
 
-type Broker struct {
+type broker struct {
 	// TODO: report it to ResourceManager
 	allocated map[ID]struct{}
+	// TODO: make it configurable
+	pathPrefix string
 }
 
-var DefaultBroker Broker
+var DefaultBroker = broker{
+	allocated:  make(map[ID]struct{}),
+	pathPrefix: "resources",
+}
 
 type proxy struct {
 	id      ID
@@ -45,9 +51,10 @@ func (p proxy) CreateFile(ctx context.Context, path string) (FileWriter, error) 
 	return p.storage.Create(ctx, path)
 }
 
-func (b *Broker) NewProxyForWorker(ctx context.Context, id string) (Proxy, error) {
+func newProxy(ctx context.Context, pathPrefix, id string) (Proxy, error) {
+	storagePath := filepath.Join(pathPrefix, id)
 	// only support local disk now
-	backend, err := storage.ParseBackend("./resources/"+id, nil)
+	backend, err := storage.ParseBackend(storagePath, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -55,28 +62,27 @@ func (b *Broker) NewProxyForWorker(ctx context.Context, id string) (Proxy, error
 	if err != nil {
 		return nil, err
 	}
-	b.allocated[ID(id)] = struct{}{}
 	return &proxy{
 		id:      ID(id),
 		storage: s,
 	}, nil
 }
 
+func (b *broker) NewProxyForWorker(ctx context.Context, id string) (Proxy, error) {
+	p, err := newProxy(ctx, b.pathPrefix, id)
+	if err != nil {
+		return nil, err
+	}
+	b.allocated[ID(id)] = struct{}{}
+	return p, nil
+}
+
 func NewMockProxy(id string) Proxy {
-	backend, err := storage.ParseBackend("./unit_test_resources/"+id, nil)
+	p, err := newProxy(context.TODO(), "unit_test_resources", id)
 	if err != nil {
-		log.L().Panic("failed to parse backend",
+		log.L().Panic("failed in NewMockProxy",
 			zap.String("id", id),
 			zap.Error(err))
 	}
-	s, err := storage.New(context.TODO(), backend, nil)
-	if err != nil {
-		log.L().Panic("failed to create storage",
-			zap.String("id", id),
-			zap.Error(err))
-	}
-	return &proxy{
-		id:      ID(id),
-		storage: s,
-	}
+	return p
 }
