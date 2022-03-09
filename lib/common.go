@@ -7,7 +7,6 @@ import (
 
 	"github.com/pingcap/errors"
 
-	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
@@ -130,11 +129,6 @@ type HeartbeatPongMessage struct {
 	ReplyTime  time.Time           `json:"reply-time"`
 	ToWorkerID WorkerID            `json:"to-worker-id"`
 	Epoch      Epoch               `json:"epoch"`
-}
-
-type WorkloadReportMessage struct {
-	WorkerID WorkerID       `json:"worker-id"`
-	Workload model.RescUnit `json:"workload"`
 }
 
 type (

@@ -138,7 +138,7 @@ func (s *StatusSender) sendStatus(ctx context.Context) error {
 		ok, err := s.messageSender.SendToNode(
 			ctx,
 			s.masterClient.MasterNode(),
-			WorkerStatusUpdatedTopic(s.masterClient.MasterID(), s.masterClient.workerID),
+			WorkerStatusUpdatedTopic(s.masterClient.MasterID()),
 			&WorkerStatusUpdatedMessage{FromWorkerID: s.workerID, Epoch: s.masterClient.Epoch()})
 		if err != nil {
 			s.onError(err)

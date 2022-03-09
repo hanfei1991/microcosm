@@ -78,10 +78,6 @@ type BaseMaster interface {
 	IsMasterReady() bool
 	Close(ctx context.Context) error
 	OnError(err error)
-	// RegisterWorker registers worker handler only, the worker is expected to be running
-	RegisterWorker(ctx context.Context, workerID WorkerID) error
-	// UnregisterWorker unregisters worker handlers, this worker is expected to be offline
-	UnregisterWorker(ctx context.Context, workerID WorkerID) error
 	// CreateWorker registers worker handler and dispatches worker to executor
 	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error)
 }
@@ -217,6 +213,10 @@ func (m *DefaultBaseMaster) Init(ctx context.Context) error {
 }
 
 func (m *DefaultBaseMaster) doInit(ctx context.Context) (isFirstStartUp bool, err error) {
+	if err := m.registerMessageHandlers(ctx); err != nil {
+		return false, errors.Trace(err)
+	}
+
 	isInit, epoch, err := m.refreshMetadata(ctx)
 	if err != nil {
 		return false, errors.Trace(err)
@@ -403,27 +403,19 @@ func (m *DefaultBaseMaster) runWorkerCheck(ctx context.Context) error {
 				)
 			}
 			tombstoneHandle := NewTombstoneWorkerHandle(workerInfo.ID, *status, nil)
-			err := m.UnregisterWorker(ctx, workerInfo.ID)
-			if err != nil {
-				return err
-			}
 			var offlineError error
 			if status.Code == WorkerStatusFinished {
 				offlineError = derror.ErrWorkerFinish.FastGenByArgs()
 			} else {
-				offlineError = derror.ErrWorkerOffline.FastGenByArgs(workerInfo.ID, err)
+				offlineError = derror.ErrWorkerOffline.FastGenByArgs(workerInfo.ID)
 			}
 
-			err = m.Impl.OnWorkerOffline(tombstoneHandle, offlineError)
+			err := m.Impl.OnWorkerOffline(tombstoneHandle, offlineError)
 			if err != nil {
 				return errors.Trace(err)
 			}
 		}
 	}
-}
-
-func (m *DefaultBaseMaster) UnregisterWorker(ctx context.Context, workerID WorkerID) error {
-	return m.workerManager.OnWorkerOffline(ctx, workerID)
 }
 
 func (m *DefaultBaseMaster) OnError(err error) {
@@ -517,12 +509,6 @@ func (m *DefaultBaseMaster) prepareWorkerConfig(
 	return
 }
 
-func (m *DefaultBaseMaster) RegisterWorker(ctx context.Context, workerID WorkerID) error {
-	registerHandlerCtx, cancelRegisterHandler := context.WithTimeout(ctx, time.Second*1)
-	defer cancelRegisterHandler()
-	return m.registerHandlerForWorker(registerHandlerCtx, workerID)
-}
-
 func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error) {
 	log.L().Info("CreateWorker",
 		zap.Int64("worker-type", int64(workerType)),
@@ -537,28 +523,13 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 		return "", err
 	}
 
-	// register worker haneler before dispatching worker to executor.
-	// Because dispatchTask could fail, we must ensure register handler happens
-	// before unregister handler, in case of zombie handler.
-	if err := m.RegisterWorker(context.TODO(), workerID); err != nil {
-		return "", errors.Trace(err)
-	}
-
 	go func() {
 		// TODO make the timeout configurable
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		needUnregisterWorkerHandler := false
 		defer func() {
 			m.createWorkerQuota.Release()
-			if needUnregisterWorkerHandler {
-				ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-				defer cancel()
-				if err := m.UnregisterWorker(ctx, workerID); err != nil {
-					m.OnError(errors.Trace(err))
-				}
-			}
 		}()
 
 		// When CreateWorker failed, we need to pass the worker id to
@@ -577,7 +548,6 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 			// TODO (zixiong) make the timeout configurable
 			time.Second*10)
 		if err != nil {
-			needUnregisterWorkerHandler = true
 			err1 := m.Impl.OnWorkerDispatched(dispatchFailedDummyHandler, errors.Trace(err))
 			if err1 != nil {
 				m.OnError(errors.Trace(err1))
@@ -592,7 +562,6 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 
 		err = m.executorClientManager.AddExecutor(executorID, schedule[0].Addr)
 		if err != nil {
-			needUnregisterWorkerHandler = true
 			err1 := m.Impl.OnWorkerDispatched(dispatchFailedDummyHandler, errors.Trace(err))
 			if err1 != nil {
 				m.OnError(errors.Trace(err1))
@@ -610,7 +579,6 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 			},
 		})
 		if err != nil {
-			needUnregisterWorkerHandler = true
 			err1 := m.Impl.OnWorkerDispatched(dispatchFailedDummyHandler, errors.Trace(err))
 			if err1 != nil {
 				m.OnError(errors.Trace(err1))
@@ -621,7 +589,6 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 		log.L().Info("Worker dispatched", zap.Any("response", dispatchTaskResp))
 		errCode := dispatchTaskResp.GetErrorCode()
 		if errCode != pb.DispatchTaskErrorCode_OK {
-			needUnregisterWorkerHandler = true
 			err1 := m.Impl.OnWorkerDispatched(dispatchFailedDummyHandler,
 				errors.Errorf("dispatch worker failed with error code: %d", errCode))
 			if err1 != nil {
@@ -631,7 +598,6 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 		}
 
 		if err := m.workerManager.OnWorkerCreated(ctx, workerID, p2p.NodeID(executorID)); err != nil {
-			needUnregisterWorkerHandler = true
 			m.OnError(errors.Trace(err))
 		}
 		handle := m.workerManager.GetWorkerHandle(workerID)
