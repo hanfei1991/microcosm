@@ -14,7 +14,7 @@ import (
 	"github.com/phayes/freeport"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/embed"
+	"go.etcd.io/etcd/server/v3/embed"
 )
 
 func allocTempURL(t *testing.T) string {
