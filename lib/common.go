@@ -101,8 +101,8 @@ func (s *WorkerStatus) Marshal() ([]byte, error) {
 	return json.Marshal(s)
 }
 
-func HeartbeatPingTopic(masterID MasterID, workerID WorkerID) p2p.Topic {
-	return fmt.Sprintf("heartbeat-ping-%s-%s", masterID, workerID)
+func HeartbeatPingTopic(masterID MasterID) p2p.Topic {
+	return fmt.Sprintf("heartbeat-ping-%s", masterID)
 }
 
 func HeartbeatPongTopic(masterID MasterID, workerID WorkerID) p2p.Topic {
@@ -110,8 +110,13 @@ func HeartbeatPongTopic(masterID MasterID, workerID WorkerID) p2p.Topic {
 	return fmt.Sprintf("heartbeat-pong-%s-%s", masterID, workerID)
 }
 
-func WorkloadReportTopic(masterID MasterID) p2p.Topic {
-	return fmt.Sprintf("workload-report-%s", masterID)
+func WorkerStatusUpdatedTopic(masterID MasterID) string {
+	return fmt.Sprintf("worker-status-updated-%s", masterID)
+}
+
+type WorkerStatusUpdatedMessage struct {
+	FromWorkerID WorkerID `json:"from-worker-id"`
+	Epoch        Epoch    `json:"epoch"`
 }
 
 type HeartbeatPingMessage struct {

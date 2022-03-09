@@ -242,6 +242,43 @@ func (m *DefaultBaseMaster) doInit(ctx context.Context) (isFirstStartUp bool, er
 	return isInit, nil
 }
 
+func (m *DefaultBaseMaster) registerMessageHandlers(ctx context.Context) error {
+	ok, err := m.messageHandlerManager.RegisterHandler(
+		ctx,
+		HeartbeatPingTopic(m.id),
+		&HeartbeatPingMessage{},
+		func(sender p2p.NodeID, value p2p.MessageValue) error {
+			msg := value.(*HeartbeatPingMessage)
+			if err := m.workerManager.HandleHeartbeat(msg, sender); err != nil {
+				return errors.Trace(err)
+			}
+			return nil
+		})
+	if err != nil {
+		return err
+	}
+	if !ok {
+		log.L().Panic("duplicate handler", zap.String("topic", HeartbeatPingTopic(m.id)))
+	}
+
+	ok, err = m.messageHandlerManager.RegisterHandler(
+		ctx,
+		WorkerStatusUpdatedTopic(m.id),
+		&WorkerStatusUpdatedMessage{},
+		func(sender p2p.NodeID, value p2p.MessageValue) error {
+			msg := value.(*WorkerStatusUpdatedMessage)
+			m.workerManager.OnWorkerStatusUpdated(msg)
+			return nil
+		})
+	if err != nil {
+		return err
+	}
+	if !ok {
+		log.L().Panic("duplicate handler", zap.String("topic", WorkerStatusUpdatedTopic(m.id)))
+	}
+	return nil
+}
+
 func (m *DefaultBaseMaster) Poll(ctx context.Context) error {
 	if err := m.doPoll(ctx); err != nil {
 		return errors.Trace(err)
@@ -386,15 +423,6 @@ func (m *DefaultBaseMaster) runWorkerCheck(ctx context.Context) error {
 }
 
 func (m *DefaultBaseMaster) UnregisterWorker(ctx context.Context, workerID WorkerID) error {
-	topic := HeartbeatPingTopic(m.id, workerID)
-	removed, err := m.messageHandlerManager.UnregisterHandler(ctx, topic)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if !removed {
-		log.L().Warn("heartbeat message handler is not removed", zap.String("topic", topic))
-	}
-
 	return m.workerManager.OnWorkerOffline(ctx, workerID)
 }
 
@@ -452,37 +480,6 @@ func (m *DefaultBaseMaster) markStatusCodeInMetadata(
 
 	masterMeta.StatusCode = code
 	return metaClient.Store(ctx, masterMeta)
-}
-
-func (m *DefaultBaseMaster) registerHandlerForWorker(ctx context.Context, workerID WorkerID) error {
-	topic := HeartbeatPingTopic(m.id, workerID)
-	ok, err := m.messageHandlerManager.RegisterHandler(
-		ctx,
-		topic,
-		&HeartbeatPingMessage{},
-		func(sender p2p.NodeID, value p2p.MessageValue) error {
-			heartBeatMsg := value.(*HeartbeatPingMessage)
-			curEpoch := m.currentEpoch.Load()
-			if heartBeatMsg.Epoch < curEpoch {
-				log.L().Info("stale message dropped",
-					zap.Any("message", heartBeatMsg),
-					zap.Int64("cur-epoch", curEpoch))
-				return nil
-			}
-			if err := m.workerManager.HandleHeartbeat(heartBeatMsg, sender); err != nil {
-				log.L().Error("HandleHeartbeat failed", zap.Error(err))
-				m.OnError(err)
-			}
-			return nil
-		})
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if !ok {
-		log.L().Panic("duplicate handler",
-			zap.String("topic", topic))
-	}
-	return nil
 }
 
 // prepareWorkerConfig extracts information from WorkerConfig into detail fields.
