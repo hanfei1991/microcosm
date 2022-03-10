@@ -7,6 +7,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/sync/semaphore"
 	"google.golang.org/grpc/codes"
@@ -25,6 +26,8 @@ type TaskRunner struct {
 
 	cancelMu sync.RWMutex
 	canceled bool
+
+	taskCount atomic.Int64
 }
 
 const (
@@ -165,6 +168,7 @@ func (r *TaskRunner) onNewTask(ctx context.Context, task Runnable) (ret error) {
 		return derror.ErrRuntimeDuplicateTaskID.GenWithStackByArgs(task.ID())
 	}
 
+	r.taskCount.Inc()
 	runInit := func(initCtx context.Context) (ret error) {
 		defer func() {
 			if r := recover(); r != nil {
@@ -183,10 +187,14 @@ func (r *TaskRunner) onNewTask(ctx context.Context, task Runnable) (ret error) {
 	r.wg.Add(1)
 	go func() {
 		defer r.wg.Done()
+		defer r.taskCount.Dec()
 
 		defer func() {
 			err := t.Close(ctx)
-			log.L().Info("Task Closed", zap.String("id", t.ID()), zap.Error(err))
+			log.L().Info("Task Closed",
+				zap.String("id", t.ID()),
+				zap.Error(err),
+				zap.Int64("runtime-task-count", r.taskCount.Load()))
 			t.OnStopped()
 
 			if _, ok := r.tasks.LoadAndDelete(t.ID()); !ok {
@@ -196,10 +204,15 @@ func (r *TaskRunner) onNewTask(ctx context.Context, task Runnable) (ret error) {
 
 		if err := runInit(taskCtx); err != nil {
 			log.L().Warn("Task init returned error", zap.String("id", t.ID()), zap.Error(err))
+			return
 		}
 
+		log.L().Info("Task initialized",
+			zap.String("id", t.ID()),
+			zap.Int64("runtime-task-count", r.taskCount.Load()))
+
 		err := t.EventLoop(ctx)
-		log.L().Info("Task exited", zap.String("id", t.ID()), zap.Error(err))
+		log.L().Info("Task stopped", zap.String("id", t.ID()), zap.Error(err))
 	}()
 
 	return nil
