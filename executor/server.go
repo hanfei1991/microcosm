@@ -309,9 +309,11 @@ func (s *Server) startMsgService(ctx context.Context, wg *errgroup.Group) (err e
 }
 
 const (
-	defaultRuntimeCapacity = 65536 // TODO make this configurable
+	// TODO since we introduced queuing in the TaskRunner, it is no longer
+	// easy to implement the capacity. Think of a better solution later.
+	// defaultRuntimeCapacity      = 65536
 	defaultRuntimeIncomingQueueLen = 256
-	defaultRuntimeInitConcurrency = 256
+	defaultRuntimeInitConcurrency  = 256
 )
 
 func (s *Server) Run(ctx context.Context) error {
