@@ -46,7 +46,7 @@ type Server struct {
 	cli         client.MasterClient
 	cliUpdateCh chan []string
 	sch         *runtime.Runtime
-	workerRtm   *worker.Runtime
+	workerRtm   *worker.TaskRunner
 	msgServer   *p2p.MessageRPCService
 	info        *model.NodeInfo
 
@@ -228,9 +228,9 @@ func (s *Server) DispatchTask(ctx context.Context, req *pb.DispatchTaskRequest) 
 		return nil, err
 	}
 
-	if err := s.workerRtm.SubmitTask(newWorker); err != nil {
+	if err := s.workerRtm.AddTask(newWorker); err != nil {
 		errCode := pb.DispatchTaskErrorCode_Other
-		if errors.ErrRuntimeReachedCapacity.Equal(err) {
+		if errors.ErrRuntimeReachedCapacity.Equal(err) || errors.ErrRuntimeIncomingQueueFull.Equal(err) {
 			errCode = pb.DispatchTaskErrorCode_NoResource
 		}
 
@@ -310,6 +310,8 @@ func (s *Server) startMsgService(ctx context.Context, wg *errgroup.Group) (err e
 
 const (
 	defaultRuntimeCapacity = 65536 // TODO make this configurable
+	defaultRuntimeIncomingQueueLen = 256
+	defaultRuntimeInitConcurrency = 256
 )
 
 func (s *Server) Run(ctx context.Context) error {
@@ -327,12 +329,10 @@ func (s *Server) Run(ctx context.Context) error {
 		return nil
 	})
 
-	pollCon := s.cfg.PollConcurrency
-	s.workerRtm = worker.NewRuntime(ctx, defaultRuntimeCapacity)
+	s.workerRtm = worker.NewTaskRunner(defaultRuntimeIncomingQueueLen, defaultRuntimeInitConcurrency)
 
 	wg.Go(func() error {
-		s.workerRtm.Start(ctx, pollCon)
-		return nil
+		return s.workerRtm.Run(ctx)
 	})
 
 	err := s.selfRegister(ctx)
