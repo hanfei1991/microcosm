@@ -342,7 +342,7 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 
 	// TODO: make the prefix configurable later
-	s.resourceBroker = resource.NewBroker(s.cfg.Name, s.cli)
+	s.resourceBroker = resource.NewBroker(s.cfg.Name, s.cfg.Name, s.cli)
 
 	s.p2pMsgRouter = p2p.NewMessageRouter(p2p.NodeID(s.info.ID), s.info.Addr)
 
@@ -560,7 +560,6 @@ func getJoinURLs(addrs string) []string {
 }
 
 func (s *Server) reportTaskRescOnce(ctx context.Context) error {
-	// we rely on the
 	resourceIDs := s.resourceBroker.AllocatedIDs()
 
 	rescs := s.sch.Resource()
