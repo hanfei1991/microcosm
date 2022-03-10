@@ -83,7 +83,9 @@ func (r *TaskRunner) Run(ctx context.Context) error {
 				return derror.ErrRuntimeIsClosed.GenWithStackByArgs()
 			}
 			if err := r.onNewTask(ctx, task); err != nil {
-				log.L().Warn("Failed to launch task", zap.Error(err))
+				log.L().Warn("Failed to launch task",
+					zap.String("id", task.ID()),
+					zap.Error(err))
 			}
 		}
 	}
