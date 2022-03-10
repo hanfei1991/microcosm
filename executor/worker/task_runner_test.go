@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	workerNum = 1000
+	workerNum = 100
 )
 
 func TestTaskRunnerBasics(t *testing.T) {
