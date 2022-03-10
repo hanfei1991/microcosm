@@ -5,7 +5,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hanfei1991/microcosm/model"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
@@ -14,6 +13,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/hanfei1991/microcosm/executor/worker/internal"
+	"github.com/hanfei1991/microcosm/model"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 )
 
@@ -54,7 +54,7 @@ func (e *taskEntry) EventLoop(ctx context.Context) error {
 	}
 }
 
-func NewTaskRunner(capacity int, inQueueSize int, initConcurrency int) *TaskRunner {
+func NewTaskRunner(inQueueSize int, initConcurrency int) *TaskRunner {
 	return &TaskRunner{
 		inQueue:       make(chan Runnable, inQueueSize),
 		initQuotaSema: semaphore.NewWeighted(int64(initConcurrency)),
