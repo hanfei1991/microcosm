@@ -60,7 +60,7 @@ type Proxy interface {
 type proxy struct {
 	resourceID ID
 	executorID string
-	masterCli  *ignoreAfterSuccClient // we only need one request for one resource
+	masterCli  client.MasterClient
 	storage    storage.ExternalStorage
 }
 
@@ -125,6 +125,7 @@ func (b *Broker) NewProxyForWorker(ctx context.Context, id string) (Proxy, error
 	if err != nil {
 		return nil, err
 	}
+	// we only need one request for one resource proxy (one folder)
 	p.masterCli = &ignoreAfterSuccClient{
 		MasterClient: b.masterCli,
 	}
@@ -147,12 +148,22 @@ func (b *Broker) AllocatedIDs() []string {
 	return ids
 }
 
-func NewMockProxy(id string) Proxy {
+type MockProxyWithMasterCli struct {
+	*proxy
+	MockMasterCli *client.MockServerMasterClient
+}
+
+func NewMockProxy(id string) MockProxyWithMasterCli {
 	p, err := newProxy(context.TODO(), "unit_test_resources", id)
 	if err != nil {
 		log.L().Panic("failed in NewMockProxy",
 			zap.String("resourceID", id),
 			zap.Error(err))
 	}
-	return p
+	mockMasterCli := &client.MockServerMasterClient{}
+	p.masterCli = mockMasterCli
+	return MockProxyWithMasterCli{
+		proxy:         p,
+		MockMasterCli: mockMasterCli,
+	}
 }
