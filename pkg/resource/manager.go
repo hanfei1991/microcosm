@@ -1,17 +1,31 @@
 package resource
 
-// not thread-safe now
-type manager struct {
+import (
+	"context"
+
+	 "github.com/hanfei1991/microcosm/pkg/resource/model"
+)
+
+type Manager struct {
 	// resourceID -> executorID
 	resourceMap map[string]string
 }
 
-var DefaultManager = &manager{
-	resourceMap: make(map[string]string),
+func (m *Manager) UpsertResource(
+	ctx context.Context,
+	executorID model.ExecutorID,
+	workerID model.WorkerID,
+	resource ID,
+	keepAlive model.KeepAliveStrategy,
+) error {
+
 }
 
-func (m *manager) AddResources(executorID string, resourceIDs []string) {
-	for _, rID := range resourceIDs {
-		m.resourceMap[rID] = executorID
-	}
+func (m *Manager) ConsumeResource(
+	ctx context.Context,
+	executorID model.ExecutorID,
+	workerID model.WorkerID,
+	resource ID,
+) error {
+
 }
