@@ -200,8 +200,8 @@ type MockWorkerHandler struct {
 	WorkerID WorkerID
 }
 
-func (m *MockWorkerHandler) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) error {
-	args := m.Called(ctx, topic, message)
+func (m *MockWorkerHandler) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error {
+	args := m.Called(ctx, topic, message, nonblocking)
 	return args.Error(0)
 }
 

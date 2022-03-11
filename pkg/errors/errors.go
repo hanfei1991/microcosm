@@ -66,6 +66,7 @@ var (
 	ErrWorkerUpdateStatusTryAgain = errors.Normalize("worker should try again in updating the status", errors.RFCCodeText("DFLOW:ErrWorkerUpdateStatusTryAgain"))
 	ErrInvalidJobType             = errors.Normalize("invalid job type: %s", errors.RFCCodeText("DFLOW:ErrInvalidJobType"))
 	ErrWorkerFinish               = errors.Normalize("worker finished and exited", errors.RFCCodeText("DFLOW:ErrWorkerFinish"))
+	ErrWorkerStop                 = errors.Normalize("worker is stopped", errors.RFCCodeText("DFLOW:ErrWorkerStop"))
 
 	// master etcd related errors
 	ErrMasterEtcdCreateSessionFail    = errors.Normalize("failed to create Etcd session", errors.RFCCodeText("DFLOW:ErrMasterEtcdCreateSessionFail"))

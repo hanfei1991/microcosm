@@ -17,6 +17,9 @@ type MessageSender interface {
 	// SendToNode sends a message to a given node. Returns whether it is successful and a possible error.
 	// A `would-block` error will not be returned. (false, nil) would be returned instead.
 	SendToNode(ctx context.Context, targetNodeID NodeID, topic Topic, message interface{}) (bool, error)
+
+	// SendToNodeB sends a message to a given node in a blocking way
+	SendToNodeB(ctx context.Context, targetNodeID NodeID, topic Topic, message interface{}) error
 }
 
 type messageSenderImpl struct {
@@ -26,6 +29,19 @@ type messageSenderImpl struct {
 // NewMessageSender returns a new message sender.
 func NewMessageSender(router MessageRouter) MessageSender {
 	return &messageSenderImpl{router: router}
+}
+
+// SendToNodeB implements MessageSender.SendToNodeB
+func (m *messageSenderImpl) SendToNodeB(
+	ctx context.Context, targetNodeID NodeID, topic Topic, message interface{},
+) error {
+	client := m.router.GetClient(targetNodeID)
+	if client == nil {
+		return nil
+	}
+
+	_, err := client.SendMessage(ctx, topic, message)
+	return err
 }
 
 func (m *messageSenderImpl) SendToNode(ctx context.Context, targetNodeID NodeID, topic Topic, message interface{}) (bool, error) {
