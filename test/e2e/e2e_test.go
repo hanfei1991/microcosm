@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -68,6 +67,7 @@ func TestSubmitTest(t *testing.T) {
 	wg.Add(config.JobNum)
 	for i := 1; i <= config.JobNum; i++ {
 		go func(idx int) {
+			defer wg.Done()
 			cfg := &cvsTask.Config{
 				SrcDir:  config.DemoDataDir + "/datax",
 				DstDir:  fmt.Sprintf(config.DemoDataDir+"/data%d", idx),
@@ -75,7 +75,6 @@ func TestSubmitTest(t *testing.T) {
 				DstHost: config.DemoHost,
 			}
 			testSubmitTest(t, cfg, config)
-			wg.Done()
 		}(i)
 	}
 	wg.Wait()
@@ -118,24 +117,19 @@ func testSubmitTest(t *testing.T, cfg *cvsTask.Config, config *Config) {
 	}
 	// continue to query
 	for {
-		queryResp, err := masterclient.QueryJob(ctx, queryReq)
+		ctx1, cancel := context.WithTimeout(ctx, 3*time.Second)
+		queryResp, err := masterclient.QueryJob(ctx1, queryReq)
 		require.Nil(t, err)
 		require.Nil(t, queryResp.Err)
 		require.Equal(t, queryResp.Tp, int64(lib.CvsJobMaster))
-		if queryResp.Status == pb.QueryJobResponse_online {
-			statusBytes := queryResp.JobMasterInfo.Status
-			status := &lib.WorkerStatus{}
-			err = json.Unmarshal(statusBytes, status)
-			require.Nil(t, err)
-			if status.Code == lib.WorkerStatusFinished {
-				ext, err := strconv.ParseInt(string(status.ExtBytes), 10, 64)
-				require.Nil(t, err, string(status.ExtBytes), string(statusBytes))
-				require.Equal(t, ext, config.RecordNum)
-				break
-			}
+		cancel()
+		fmt.Printf("query id %s, status %d, time %s\n", resp.JobIdStr, int(queryResp.Status), time.Now().Format("2006-01-02 15:04:05"))
+		if queryResp.Status == pb.QueryJobResponse_finished {
+			break
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+	fmt.Printf("job id %s checking\n", resp.JobIdStr)
 	// check files
 	demoResp, err := democlient.client.CheckDir(ctx, &pb.CheckDirRequest{
 		Dir: cfg.DstDir,

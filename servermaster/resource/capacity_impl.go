@@ -1,7 +1,9 @@
 package resource
 
 import (
+	"math/rand"
 	"sync"
+	"time"
 
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
@@ -87,7 +89,8 @@ func (m *CapRescMgr) allocateTasksWithNaiveStrategy(
 		// No resources in this cluster
 		return false, nil
 	}
-	var idx int = 0
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	idx := r.Intn(len(resources))
 	for _, task := range tasks {
 		originalIdx := idx
 		for {
