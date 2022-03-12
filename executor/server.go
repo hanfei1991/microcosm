@@ -46,7 +46,7 @@ type Server struct {
 	cli         client.MasterClient
 	cliUpdateCh chan []string
 	sch         *runtime.Runtime
-	workerRtm   *worker.Runtime
+	workerRtm   *worker.TaskRunner
 	msgServer   *p2p.MessageRPCService
 	info        *model.NodeInfo
 
@@ -60,6 +60,7 @@ type Server struct {
 	metastore       metadata.MetaKV
 	p2pMsgRouter    p2pImpl.MessageRouter
 	discoveryKeeper *serverutils.DiscoveryKeepaliver
+	resourceBroker  *resource.Broker
 }
 
 func NewServer(cfg *Config, ctx *test.Context) *Server {
@@ -170,7 +171,7 @@ func (s *Server) buildDeps(wid lib.WorkerID) (*deps.Deps, error) {
 		return nil, err
 	}
 
-	proxy, err := resource.DefaultBroker.NewProxyForWorker(context.TODO(), wid)
+	proxy, err := s.resourceBroker.NewProxyForWorker(context.TODO(), wid)
 	if err != nil {
 		return nil, err
 	}
@@ -228,9 +229,9 @@ func (s *Server) DispatchTask(ctx context.Context, req *pb.DispatchTaskRequest) 
 		return nil, err
 	}
 
-	if err := s.workerRtm.SubmitTask(newWorker); err != nil {
+	if err := s.workerRtm.AddTask(newWorker); err != nil {
 		errCode := pb.DispatchTaskErrorCode_Other
-		if errors.ErrRuntimeReachedCapacity.Equal(err) {
+		if errors.ErrRuntimeReachedCapacity.Equal(err) || errors.ErrRuntimeIncomingQueueFull.Equal(err) {
 			errCode = pb.DispatchTaskErrorCode_NoResource
 		}
 
@@ -309,7 +310,11 @@ func (s *Server) startMsgService(ctx context.Context, wg *errgroup.Group) (err e
 }
 
 const (
-	defaultRuntimeCapacity = 65536 // TODO make this configurable
+	// TODO since we introduced queuing in the TaskRunner, it is no longer
+	// easy to implement the capacity. Think of a better solution later.
+	// defaultRuntimeCapacity      = 65536
+	defaultRuntimeIncomingQueueLen = 256
+	defaultRuntimeInitConcurrency  = 256
 )
 
 func (s *Server) Run(ctx context.Context) error {
@@ -327,18 +332,19 @@ func (s *Server) Run(ctx context.Context) error {
 		return nil
 	})
 
-	pollCon := s.cfg.PollConcurrency
-	s.workerRtm = worker.NewRuntime(ctx, defaultRuntimeCapacity)
+	s.workerRtm = worker.NewTaskRunner(defaultRuntimeIncomingQueueLen, defaultRuntimeInitConcurrency)
 
 	wg.Go(func() error {
-		s.workerRtm.Start(ctx, pollCon)
-		return nil
+		return s.workerRtm.Run(ctx)
 	})
 
 	err := s.selfRegister(ctx)
 	if err != nil {
 		return err
 	}
+
+	// TODO: make the prefix configurable later
+	s.resourceBroker = resource.NewBroker(s.cfg.Name, s.cfg.Name, s.cli)
 
 	s.p2pMsgRouter = p2p.NewMessageRouter(p2p.NodeID(s.info.ID), s.info.Addr)
 
@@ -556,11 +562,14 @@ func getJoinURLs(addrs string) []string {
 }
 
 func (s *Server) reportTaskRescOnce(ctx context.Context) error {
+	resourceIDs := s.resourceBroker.AllocatedIDs()
+
 	rescs := s.sch.Resource()
 	req := &pb.ExecWorkloadRequest{
 		// TODO: use which field as ExecutorId is more accurate
 		ExecutorId: s.cfg.WorkerAddr,
 		Workloads:  make([]*pb.ExecWorkload, 0, len(rescs)),
+		ResourceId: resourceIDs,
 	}
 	for tp, resc := range rescs {
 		req.Workloads = append(req.Workloads, &pb.ExecWorkload{
