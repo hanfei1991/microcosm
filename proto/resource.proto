@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package pb;
+
+import "error.proto";
+
+message ResourceError {
+  ResourceErrorCode error_code = 1;
+  string message = 2;
+  Error base_error = 3;
+}
+
+enum ResourceErrorCode {
+  ResourceUnknownError = 0;
+  ResourceOK = 1;
+  ResourceNoQuota = 2;
+  ResourceNotFound = 3;
+  ResourceDuplicate = 4;
+}
+
+message CreateResourceRequest {
+  string resource_id = 1;
+  string executor_id = 2;
+  string worker_id = 3;
+  string job_id = 4;
+}
+
+message CreateResourceResponse {
+  ResourceError error = 1;
+}
+
+enum ResourceLeaseType {
+  UnknownLeaseType = 0;
+  LeaseBindToWorker = 1;
+  LeaseBindToJob = 2;
+  LeaseTimeout = 3;
+}
+
+message UpdateResourceRequest {
+  string resource_id = 1;
+  string worker_id = 2;
+  ResourceLeaseType lease_type = 3;
+}
+
+message UpdateResourceResponse {
+  ResourceError error = 1;
+}

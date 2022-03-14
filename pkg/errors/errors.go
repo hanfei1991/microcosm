@@ -102,4 +102,8 @@ var (
 	ErrMetaRevisionUnmatch = errors.Normalize("meta revision unmatch", errors.RFCCodeText("DFLOW:ErrMetaRevisionUnmatch"))
 	ErrMetaNestedTxn       = errors.Normalize("meta unsupported nested txn", errors.RFCCodeText("DFLOW:ErrMetaNestedTxn"))
 	ErrMetaCommittedTxn    = errors.Normalize("meta already committed txn", errors.RFCCodeText("DFLOW:ErrMetaCommittedTxn"))
+
+	ErrDuplicateResources    = errors.Normalize("a duplicate resource exists: %s", errors.RFCCodeText("DFLOW:ErrDuplicateResources"))
+	ErrResourceNotFound      = errors.Normalize("resource not found: %s", errors.RFCCodeText("DFLOW:ErrResourceNotFound"))
+	ErrResourceMetaCorrupted = errors.Normalize("resource metadata store has been corrupted: %s", errors.RFCCodeText("DFLOW:ErrResourceMetaCorrupted"))
 )

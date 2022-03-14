@@ -5,6 +5,7 @@ package pb;
 import "error.proto";
 import "executor.proto";
 import "metastore.proto";
+import "resource.proto";
 
 // I'm trying to phase out the communication protocal.
 // - system level
@@ -51,9 +52,13 @@ service Master {
     // resource usage in executor.
     rpc ReportExecutorWorkload(ExecWorkloadRequest) returns(ExecWorkloadResponse) {}
 
-    // PersistResource is called from executor to indicate some workers on it wants
-    // to persist resource files.
-    rpc PersistResource(PersistResourceRequest) returns(PersistResourceResponse) {}
+    // CreateResource is called from executor to server master to declare the use
+    // of an external resource.
+    rpc CreateResource(CreateResourceRequest) returns(CreateResourceResponse) {}
+
+    // UpdateResource is called from executor to indicate some workers on it wants
+    // to change the lease type or status of the resource.
+    rpc UpdateResource(UpdateResourceRequest) returns(UpdateResourceResponse) {}
 }
 
 message HeartbeatRequest {
@@ -156,6 +161,7 @@ message ScheduleTask{
     TaskRequest task = 1;
     int64 cost = 2;
     string preferred_location = 3;
+    repeated string required_resources = 4;
 }
 
 // TaskSchedulerRequest is sent from job master to server master, server master
@@ -192,11 +198,3 @@ message ExecWorkloadResponse {
     Error err = 1;
 }
 
-message PersistResourceRequest {
-    string executor_id = 1;
-    string resource_id = 2;
-}
-
-message PersistResourceResponse {
-    Error err = 1;
-}

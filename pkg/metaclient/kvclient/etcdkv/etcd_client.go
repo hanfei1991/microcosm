@@ -62,6 +62,12 @@ func NewEtcdImpl(config *metaclient.Config) (*etcdImpl, error) {
 	return c, nil
 }
 
+func NewEtcdImplFromRawClient(client *clientv3.Client) *etcdImpl {
+	return &etcdImpl{
+		cli: client,
+	}
+}
+
 func (c *etcdImpl) getEtcdOptions(op metaclient.Op) []clientv3.OpOption {
 	etcdOps := make([]clientv3.OpOption, 0, 1)
 	switch {

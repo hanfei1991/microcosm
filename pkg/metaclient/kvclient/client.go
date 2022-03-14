@@ -4,6 +4,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/metaclient/kvclient/etcdkv"
 	"github.com/hanfei1991/microcosm/pkg/metaclient/namespace"
+	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 // etcdKVClient is the implement of kv interface based on etcd
@@ -21,6 +22,16 @@ func NewEtcdKVClient(config *metaclient.Config, tenantID string) (metaclient.KVC
 		return nil, err
 	}
 
+	pfKV := namespace.NewPrefixKV(impl, namespace.MakeNamespacePrefix(tenantID))
+	return &etcdKVClient{
+		Closer:   etcdkv.NewEtcdClientCloser(impl),
+		KV:       pfKV,
+		tenantID: tenantID,
+	}, nil
+}
+
+func NewEtcdKVClientFromRaw(rawClient *clientv3.Client, tenantID string) (metaclient.KVClient, error) {
+	impl := etcdkv.NewEtcdImplFromRawClient(rawClient)
 	pfKV := namespace.NewPrefixKV(impl, namespace.MakeNamespacePrefix(tenantID))
 	return &etcdKVClient{
 		Closer:   etcdkv.NewEtcdClientCloser(impl),

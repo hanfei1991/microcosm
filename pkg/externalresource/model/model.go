@@ -6,22 +6,24 @@ import (
 	"github.com/hanfei1991/microcosm/model"
 )
 
-type KeepAliveStrategy = string
+type LeaseType = string
 
 const (
-	KeepAliveByJob               = KeepAliveStrategy("job")
-	KeepAliveByWorker            = KeepAliveStrategy("worker")
-	KeepAliveByWorkerWithTimeout = KeepAliveStrategy("timeout")
+	LeaseTypeJob     = LeaseType("job")
+	LeaseTypeWorker  = LeaseType("worker")
+	LeaseTypeTimeout = LeaseType("timeout")
 )
 
-type WorkerID = string
-type ResourceID = string
-type JobID = string
-type ExecutorID = model.ExecutorID
+type (
+	WorkerID   = string
+	ResourceID = string
+	JobID      = string
+	ExecutorID = model.ExecutorID
+)
 
 type ResourceMeta struct {
 	ID        ResourceID `json:"id"`
-	Persisted bool       `json:"persisted"`
+	LeaseType LeaseType  `json:"lease_type"`
 	Job       JobID      `json:"job"`
 	Worker    WorkerID   `json:"worker"`
 	Executor  ExecutorID `json:"executor"`

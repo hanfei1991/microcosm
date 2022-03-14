@@ -13,9 +13,9 @@ import (
 	"github.com/hanfei1991/microcosm/pb"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/deps"
+	"github.com/hanfei1991/microcosm/pkg/externalresource"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
-	"github.com/hanfei1991/microcosm/pkg/resource"
 )
 
 func MockBaseWorker(
@@ -29,7 +29,7 @@ func MockBaseWorker(
 		MessageHandlerManager: p2p.NewMockMessageHandlerManager(),
 		MessageSender:         p2p.NewMockMessageSender(),
 		MetaKVClient:          metadata.NewMetaMock(),
-		ResourceProxy:         resource.NewMockProxy(workerID),
+		ResourceProxy:         externalresource.NewMockProxy(workerID),
 	}
 	err := dp.Provide(func() workerParamListForTest {
 		return params
@@ -74,7 +74,10 @@ func MockBaseWorkerPersistResource(
 	t *testing.T,
 	worker *DefaultBaseWorker,
 ) {
-	worker.resourceProxy.(resource.MockProxyWithMasterCli).MockMasterCli.
-		Mock.On("PersistResource", mock.Anything, mock.Anything).
-		Return(&pb.PersistResourceResponse{}, nil)
+	// TODO more detailed checks on the method call.
+	worker.resourceProxy.(externalresource.MockProxyWithMasterCli).MockMasterCli.
+		Mock.On("UpdateResource", mock.Anything, mock.Anything).
+		Return(&pb.UpdateResourceResponse{
+			Error: &pb.ResourceError{ErrorCode: pb.ResourceErrorCode_ResourceOK},
+		}, nil)
 }

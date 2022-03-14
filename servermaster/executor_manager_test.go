@@ -7,6 +7,7 @@ import (
 
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
+	"github.com/hanfei1991/microcosm/pkg/externalresource"
 	"github.com/stretchr/testify/require"
 )
 
@@ -17,7 +18,9 @@ func TestExecutorManager(t *testing.T) {
 	defer cancel()
 	heartbeatTTL := time.Millisecond * 100
 	checkInterval := time.Millisecond * 10
-	mgr := NewExecutorManagerImpl(heartbeatTTL, checkInterval, nil)
+	mgr := NewExecutorManagerImpl(heartbeatTTL, checkInterval, nil, func() *externalresource.Manager {
+		return nil
+	})
 
 	// register an executor server
 	executorAddr := "127.0.0.1:10001"
@@ -49,21 +52,17 @@ func TestExecutorManager(t *testing.T) {
 	require.Nil(t, resp.Err)
 
 	// test allocate resource to given task request
-	tasks := []*pb.ScheduleTask{
-		{
-			Task: &pb.TaskRequest{Id: 1, OpTp: int32(model.JobMasterType)},
-			Cost: 1,
-		},
+	task := &pb.ScheduleTask{
+		Task: &pb.TaskRequest{Id: 1, OpTp: int32(model.JobMasterType)},
+		Cost: 1,
 	}
-	allocated, allocResp := mgr.Allocate(tasks)
+
+	allocated, allocResp := mgr.Allocate(ctx, task)
 	require.True(t, allocated)
-	require.Equal(t, 1, len(allocResp.GetSchedule()))
-	require.Equal(t, map[int64]*pb.ScheduleResult{
-		1: {
-			ExecutorId: string(info.ID),
-			Addr:       executorAddr,
-		},
-	}, allocResp.GetSchedule())
+	require.Equal(t, &pb.ScheduleResult{
+		ExecutorId: string(info.ID),
+		Addr:       executorAddr,
+	}, allocResp)
 
 	mgr.Start(ctx)
 

@@ -46,10 +46,14 @@ type MasterClient interface {
 		req *pb.TaskSchedulerRequest,
 		timeout time.Duration,
 	) (resp *pb.TaskSchedulerResponse, err error)
-	PersistResource(
+	UpdateResource(
 		ctx context.Context,
-		request *pb.PersistResourceRequest,
-	) (*pb.PersistResourceResponse, error)
+		request *pb.UpdateResourceRequest,
+	) (*pb.UpdateResourceResponse, error)
+	CreateResource(
+		ctx context.Context,
+		request *pb.CreateResourceRequest,
+	) (*pb.CreateResourceResponse, error)
 	Close() (err error)
 	GetLeaderClient() pb.MasterClient
 }
@@ -240,10 +244,18 @@ func (c *MasterClientImpl) ReportExecutorWorkload(
 	return
 }
 
-func (c *MasterClientImpl) PersistResource(
+func (c *MasterClientImpl) CreateResource(
 	ctx context.Context,
-	req *pb.PersistResourceRequest,
-) (resp *pb.PersistResourceResponse, err error) {
+	req *pb.CreateResourceRequest,
+) (resp *pb.CreateResourceResponse, err error) {
+	err = c.rpcWrap(ctx, req, &resp)
+	return
+}
+
+func (c *MasterClientImpl) UpdateResource(
+	ctx context.Context,
+	req *pb.UpdateResourceRequest,
+) (resp *pb.UpdateResourceResponse, err error) {
 	err = c.rpcWrap(ctx, req, &resp)
 	return
 }

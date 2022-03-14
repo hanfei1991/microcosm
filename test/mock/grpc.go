@@ -68,6 +68,11 @@ type masterServerClient struct {
 	conn Conn
 }
 
+func (c *masterServerClient) CreateResource(ctx context.Context, req *pb.CreateResourceRequest, opts ...grpc.CallOption) (*pb.CreateResourceResponse, error) {
+	resp, err := c.conn.sendRequest(ctx, req)
+	return resp.(*pb.CreateResourceResponse), err
+}
+
 func (c *masterServerClient) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorRequest, opts ...grpc.CallOption) (*pb.RegisterExecutorResponse, error) {
 	resp, err := c.conn.sendRequest(ctx, req)
 	return resp.(*pb.RegisterExecutorResponse), err
@@ -131,14 +136,14 @@ func (c *masterServerClient) QueryJob(
 	return resp.(*pb.QueryJobResponse), nil
 }
 
-func (c *masterServerClient) PersistResource(
-	ctx context.Context, req *pb.PersistResourceRequest, opts ...grpc.CallOption,
-) (*pb.PersistResourceResponse, error) {
+func (c *masterServerClient) UpdateResource(
+	ctx context.Context, req *pb.UpdateResourceRequest, opts ...grpc.CallOption,
+) (*pb.UpdateResourceResponse, error) {
 	resp, err := c.conn.sendRequest(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return resp.(*pb.PersistResourceResponse), nil
+	return resp.(*pb.UpdateResourceResponse), nil
 }
 
 func (c *masterServerClient) ReportExecutorWorkload(

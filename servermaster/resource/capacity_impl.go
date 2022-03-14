@@ -1,25 +1,37 @@
 package resource
 
 import (
+	"context"
+	"math/rand"
 	"sync"
 
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/errors"
+	"github.com/hanfei1991/microcosm/pkg/externalresource"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 )
+
+var _ RescMgr = &CapRescMgr{}
 
 // CapRescMgr implements ResourceMgr interface, and it uses node capacity as
 // alloction algorithm
 type CapRescMgr struct {
 	mu        sync.Mutex
 	executors map[model.ExecutorID]*ExecutorResource
+	startIdx  int
+
+	// The thunk is used here because the external resource
+	// manager is intialized lazily in Server.
+	// TODO resolve this issue by proper dependency management!
+	externalResourceManagerThunk func() *externalresource.Manager
 }
 
-func NewCapRescMgr() *CapRescMgr {
+func NewCapRescMgr(managerThunk func() *externalresource.Manager) *CapRescMgr {
 	return &CapRescMgr{
 		executors: make(map[model.ExecutorID]*ExecutorResource),
+		startIdx:  rand.Int(),
 	}
 }
 
@@ -46,8 +58,33 @@ func (m *CapRescMgr) Unregister(id model.ExecutorID) {
 }
 
 // Allocate implements RescMgr.Allocate
-func (m *CapRescMgr) Allocate(tasks []*pb.ScheduleTask) (bool, *pb.TaskSchedulerResponse) {
-	return m.allocateTasksWithNaiveStrategy(tasks)
+func (m *CapRescMgr) Allocate(ctx context.Context, task *pb.ScheduleTask) (bool, *pb.ScheduleResult) {
+	if len(task.RequiredResources) == 0 {
+		return m.allocateTasksWithNaiveStrategy(model.RescUnit(task.Cost))
+	}
+
+	externalResourceManager := m.externalResourceManagerThunk()
+	if externalResourceManager == nil {
+		// TODO return a proper error here
+		return false, nil
+	}
+
+	var target model.ExecutorID
+	for _, resourceID := range task.GetRequiredResources() {
+		newTarget, err := externalResourceManager.GetExecutorConstraint(ctx, resourceID)
+		if err != nil {
+			log.L().Warn("Capacity Manager failed to request the contraint on resource",
+				zap.Any("task", task), zap.String("failed-resource-id", resourceID))
+			return false, nil
+		}
+		if target != "" && newTarget != target {
+			log.L().Info("Conflicting requirements",
+				zap.Any("task", task))
+			return false, nil
+		}
+	}
+
+	return m.allocateTaskWithConstraint(model.RescUnit(task.Cost), target)
 }
 
 // Update implements RescMgr.Update
@@ -77,38 +114,64 @@ func (m *CapRescMgr) getAvailableResource() []*ExecutorResource {
 }
 
 func (m *CapRescMgr) allocateTasksWithNaiveStrategy(
-	tasks []*pb.ScheduleTask,
-) (bool, *pb.TaskSchedulerResponse) {
+	taskCost model.RescUnit,
+) (successful bool, result *pb.ScheduleResult) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	result := make(map[int64]*pb.ScheduleResult)
 	resources := m.getAvailableResource()
 	if len(resources) == 0 {
 		// No resources in this cluster
 		return false, nil
 	}
-	var idx int = 0
-	for _, task := range tasks {
-		originalIdx := idx
-		for {
-			exec := resources[idx]
-			used := exec.Used
-			if exec.Reserved > used {
-				used = exec.Reserved
+
+	originalIdx := m.startIdx % len(resources)
+	idx := originalIdx
+	for {
+		exec := resources[idx]
+		used := exec.Used
+		if exec.Reserved > used {
+			used = exec.Reserved
+		}
+		rest := exec.Capacity - used
+		if rest >= taskCost {
+			result = &pb.ScheduleResult{
+				ExecutorId: string(exec.ID),
+				Addr:       exec.Addr,
 			}
-			rest := exec.Capacity - used
-			if rest >= model.RescUnit(task.Cost) {
-				result[task.GetTask().Id] = &pb.ScheduleResult{
-					ExecutorId: string(exec.ID),
-					Addr:       exec.Addr,
-				}
-				break
-			}
-			idx = (idx + 1) % len(resources)
-			if idx == originalIdx {
-				return false, nil
-			}
+			break
+		}
+		idx = (idx + 1) % len(resources)
+		m.startIdx++
+		if idx == originalIdx {
+			return false, nil
 		}
 	}
-	return true, &pb.TaskSchedulerResponse{Schedule: result}
+	return true, result
+}
+
+func (m *CapRescMgr) allocateTaskWithConstraint(
+	taskCost model.RescUnit,
+	constraint model.ExecutorID,
+) (successful bool, result *pb.ScheduleResult) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	exec, ok := m.executors[constraint]
+	if !ok {
+		return false, nil
+	}
+
+	used := exec.Used
+	if exec.Reserved > used {
+		used = exec.Reserved
+	}
+	rest := exec.Capacity - used
+	if rest < taskCost {
+		return false, nil
+	}
+
+	return true, &pb.ScheduleResult{
+		ExecutorId: string(exec.ID),
+		Addr:       exec.Addr,
+	}
 }

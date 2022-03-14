@@ -11,6 +11,13 @@ import (
 	"sync"
 	"time"
 
+	model2 "github.com/hanfei1991/microcosm/pkg/externalresource/model"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
+	"github.com/hanfei1991/microcosm/pkg/externalresource"
+	"github.com/hanfei1991/microcosm/pkg/metaclient/kvclient"
+
 	"github.com/google/uuid"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -80,17 +87,15 @@ type Server struct {
 	rpcLogRL        *rate.Limiter
 	discoveryKeeper *serverutils.DiscoveryKeepaliver
 
+	externalResourceManagerMu sync.RWMutex
+	externalResourceManager   *externalresource.Manager
+
 	initialized atomic.Bool
 
 	// mocked server for test
 	mockGrpcServer mock.GrpcServer
 
 	testCtx *test.Context
-}
-
-func (s *Server) PersistResource(ctx context.Context, request *pb.PersistResourceRequest) (*pb.PersistResourceResponse, error) {
-	// TODO implement me
-	panic("implement me")
 }
 
 type serverMasterMetric struct {
@@ -124,8 +129,6 @@ func genServerMasterUUID(etcdName string) string {
 
 // NewServer creates a new master-server.
 func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
-	executorManager := NewExecutorManagerImpl(cfg.KeepAliveTTL, cfg.KeepAliveInterval, ctx)
-
 	urls, err := parseURLs(cfg.MasterAddr)
 	if err != nil {
 		return nil, err
@@ -144,17 +147,17 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 	p2pMsgRouter := p2p.NewMessageRouter(p2p.NodeID(info.ID), info.Addr)
 
 	server := &Server{
-		id:              id,
-		cfg:             cfg,
-		info:            info,
-		executorManager: executorManager,
-		initialized:     *atomic.NewBool(false),
-		testCtx:         ctx,
-		leader:          atomic.Value{},
-		p2pMsgRouter:    p2pMsgRouter,
-		rpcLogRL:        rate.NewLimiter(rate.Every(time.Second*5), 3 /*burst*/),
-		metrics:         newServerMasterMetric(),
+		id:           id,
+		cfg:          cfg,
+		info:         info,
+		initialized:  *atomic.NewBool(false),
+		testCtx:      ctx,
+		leader:       atomic.Value{},
+		p2pMsgRouter: p2pMsgRouter,
+		rpcLogRL:     rate.NewLimiter(rate.Every(time.Second*5), 3 /*burst*/),
+		metrics:      newServerMasterMetric(),
 	}
+	server.executorManager = NewExecutorManagerImpl(cfg.KeepAliveTTL, cfg.KeepAliveInterval, ctx, server.getExternalResourceManager)
 	server.leaderServiceFn = server.runLeaderService
 	return server, nil
 }
@@ -294,6 +297,8 @@ func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorR
 // - queries resource manager to allocate resource and maps tasks to executors
 // - returns scheduler response to job master
 func (s *Server) ScheduleTask(ctx context.Context, req *pb.TaskSchedulerRequest) (*pb.TaskSchedulerResponse, error) {
+	// TODO we need to adjust the grpc method definition to match the
+	// one-task-a-time semantics.
 	var (
 		resp2 *pb.TaskSchedulerResponse
 		err2  error
@@ -309,11 +314,18 @@ func (s *Server) ScheduleTask(ctx context.Context, req *pb.TaskSchedulerRequest)
 	}
 
 	tasks := req.GetTasks()
-	success, resp := s.executorManager.Allocate(tasks)
-	if !success {
-		return nil, errors.ErrClusterResourceNotEnough.GenWithStackByArgs()
+	ret := &pb.TaskSchedulerResponse{
+		Schedule: make(map[int64]*pb.ScheduleResult, len(tasks)),
 	}
-	return resp, nil
+
+	for _, task := range tasks {
+		success, resp := s.executorManager.Allocate(ctx, task)
+		if success {
+			ret.Schedule[task.Task.Id] = resp
+		}
+	}
+
+	return ret, nil
 }
 
 // DeleteExecutor deletes an executor, but have yet implemented.
@@ -362,6 +374,88 @@ func (s *Server) ReportExecutorWorkload(
 		log.L().Debug("workload", zap.Int32("type", int32(res.GetTp())), zap.Int32("usage", res.GetUsage()))
 	}
 	return &pb.ExecWorkloadResponse{}, nil
+}
+
+func (s *Server) CreateResource(ctx context.Context, request *pb.CreateResourceRequest) (*pb.CreateResourceResponse, error) {
+	var (
+		resp2 *pb.CreateResourceResponse
+		err2  error
+	)
+	shouldRet := s.rpcForwardIfNeeded(ctx, request, &resp2, &err2)
+	if shouldRet {
+		return resp2, err2
+	}
+
+	checkErr := s.apiPreCheck()
+	if checkErr != nil {
+		return &pb.CreateResourceResponse{Error: &pb.ResourceError{BaseError: checkErr}}, nil
+	}
+
+	extResourceManager := s.getExternalResourceManager()
+	if extResourceManager == nil {
+		return nil, status.Error(codes.Unavailable, "the external resource manager has not been initialized")
+	}
+
+	err := extResourceManager.CreateResource(
+		ctx,
+		request.GetResourceId(),
+		request.GetJobId(),
+		model2.ExecutorID(request.GetExecutorId()),
+		request.GetWorkerId())
+
+	if err == nil {
+		return &pb.CreateResourceResponse{
+			Error: &pb.ResourceError{ErrorCode: pb.ResourceErrorCode_ResourceOK},
+		}, nil
+	}
+	if errors.ErrDuplicateResources.Equal(err) {
+		log.L().Info("Error encountered in CreateResource", zap.Error(err))
+		return &pb.CreateResourceResponse{
+			Error: &pb.ResourceError{ErrorCode: pb.ResourceErrorCode_ResourceDuplicate},
+		}, nil
+	}
+	return nil, err
+}
+
+func (s *Server) UpdateResource(ctx context.Context, request *pb.UpdateResourceRequest) (*pb.UpdateResourceResponse, error) {
+	var (
+		resp2 *pb.UpdateResourceResponse
+		err2  error
+	)
+	shouldRet := s.rpcForwardIfNeeded(ctx, request, &resp2, &err2)
+	if shouldRet {
+		return resp2, err2
+	}
+
+	checkErr := s.apiPreCheck()
+	if checkErr != nil {
+		return &pb.UpdateResourceResponse{Error: &pb.ResourceError{BaseError: checkErr}}, nil
+	}
+
+	extResourceManager := s.getExternalResourceManager()
+	if extResourceManager == nil {
+		return nil, status.Error(codes.Unavailable, "the external resource manager has not been initialized")
+	}
+
+	err := extResourceManager.UpdateResource(
+		ctx,
+		request.GetResourceId(),
+		request.GetWorkerId(),
+		externalresource.LeaseTypeFromPB(request.GetLeaseType()),
+	)
+
+	if err == nil {
+		return &pb.UpdateResourceResponse{
+			Error: &pb.ResourceError{ErrorCode: pb.ResourceErrorCode_ResourceOK},
+		}, nil
+	}
+	if errors.ErrResourceNotFound.Equal(err) {
+		log.L().Info("Error encountered in CreateResource", zap.Error(err))
+		return &pb.UpdateResourceResponse{
+			Error: &pb.ResourceError{ErrorCode: pb.ResourceErrorCode_ResourceNotFound},
+		}, nil
+	}
+	return nil, err
 }
 
 func (s *Server) startForTest(ctx context.Context) (err error) {
@@ -437,6 +531,24 @@ func (s *Server) Run(ctx context.Context) (err error) {
 	wg.Go(func() error {
 		return s.discoveryKeeper.Keepalive(ctx)
 	})
+
+	cli, err := kvclient.NewEtcdKVClientFromRaw(s.etcdClient, "system")
+	if err != nil {
+		return err
+	}
+
+	s.externalResourceManagerMu.Lock()
+	s.externalResourceManager = externalresource.NewManager(cli)
+	s.externalResourceManagerMu.Unlock()
+
+	defer func() {
+		s.externalResourceManagerMu.Lock()
+		if s.externalResourceManager != nil {
+			s.externalResourceManager.Stop()
+			s.externalResourceManager = nil
+		}
+		s.externalResourceManagerMu.Unlock()
+	}()
 
 	return wg.Wait()
 }
@@ -636,6 +748,13 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 			s.collectLeaderMetric()
 		}
 	}
+}
+
+func (s *Server) getExternalResourceManager() *externalresource.Manager {
+	s.externalResourceManagerMu.RLock()
+	defer s.externalResourceManagerMu.RUnlock()
+
+	return s.externalResourceManager
 }
 
 func (s *Server) checkLeader() (leader *Member, exist bool) {

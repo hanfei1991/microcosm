@@ -263,11 +263,19 @@ type mockExecutorManager struct {
 	count      map[model.ExecutorStatus]int
 }
 
+func (m *mockExecutorManager) IsExecutorAlive(id model.ExecutorID) bool {
+	panic("implement me")
+}
+
+func (m *mockExecutorManager) SetExecutorChangedHandler(handler ExecutorChangeHandler) {
+	panic("implement me")
+}
+
 func (m *mockExecutorManager) HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
 	panic("not implemented")
 }
 
-func (m *mockExecutorManager) Allocate(tasks []*pb.ScheduleTask) (bool, *pb.TaskSchedulerResponse) {
+func (m *mockExecutorManager) Allocate(ctx context.Context, task *pb.ScheduleTask) (bool, *pb.ScheduleResult) {
 	panic("not implemented")
 }
 

@@ -1,10 +1,12 @@
-package resource
+package externalresource
 
 import (
 	"context"
 	"errors"
 	"path/filepath"
 	"sync"
+
+	"github.com/hanfei1991/microcosm/pkg/externalresource/model"
 
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -27,6 +29,7 @@ type fileWriter struct {
 	storage.ExternalFileWriter
 	resourceID ID
 	executorID string
+	workerID   model.WorkerID
 	masterCli  client.MasterClient
 }
 
@@ -36,12 +39,15 @@ func (f *fileWriter) Close(ctx context.Context) error {
 		return err
 	}
 	// failing here will generate trash files, need clean it
-	resp, err := f.masterCli.PersistResource(ctx, &pb.PersistResourceRequest{
-		ExecutorId: f.executorID,
+	resp, err := f.masterCli.UpdateResource(ctx, &pb.UpdateResourceRequest{
+		WorkerId:   f.workerID,
 		ResourceId: string(f.resourceID),
+		// We are using the timeout lease as the default lease for persistence.
+		// The alternative may be a job lease.
+		LeaseType: pb.ResourceLeaseType_LeaseTimeout,
 	})
 	if err != nil {
-		return errors.New(resp.Err.String())
+		return errors.New(resp.Error.String())
 	}
 	return nil
 }

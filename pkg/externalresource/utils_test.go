@@ -1,4 +1,4 @@
-package resource
+package externalresource
 
 import (
 	"context"
@@ -16,17 +16,19 @@ func TestIgnoreAfterSuccClient(t *testing.T) {
 	c := &ignoreAfterSuccClient{MasterClient: mockCli}
 
 	ctx := context.Background()
-	req := &pb.PersistResourceRequest{}
+	req := &pb.UpdateResourceRequest{}
 
 	// mock expect once
 	mockCli.Mock.On("PersistResource", mock.Anything, mock.Anything).
-		Return(&pb.PersistResourceResponse{}, nil)
+		Return(&pb.UpdateResourceResponse{
+			Error: &pb.ResourceError{ErrorCode: pb.ResourceErrorCode_ResourceOK},
+		}, nil)
 
 	// call twice
-	check := func(resp *pb.PersistResourceResponse, err error) {
+	check := func(resp *pb.UpdateResourceResponse, err error) {
 		require.NoError(t, err)
-		require.Nil(t, resp.Err)
+		require.Equal(t, resp.Error.ErrorCode, pb.ResourceErrorCode_ResourceOK)
 	}
-	check(c.PersistResource(ctx, req))
-	check(c.PersistResource(ctx, req))
+	check(c.UpdateResource(ctx, req))
+	check(c.UpdateResource(ctx, req))
 }

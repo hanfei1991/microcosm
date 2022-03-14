@@ -1,6 +1,8 @@
 package resource
 
 import (
+	"context"
+
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 )
@@ -14,7 +16,7 @@ type RescMgr interface {
 	Unregister(id model.ExecutorID)
 
 	// Allocate allocates executor resources to given tasks
-	Allocate(tasks []*pb.ScheduleTask) (bool, *pb.TaskSchedulerResponse)
+	Allocate(ctx context.Context, tasks *pb.ScheduleTask) (bool, *pb.ScheduleResult)
 
 	// Update updates executor resource usage and running status
 	Update(id model.ExecutorID, used, reserved model.RescUnit, status model.ExecutorStatus) error

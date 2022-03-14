@@ -146,13 +146,24 @@ func (c *MockServerMasterClient) ScheduleTask(
 	return args.Get(0).(*pb.TaskSchedulerResponse), args.Error(1)
 }
 
-func (c *MockServerMasterClient) PersistResource(
+func (c *MockServerMasterClient) CreateResource(
 	ctx context.Context,
-	in *pb.PersistResourceRequest,
-) (*pb.PersistResourceResponse, error) {
+	in *pb.CreateResourceRequest,
+) (*pb.CreateResourceResponse, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	args := c.Mock.Called()
-	return args.Get(0).(*pb.PersistResourceResponse), args.Error(1)
+	return args.Get(0).(*pb.CreateResourceResponse), args.Error(1)
+}
+
+func (c *MockServerMasterClient) UpdateResource(
+	ctx context.Context,
+	in *pb.UpdateResourceRequest,
+) (*pb.UpdateResourceResponse, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	args := c.Mock.Called()
+	return args.Get(0).(*pb.UpdateResourceResponse), args.Error(1)
 }

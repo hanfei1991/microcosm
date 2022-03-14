@@ -9,6 +9,7 @@ import (
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/autoid"
 	"github.com/hanfei1991/microcosm/pkg/errors"
+	"github.com/hanfei1991/microcosm/pkg/externalresource"
 	"github.com/hanfei1991/microcosm/pkg/ha"
 	"github.com/hanfei1991/microcosm/servermaster/resource"
 	"github.com/hanfei1991/microcosm/test"
@@ -17,10 +18,12 @@ import (
 	"golang.org/x/time/rate"
 )
 
+type ExecutorChangeHandler = func(executorID model.ExecutorID, isDelete bool)
+
 // ExecutorManager defines an interface to manager all executors
 type ExecutorManager interface {
 	HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error)
-	Allocate(tasks []*pb.ScheduleTask) (bool, *pb.TaskSchedulerResponse)
+	Allocate(ctx context.Context, task *pb.ScheduleTask) (bool, *pb.ScheduleResult)
 	AllocateNewExec(req *pb.RegisterExecutorRequest) (*model.NodeInfo, error)
 	RegisterExec(info *model.NodeInfo)
 	Start(ctx context.Context)
@@ -44,16 +47,22 @@ type ExecutorManagerImpl struct {
 
 	rescMgr resource.RescMgr
 	logRL   *rate.Limiter
+
+	externalResourceManager externalresource.Manager
 }
 
-func NewExecutorManagerImpl(initHeartbeatTTL, keepAliveInterval time.Duration, ctx *test.Context) *ExecutorManagerImpl {
+func NewExecutorManagerImpl(
+	initHeartbeatTTL, keepAliveInterval time.Duration,
+	ctx *test.Context,
+	managerThunk func() *externalresource.Manager,
+) *ExecutorManagerImpl {
 	return &ExecutorManagerImpl{
 		testContext:       ctx,
 		executors:         make(map[model.ExecutorID]*Executor),
 		idAllocator:       autoid.NewUUIDAllocator(),
 		initHeartbeatTTL:  initHeartbeatTTL,
 		keepAliveInterval: keepAliveInterval,
-		rescMgr:           resource.NewCapRescMgr(),
+		rescMgr:           resource.NewCapRescMgr(managerThunk),
 		logRL:             rate.NewLimiter(rate.Every(time.Second*5), 1 /*burst*/),
 	}
 }
@@ -80,6 +89,8 @@ func (e *ExecutorManagerImpl) removeExecutorImpl(id model.ExecutorID) error {
 			Time: time.Now(),
 		})
 	}
+	e.externalResourceManager.OnExecutorOffline(id)
+
 	return nil
 }
 
@@ -119,6 +130,14 @@ func (e *ExecutorManagerImpl) HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.Hea
 	return resp, nil
 }
 
+func (e *ExecutorManagerImpl) IsExecutorAlive(id model.ExecutorID) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	_, exists := e.executors[id]
+	return exists
+}
+
 // RegisterExec registers executor to both executor manager and resource manager
 func (e *ExecutorManagerImpl) RegisterExec(info *model.NodeInfo) {
 	log.L().Info("register executor", zap.Any("info", info))
@@ -156,8 +175,8 @@ func (e *ExecutorManagerImpl) AllocateNewExec(req *pb.RegisterExecutorRequest) (
 	return info, nil
 }
 
-func (e *ExecutorManagerImpl) Allocate(tasks []*pb.ScheduleTask) (bool, *pb.TaskSchedulerResponse) {
-	return e.rescMgr.Allocate(tasks)
+func (e *ExecutorManagerImpl) Allocate(ctx context.Context, task *pb.ScheduleTask) (bool, *pb.ScheduleResult) {
+	return e.rescMgr.Allocate(ctx, task)
 }
 
 // Executor records the status of an executor instance.
