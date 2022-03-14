@@ -2,13 +2,13 @@ package externalresource
 
 import (
 	"context"
-	"errors"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sync"
 
-	"github.com/hanfei1991/microcosm/pkg/externalresource/model"
+	derror "github.com/hanfei1991/microcosm/pkg/errors"
+	"github.com/pingcap/errors"
 
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -16,9 +16,10 @@ import (
 
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/pb"
+	"github.com/hanfei1991/microcosm/pkg/externalresource/model"
 )
 
-type ID string
+type ID = string
 
 // FileWriter supports two methods:
 // - Write: classical IO API.
@@ -66,10 +67,13 @@ type Proxy interface {
 }
 
 type proxy struct {
-	resourceID ID
+	resourceID model.ResourceID
 	executorID string
-	masterCli  client.MasterClient
-	storage    storage.ExternalStorage
+	workerID   string
+	jobID      string
+
+	masterCli client.MasterClient
+	storage   storage.ExternalStorage
 }
 
 func (p proxy) ID() ID {
@@ -125,8 +129,34 @@ func NewBroker(executorID, pathPrefix string, masterCli client.MasterClient) *Br
 	}
 }
 
-func (b *Broker) NewProxyForWorker(ctx context.Context, id string) (Proxy, error) {
-	p, err := newProxy(ctx, b.pathPrefix, id)
+func (b *Broker) NewProxyForWorker(
+	ctx context.Context,
+	resourceID model.ResourceID,
+	workerID model.WorkerID,
+	jobID model.JobID) (Proxy, error) {
+
+	resp, err := b.masterCli.CreateResource(ctx, &pb.CreateResourceRequest{
+		ResourceId: resourceID,
+		ExecutorId: b.executorID,
+		JobId:      jobID,
+		WorkerId:   workerID,
+	})
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	switch resp.Error.ErrorCode {
+	case pb.ResourceErrorCode_ResourceOK:
+		break
+	case pb.ResourceErrorCode_ResourceDuplicate:
+		return nil, derror.ErrDuplicateResources.GenWithStackByArgs(resourceID)
+	default:
+		return nil, derror.ErrCreateResourceFailed.GenWithStackByArgs(resp.GetError().String())
+	}
+	if resp.Error.BaseError != nil {
+		return nil, derror.ErrCreateResourceFailed.GenWithStackByArgs(resp.GetError().String())
+	}
+
+	p, err := newProxy(ctx, b.pathPrefix, resourceID)
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +165,7 @@ func (b *Broker) NewProxyForWorker(ctx context.Context, id string) (Proxy, error
 		MasterClient: b.masterCli,
 	}
 	p.executorID = b.executorID
-	b.allocated.Store(ID(id), struct{}{})
+	b.allocated.Store(ID(resourceID), struct{}{})
 	return p, nil
 }
 

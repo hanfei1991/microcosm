@@ -106,4 +106,5 @@ var (
 	ErrDuplicateResources    = errors.Normalize("a duplicate resource exists: %s", errors.RFCCodeText("DFLOW:ErrDuplicateResources"))
 	ErrResourceNotFound      = errors.Normalize("resource not found: %s", errors.RFCCodeText("DFLOW:ErrResourceNotFound"))
 	ErrResourceMetaCorrupted = errors.Normalize("resource metadata store has been corrupted: %s", errors.RFCCodeText("DFLOW:ErrResourceMetaCorrupted"))
+	ErrCreateResourceFailed  = errors.Normalize("creating resource failed for unexpected reason: %s", errors.RFCCodeText("DFLOW:ErrCreateResourceFailed"))
 )

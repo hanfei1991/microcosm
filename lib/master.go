@@ -7,6 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hanfei1991/microcosm/pkg/externalresource"
+
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -79,7 +81,8 @@ type BaseMaster interface {
 	Close(ctx context.Context) error
 	OnError(err error)
 	// CreateWorker registers worker handler and dispatches worker to executor
-	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error)
+	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit,
+		requirements ...externalresource.ID) (WorkerID, error)
 }
 
 type DefaultBaseMaster struct {
@@ -509,7 +512,12 @@ func (m *DefaultBaseMaster) prepareWorkerConfig(
 	return
 }
 
-func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error) {
+func (m *DefaultBaseMaster) CreateWorker(
+	workerType WorkerType,
+	config WorkerConfig,
+	cost model.RescUnit,
+	requirements ...externalresource.ID,
+) (WorkerID, error) {
 	log.L().Info("CreateWorker",
 		zap.Int64("worker-type", int64(workerType)),
 		zap.Any("worker-config", config),
@@ -544,7 +552,8 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 			Task: &pb.TaskRequest{
 				Id: 0,
 			},
-			Cost: int64(cost),
+			Cost:              int64(cost),
+			RequiredResources: requirements,
 		}}},
 			// TODO (zixiong) make the timeout configurable
 			time.Second*10)

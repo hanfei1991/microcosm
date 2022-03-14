@@ -6,12 +6,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/zap"
+
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/externalresource"
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	"go.uber.org/zap"
 )
 
 var _ RescMgr = &CapRescMgr{}

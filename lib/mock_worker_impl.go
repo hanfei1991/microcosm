@@ -33,7 +33,7 @@ type workerParamListForTest struct {
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
 	MetaKVClient          metadata.MetaKV
-	ResourceProxy         externalresource.Proxy
+	ResourceBroker        *externalresource.Broker
 }
 
 //nolint:unparam

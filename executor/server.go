@@ -171,12 +171,8 @@ func (s *Server) buildDeps(wid lib.WorkerID) (*deps.Deps, error) {
 		return nil, err
 	}
 
-	proxy, err := s.resourceBroker.NewProxyForWorker(context.TODO(), wid)
-	if err != nil {
-		return nil, err
-	}
-	err = deps.Provide(func() externalresource.Proxy {
-		return proxy
+	err = deps.Provide(func() *externalresource.Broker {
+		return s.resourceBroker
 	})
 	if err != nil {
 		return nil, err

@@ -4,6 +4,7 @@ package lib
 // can finish its unit tests.
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -75,7 +76,10 @@ func MockBaseWorkerPersistResource(
 	worker *DefaultBaseWorker,
 ) {
 	// TODO more detailed checks on the method call.
-	worker.resourceProxy.(externalresource.MockProxyWithMasterCli).MockMasterCli.
+	proxy, err := worker.Resource(context.Background(), "fake-resource")
+	require.NoError(t, err)
+
+	proxy.(externalresource.MockProxyWithMasterCli).MockMasterCli.
 		Mock.On("UpdateResource", mock.Anything, mock.Anything).
 		Return(&pb.UpdateResourceResponse{
 			Error: &pb.ResourceError{ErrorCode: pb.ResourceErrorCode_ResourceOK},
