@@ -7,7 +7,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 
-	mock "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock_metaclient"
+	mock "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 )
 
