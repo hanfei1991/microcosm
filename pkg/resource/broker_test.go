@@ -44,9 +44,9 @@ func TestCollectLocalAndRemove(t *testing.T) {
 		err := os.RemoveAll("./resources")
 		require.NoError(t, err)
 	}()
-	err := os.MkdirAll("./resources/id-1", 0777)
+	err := os.MkdirAll("./resources/id-1", 0o777)
 	require.NoError(t, err)
-	err = os.MkdirAll("./resources/id-2", 0777)
+	err = os.MkdirAll("./resources/id-2", 0o777)
 	require.NoError(t, err)
 
 	allocated := MockBroker.AllocatedIDs()
