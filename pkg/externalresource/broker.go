@@ -7,91 +7,20 @@ import (
 	"path/filepath"
 	"sync"
 
-	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/pingcap/errors"
-
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/pb"
+	derror "github.com/hanfei1991/microcosm/pkg/errors"
+	"github.com/hanfei1991/microcosm/pkg/externalresource/internal"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/model"
 )
 
 type ID = string
 
-// FileWriter supports two methods:
-// - Write: classical IO API.
-// - Close: close the file and completes the upload if needed.
-type FileWriter interface {
-	storage.ExternalFileWriter
-}
-
-type fileWriter struct {
-	storage.ExternalFileWriter
-	resourceID ID
-	executorID string
-	workerID   model.WorkerID
-	masterCli  client.MasterClient
-}
-
-func (f *fileWriter) Close(ctx context.Context) error {
-	err := f.ExternalFileWriter.Close(ctx)
-	if err != nil {
-		return err
-	}
-	// failing here will generate trash files, need clean it
-	resp, err := f.masterCli.UpdateResource(ctx, &pb.UpdateResourceRequest{
-		WorkerId:   f.workerID,
-		ResourceId: string(f.resourceID),
-		// We are using the timeout lease as the default lease for persistence.
-		// The alternative may be a job lease.
-		LeaseType: pb.ResourceLeaseType_LeaseTimeout,
-	})
-	if err != nil {
-		return errors.New(resp.Error.String())
-	}
-	return nil
-}
-
-// Proxy is assigned to a worker so worker can create the resource files and notify
-// the dataflow engine.
-type Proxy interface {
-	// ID identifies the resources that one worker created, to provide cross-worker
-	// constrains.
-	ID() ID
-	// CreateFile can create a FileWriter for writing at the given path under current
-	// ID.
-	CreateFile(ctx context.Context, path string) (FileWriter, error)
-}
-
-type proxy struct {
-	resourceID model.ResourceID
-	executorID string
-	workerID   string
-	jobID      string
-
-	masterCli client.MasterClient
-	storage   storage.ExternalStorage
-}
-
-func (p proxy) ID() ID {
-	return p.resourceID
-}
-
-func (p proxy) CreateFile(ctx context.Context, path string) (FileWriter, error) {
-	writer, err := p.storage.Create(ctx, path)
-	if err != nil {
-		return nil, err
-	}
-	return &fileWriter{
-		ExternalFileWriter: writer,
-		resourceID:         p.resourceID,
-		executorID:         p.executorID,
-		masterCli:          p.masterCli,
-	}, nil
-}
 
 func newProxy(ctx context.Context, pathPrefix, id string) (*proxy, error) {
 	storagePath := filepath.Join(pathPrefix, id)

@@ -8,7 +8,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 
-	"github.com/hanfei1991/microcosm/pkg/ctxMu"
+	"github.com/hanfei1991/microcosm/pkg/ctxmu"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/internal"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/model"
@@ -16,7 +16,7 @@ import (
 )
 
 type Manager struct {
-	mu            ctxMu.CtxMutex
+	mu            ctxmu.CtxMutex
 	metaAccessor  *internal.MetadataAccessor
 	gcCoordinator *internal.GCCoordinator
 
@@ -28,7 +28,7 @@ type Manager struct {
 func NewManager(client metaclient.KV) *Manager {
 	gcCtx, cancel := context.WithCancel(context.Background())
 	ret := &Manager{
-		mu:            ctxMu.New(),
+		mu:            ctxmu.New(),
 		metaAccessor:  internal.NewMetadataAccessor(client),
 		gcCoordinator: &internal.GCCoordinator{},
 		cancelGC:      cancel,
