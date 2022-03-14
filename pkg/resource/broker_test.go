@@ -45,7 +45,7 @@ func TestProxyConcurrent(t *testing.T) {
 
 func TestCollectLocalAndRemove(t *testing.T) {
 	t.Parallel()
-	
+
 	prefix := "resources-2"
 	broker := NewBroker("executor-id", prefix, nil)
 	defer func() {
