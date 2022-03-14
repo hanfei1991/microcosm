@@ -119,10 +119,6 @@ func NewBroker(executorID, pathPrefix string, masterCli client.MasterClient) *Br
 	}
 }
 
-var MockBroker = Broker{
-	pathPrefix: "resources",
-}
-
 func (b *Broker) NewProxyForWorker(ctx context.Context, id string) (Proxy, error) {
 	p, err := newProxy(ctx, b.pathPrefix, id)
 	if err != nil {
