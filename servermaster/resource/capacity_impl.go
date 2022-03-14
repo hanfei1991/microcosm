@@ -4,6 +4,7 @@ import (
 	"context"
 	"math/rand"
 	"sync"
+	"time"
 
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
@@ -19,6 +20,7 @@ var _ RescMgr = &CapRescMgr{}
 // alloction algorithm
 type CapRescMgr struct {
 	mu        sync.Mutex
+	r         *rand.Rand // random generator for choosing node
 	executors map[model.ExecutorID]*ExecutorResource
 	startIdx  int
 
@@ -30,6 +32,7 @@ type CapRescMgr struct {
 
 func NewCapRescMgr(managerThunk func() *externalresource.Manager) *CapRescMgr {
 	return &CapRescMgr{
+		r:         rand.New(rand.NewSource(time.Now().UnixNano())),
 		executors: make(map[model.ExecutorID]*ExecutorResource),
 		startIdx:  rand.Int(),
 	}
@@ -124,7 +127,7 @@ func (m *CapRescMgr) allocateTasksWithNaiveStrategy(
 		return false, nil
 	}
 
-	originalIdx := m.startIdx % len(resources)
+	originalIdx := m.r.Intn(len(resources))
 	idx := originalIdx
 	for {
 		exec := resources[idx]

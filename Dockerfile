@@ -14,7 +14,7 @@ WORKDIR /data-engine
 COPY go.mod .
 COPY go.sum .
 
-RUN GO111MODULE=on go mod download
+RUN GOPROXY=https://proxy.golang.com.cn,direct GO111MODULE=on go mod download
 
 # Protoc setup
 RUN apk add --no-cache \
