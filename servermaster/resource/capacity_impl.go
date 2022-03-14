@@ -16,11 +16,13 @@ import (
 // alloction algorithm
 type CapRescMgr struct {
 	mu        sync.Mutex
+	r         *rand.Rand // random generator for choosing node
 	executors map[model.ExecutorID]*ExecutorResource
 }
 
 func NewCapRescMgr() *CapRescMgr {
 	return &CapRescMgr{
+		r:         rand.New(rand.NewSource(time.Now().UnixNano())),
 		executors: make(map[model.ExecutorID]*ExecutorResource),
 	}
 }
@@ -89,8 +91,7 @@ func (m *CapRescMgr) allocateTasksWithNaiveStrategy(
 		// No resources in this cluster
 		return false, nil
 	}
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	idx := r.Intn(len(resources))
+	idx := m.r.Intn(len(resources))
 	for _, task := range tasks {
 		originalIdx := idx
 		for {
