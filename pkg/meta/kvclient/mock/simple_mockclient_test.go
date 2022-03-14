@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanfei1991/microcosm/pkg/metaclient"
+	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/stretchr/testify/require"
 )
 

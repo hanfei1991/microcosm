@@ -5,7 +5,7 @@ import (
 	"strings"
 	"sync"
 
-	metaclient "github.com/hanfei1991/microcosm/pkg/metaclient"
+	metaclient "github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 )
 
 type mockTxn struct {
