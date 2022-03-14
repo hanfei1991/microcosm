@@ -3,6 +3,7 @@ package resource
 import (
 	"context"
 	"os"
+	"sort"
 	"strconv"
 	"sync"
 	"testing"
@@ -36,4 +37,26 @@ func TestProxyConcurrent(t *testing.T) {
 
 	err = os.RemoveAll("./resources")
 	require.NoError(t, err)
+}
+
+func TestCollectLocalAndRemove(t *testing.T) {
+	defer func() {
+		err := os.RemoveAll("./resources")
+		require.NoError(t, err)
+	}()
+	err := os.MkdirAll("./resources/id-1", 0777)
+	require.NoError(t, err)
+	err = os.MkdirAll("./resources/id-2", 0777)
+	require.NoError(t, err)
+
+	allocated := MockBroker.AllocatedIDs()
+	sort.Strings(allocated)
+	require.Equal(t, []string{"id-1", "id-2"}, allocated)
+
+	MockBroker.Remove("id-1")
+	allocated = MockBroker.AllocatedIDs()
+	require.Equal(t, []string{"id-2"}, allocated)
+	// should not exist
+	_, err = os.Stat("./resources/id-1")
+	require.EqualError(t, err, "stat ./resources/id-1: no such file or directory")
 }
