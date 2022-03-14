@@ -1,4 +1,4 @@
-package mock_metaclient
+package mock
 
 import (
 	"context"

@@ -1,4 +1,4 @@
-package mock_metaclient
+package mock
 
 import (
 	"context"
@@ -30,7 +30,7 @@ func (t *mockTxn) Commit() (*metaclient.TxnResponse, metaclient.Error) {
 	return nil, nil
 }
 
-// [TODO] use an embeded etcd as store may be better
+// [TODO] use an embedded etcd as store may be better
 // not support Option/txn yet
 type MetaMock struct {
 	sync.Mutex
