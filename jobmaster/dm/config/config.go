@@ -139,6 +139,7 @@ func GenerateTaskID(upstreamCfg *UpstreamCfg) string {
 func (c *JobCfg) ToTaskConfigs() map[string]*TaskCfg {
 	taskCfgs := make(map[string]*TaskCfg, len(c.Upstreams))
 	for _, mysqlInstance := range c.Upstreams {
+		// nolint:errcheck
 		jobCfg, _ := c.Clone()
 		jobCfg.Upstreams = []*UpstreamCfg{mysqlInstance}
 
