@@ -7,8 +7,6 @@ import (
 	"sync"
 	"time"
 
-	resourceModel "github.com/hanfei1991/microcosm/pkg/externalresource/model"
-
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -26,6 +24,7 @@ import (
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/deps"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
+	resourceModel "github.com/hanfei1991/microcosm/pkg/externalresource/model"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
