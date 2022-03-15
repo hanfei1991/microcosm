@@ -178,6 +178,6 @@ syncers:
 #  validator-01:
 #    mode: none
 #    worker-count: 4
-clean-dump-file: true
+#clean-dump-file: true
 experimental:
   async-checkpoint-flush: false

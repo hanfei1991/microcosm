@@ -46,7 +46,9 @@ type JobCfg struct {
 	MetaSchema     string                  `yaml:"meta-schema" toml:"meta-schema" json:"meta-schema"`
 	OnlineDDL      bool                    `yaml:"online-ddl" toml:"online-ddl" json:"online-ddl"`
 	ColumnMappings map[string]*column.Rule `yaml:"column-mappings" toml:"column-mappings" json:"column-mappings"`
-	CleanDumpFile  bool                    `yaml:"clean-dump-file" toml:"clean-dump-file" json:"clean-dump-file"`
+
+	// removed
+	// CleanDumpFile  bool                    `yaml:"clean-dump-file" toml:"clean-dump-file" json:"clean-dump-file"`
 
 	// should use a extra job?
 	// Validators map[string]*dmconfig.ValidatorConfig `yaml:"validators" toml:"validators" json:"validators"`
@@ -143,8 +145,8 @@ func (c *JobCfg) ToTaskConfigs() map[string]*TaskCfg {
 		jobCfg, _ := c.Clone()
 		jobCfg.Upstreams = []*UpstreamCfg{mysqlInstance}
 
-		taskCfg := TaskCfg(*jobCfg)
-		taskCfgs[GenerateTaskID(mysqlInstance)] = &taskCfg
+		taskCfg := (*TaskCfg)(jobCfg)
+		taskCfgs[GenerateTaskID(mysqlInstance)] = taskCfg
 	}
 	return taskCfgs
 }
