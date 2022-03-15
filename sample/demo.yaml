@@ -6,5 +6,3 @@ services:
                         - "1234:1234"
                 command:
                         - ./bin/demoserver
-                        - "/data"
-                        - "10000"
