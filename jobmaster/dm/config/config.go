@@ -116,7 +116,6 @@ func (jc *JobCfg) adjust() error {
 	return nil
 }
 
-// yam returns YAML format representation of config.
 func (c *JobCfg) Yaml() (string, error) {
 	b, err := yaml.Marshal(c)
 	return string(b), err

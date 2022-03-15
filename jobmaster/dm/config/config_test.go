@@ -20,7 +20,7 @@ func TestJobCfg(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, clone, jobCfg)
 
-	require.Error(t, jobCfg.DecodeFile("./job_not_exit.yaml"))
+	require.Error(t, jobCfg.DecodeFile("./job_not_exist.yaml"))
 }
 
 func TestTaskCfg(t *testing.T) {
