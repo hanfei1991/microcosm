@@ -10,9 +10,9 @@ import (
 	"github.com/hanfei1991/microcosm/lib/fake"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/deps"
+	"github.com/hanfei1991/microcosm/pkg/externalresource"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
-	"github.com/hanfei1991/microcosm/pkg/resource"
 )
 
 type paramList struct {
@@ -21,7 +21,7 @@ type paramList struct {
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
 	MetaKVClient          metadata.MetaKV
-	ResourceProxy         resource.Proxy
+	ResourceProxy         externalresource.Proxy
 }
 
 func makeCtxWithMockDeps(t *testing.T) *dcontext.Context {
@@ -31,7 +31,7 @@ func makeCtxWithMockDeps(t *testing.T) *dcontext.Context {
 			MessageHandlerManager: p2p.NewMockMessageHandlerManager(),
 			MessageSender:         p2p.NewMockMessageSender(),
 			MetaKVClient:          metadata.NewMetaMock(),
-			ResourceProxy:         resource.NewMockProxy("makeCtxWithMockDeps"),
+			ResourceProxy:         externalresource.NewMockProxy("makeCtxWithMockDeps"),
 		}
 	})
 	require.NoError(t, err)
