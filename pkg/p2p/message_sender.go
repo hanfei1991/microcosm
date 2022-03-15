@@ -32,6 +32,7 @@ func NewMessageSender(router MessageRouter) MessageSender {
 }
 
 // SendToNodeB implements MessageSender.SendToNodeB
+// Note the blocking send may have performance issue, BE CAUTION when using this function.
 func (m *messageSenderImpl) SendToNodeB(
 	ctx context.Context, targetNodeID NodeID, topic Topic, message interface{},
 ) error {
@@ -40,6 +41,7 @@ func (m *messageSenderImpl) SendToNodeB(
 		return nil
 	}
 
+	// TODO: blocking send in p2p library may have performance issue
 	_, err := client.SendMessage(ctx, topic, message)
 	return err
 }
