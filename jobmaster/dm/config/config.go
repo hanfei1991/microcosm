@@ -71,24 +71,24 @@ type UpstreamCfg struct {
 	DBCfg                  *dmconfig.DBConfig `yaml:"db-config" toml:"db-config" json:"db-config"`
 }
 
-func (jc *JobCfg) DecodeFile(fpath string) error {
+func (c *JobCfg) DecodeFile(fpath string) error {
 	bs, err := os.ReadFile(fpath)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	if err = yaml.UnmarshalStrict(bs, jc); err != nil {
+	if err = yaml.UnmarshalStrict(bs, c); err != nil {
 		return err
 	}
-	return jc.adjust()
+	return c.adjust()
 }
 
 // copy from tiflow/dm/config/config.go#adjust
 // should be refactor
-func (jc *JobCfg) adjust() error {
-	for _, upstream := range jc.Upstreams {
+func (c *JobCfg) adjust() error {
+	for _, upstream := range c.Upstreams {
 		if len(upstream.MydumperConfigName) > 0 {
-			rule, ok := jc.Mydumpers[upstream.MydumperConfigName]
+			rule, ok := c.Mydumpers[upstream.MydumperConfigName]
 			if !ok {
 				return errors.Errorf("mydumper config %s not exist in mydumpers", upstream.MydumperConfigName)
 			}
@@ -96,7 +96,7 @@ func (jc *JobCfg) adjust() error {
 			*upstream.Mydumper = *rule
 		}
 		if len(upstream.LoaderConfigName) > 0 {
-			rule, ok := jc.Loaders[upstream.LoaderConfigName]
+			rule, ok := c.Loaders[upstream.LoaderConfigName]
 			if !ok {
 				return errors.Errorf("loader config %s not exist in loaders", upstream.LoaderConfigName)
 			}
@@ -104,7 +104,7 @@ func (jc *JobCfg) adjust() error {
 			*upstream.Loader = *rule // ref loader config
 		}
 		if len(upstream.SyncerConfigName) > 0 {
-			rule, ok := jc.Syncers[upstream.SyncerConfigName]
+			rule, ok := c.Syncers[upstream.SyncerConfigName]
 			if !ok {
 				return errors.Errorf("syncer config %s not exist in syncers", upstream.SyncerConfigName)
 			}
