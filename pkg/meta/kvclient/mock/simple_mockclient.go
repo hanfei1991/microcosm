@@ -9,6 +9,7 @@ import (
 )
 
 type mockTxn struct {
+	c   context.Context
 	m   *MetaMock
 	ops []metaclient.Op
 }
@@ -21,7 +22,7 @@ func (t *mockTxn) Do(ops ...metaclient.Op) metaclient.Txn {
 // [TODO] refine
 func (t *mockTxn) Commit() (*metaclient.TxnResponse, metaclient.Error) {
 	for _, op := range t.ops {
-		_, err := t.m.Put(context.Background(), string(op.KeyBytes()), string(op.ValueBytes()))
+		_, err := t.m.Put(t.c, string(op.KeyBytes()), string(op.ValueBytes()))
 		if err != nil {
 			return nil, err
 		}
@@ -92,6 +93,7 @@ func (m *MetaMock) Get(ctx context.Context, key string, opts ...metaclient.OpOpt
 func (m *MetaMock) Txn(ctx context.Context) metaclient.Txn {
 	return &mockTxn{
 		m: m,
+		c: ctx,
 	}
 }
 
