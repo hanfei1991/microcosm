@@ -6,14 +6,14 @@ import (
 	"testing"
 	"time"
 
-	dcontext "github.com/hanfei1991/microcosm/pkg/context"
-	"github.com/hanfei1991/microcosm/pkg/deps"
-
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/model"
+	dcontext "github.com/hanfei1991/microcosm/pkg/context"
+	"github.com/hanfei1991/microcosm/pkg/deps"
+	"github.com/hanfei1991/microcosm/pkg/externalresource"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
@@ -125,6 +125,7 @@ func newBaseJobMasterForTests(impl JobMasterImpl) *DefaultBaseJobMaster {
 		MetaKVClient:          metadata.NewMetaMock(),
 		ExecutorClientManager: client.NewClientManager(),
 		ServerMasterClient:    &client.MockServerMasterClient{},
+		ResourceBroker:        externalresource.NewMockBroker(),
 	}
 	dp := deps.NewDeps()
 	err := dp.Provide(func() masterParamListForTest {

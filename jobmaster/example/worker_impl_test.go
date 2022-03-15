@@ -33,7 +33,7 @@ func TestExampleWorker(t *testing.T) {
 	err := worker.Init(ctx)
 	require.NoError(t, err)
 
-	lib.MockBaseWorkerPersistResource(t, worker.BaseWorker.(*lib.DefaultBaseWorker))
+	lib.MockBaseWorkerOpenResource(t, worker.BaseWorker.(*lib.DefaultBaseWorker), "./unit_test_resources/worker")
 
 	// tick twice
 	err = worker.Tick(ctx)

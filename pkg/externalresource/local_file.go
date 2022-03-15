@@ -1,12 +1,10 @@
-package types
+package externalresource
 
 import (
 	"context"
 	"path/filepath"
 
-	"github.com/hanfei1991/microcosm/pkg/externalresource/internal"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/model"
-	"github.com/hanfei1991/microcosm/pkg/externalresource/storage"
 	brStorage "github.com/pingcap/tidb/br/pkg/storage"
 )
 
@@ -18,10 +16,6 @@ const (
 	// TODO pass a config option from the executor.
 	LocalFsPrefix = "/tmp/dataflow/files/"
 )
-
-type localFileProxy struct {
-	*internal.BaseProxy
-}
 
 // LocalFileType implements methods necessary for manage
 // local on-disk files.
@@ -42,9 +36,9 @@ func (l *LocalFileType) CleanUp(ctx context.Context, id model.ResourceID) error 
 // local file storage space.
 func (l *LocalFileType) CreateStorage(
 	ctx context.Context,
-	baseProxy *internal.BaseProxy,
+	baseProxy *BaseProxy,
 	suffix string,
-) (storage.Proxy, error) {
+) (Proxy, error) {
 	storagePath := filepath.Join(LocalFsPrefix, suffix)
 	backend, err := brStorage.ParseBackend(storagePath, nil)
 	if err != nil {
@@ -55,8 +49,8 @@ func (l *LocalFileType) CreateStorage(
 		return nil, err
 	}
 
-	return &storage.ProxyImpl{
-		BaseProxy: baseProxy,
-		Storage:   s,
+	return &ProxyImpl{
+		BaseProxy:       baseProxy,
+		ExternalStorage: s,
 	}, nil
 }

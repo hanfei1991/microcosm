@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 
@@ -98,6 +100,21 @@ func (m *Manager) UpdateResource(
 	if !ok {
 		return derror.ErrResourceMetaCorrupted.GenWithStackByArgs(resourceID)
 	}
+	return nil
+}
+
+func (m *Manager) OnWorkerClosed(
+	ctx context.Context,
+	workerID model.WorkerID,
+) error {
+	if !m.mu.Lock(ctx) {
+		return errors.Trace(ctx.Err())
+	}
+	defer m.mu.Unlock()
+
+	// TODO implement me
+
+	log.L().Info("ExternalResourceManager: OnWorkerClosed", zap.String("worker-id", workerID))
 	return nil
 }
 

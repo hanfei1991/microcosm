@@ -21,7 +21,7 @@ type paramList struct {
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
 	MetaKVClient          metadata.MetaKV
-	ResourceProxy         externalresource.Proxy
+	ResourceBroker        externalresource.Broker
 }
 
 func makeCtxWithMockDeps(t *testing.T) *dcontext.Context {
@@ -31,7 +31,7 @@ func makeCtxWithMockDeps(t *testing.T) *dcontext.Context {
 			MessageHandlerManager: p2p.NewMockMessageHandlerManager(),
 			MessageSender:         p2p.NewMockMessageSender(),
 			MetaKVClient:          metadata.NewMetaMock(),
-			ResourceProxy:         externalresource.NewMockProxy("makeCtxWithMockDeps"),
+			ResourceBroker:        externalresource.NewMockBroker(),
 		}
 	})
 	require.NoError(t, err)

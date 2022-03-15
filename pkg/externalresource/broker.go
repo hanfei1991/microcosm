@@ -2,155 +2,80 @@ package externalresource
 
 import (
 	"context"
-	"io/ioutil"
-	"os"
-	"path/filepath"
-	"sync"
-
-	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/br/pkg/storage"
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	"go.uber.org/zap"
 
 	"github.com/hanfei1991/microcosm/client"
-	"github.com/hanfei1991/microcosm/pb"
-	derror "github.com/hanfei1991/microcosm/pkg/errors"
-	"github.com/hanfei1991/microcosm/pkg/externalresource/internal"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/model"
 )
 
-type ID = string
+type Broker interface {
+	OpenStorage(
+		ctx context.Context,
+		workerID model.WorkerID,
+		jobID model.JobID,
+		resourcePath model.ResourceID,
+	) (Proxy, error)
 
-
-func newProxy(ctx context.Context, pathPrefix, id string) (*proxy, error) {
-	storagePath := filepath.Join(pathPrefix, id)
-	// only support local disk now
-	backend, err := storage.ParseBackend(storagePath, nil)
-	if err != nil {
-		return nil, err
-	}
-	s, err := storage.New(ctx, backend, nil)
-	if err != nil {
-		return nil, err
-	}
-	return &proxy{
-		resourceID: ID(id),
-		storage:    s,
-	}, nil
+	OnWorkerClosed(
+		ctx context.Context,
+		workerID model.WorkerID,
+		jobID model.JobID,
+	)
 }
 
-// Broker is singleton per executor, it communicates with Manager of server master.
-type Broker struct {
-	// map[ID]struct{}
-	allocated        sync.Map
-	collectLocalOnce sync.Once
-
+// BrokerImpl is singleton per executor, it communicates with Manager of server master.
+type BrokerImpl struct {
 	executorID string
 	pathPrefix string
 	masterCli  client.MasterClient // nil when in test
+
+	resourceTypeParser *ResourceTypeParser
+	localFileService   *LocalService
 }
 
-func NewBroker(executorID, pathPrefix string, masterCli client.MasterClient) *Broker {
-	return &Broker{
-		executorID: executorID,
-		pathPrefix: pathPrefix,
-		masterCli:  masterCli,
+func NewBroker(executorID, pathPrefix string, masterCli client.MasterClient) *BrokerImpl {
+	typeParser := NewResourceTypeParser()
+	typeParser.RegisterResourceType(ResourceTypeLocalFile, &LocalFileType{})
+	return &BrokerImpl{
+		executorID:         executorID,
+		pathPrefix:         pathPrefix,
+		masterCli:          masterCli,
+		resourceTypeParser: typeParser,
+		localFileService: &LocalService{
+			LocalFileRootPath: pathPrefix,
+		},
 	}
 }
 
-func (b *Broker) NewProxyForWorker(
+func (b *BrokerImpl) OpenStorage(
 	ctx context.Context,
-	resourceID model.ResourceID,
 	workerID model.WorkerID,
-	jobID model.JobID) (Proxy, error) {
-
-	resp, err := b.masterCli.CreateResource(ctx, &pb.CreateResourceRequest{
-		ResourceId: resourceID,
-		ExecutorId: b.executorID,
-		JobId:      jobID,
-		WorkerId:   workerID,
-	})
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	switch resp.Error.ErrorCode {
-	case pb.ResourceErrorCode_ResourceOK:
-		break
-	case pb.ResourceErrorCode_ResourceDuplicate:
-		return nil, derror.ErrDuplicateResources.GenWithStackByArgs(resourceID)
-	default:
-		return nil, derror.ErrCreateResourceFailed.GenWithStackByArgs(resp.GetError().String())
-	}
-	if resp.Error.BaseError != nil {
-		return nil, derror.ErrCreateResourceFailed.GenWithStackByArgs(resp.GetError().String())
-	}
-
-	p, err := newProxy(ctx, b.pathPrefix, resourceID)
+	jobID model.JobID,
+	resourcePath model.ResourceID,
+) (Proxy, error) {
+	tp, suffix, err := b.resourceTypeParser.ParseResourcePath(resourcePath)
 	if err != nil {
 		return nil, err
 	}
-	// we only need one request for one resource proxy (one folder)
-	p.masterCli = &ignoreAfterSuccClient{
-		MasterClient: b.masterCli,
+
+	baseProxy := &BaseProxy{
+		ResourceID:   resourcePath,
+		ExecutorID:   model.ExecutorID(b.executorID),
+		WorkerID:     workerID,
+		JobID:        jobID,
+		MasterCli:    b.masterCli,
+		ResourceType: tp,
 	}
-	p.executorID = b.executorID
-	b.allocated.Store(ID(resourceID), struct{}{})
-	return p, nil
+	if err := baseProxy.Initialize(ctx); err != nil {
+		return nil, err
+	}
+
+	return tp.CreateStorage(ctx, baseProxy, suffix)
 }
 
-// Remove the allocated information and local resource folder (if applicable) for
-// the given ID. Manager should make sure no worker is using the resource.
-func (b *Broker) Remove(id string) {
-	folder := filepath.Join(b.pathPrefix, id)
-	err := os.RemoveAll(folder)
-	if err != nil {
-		log.L().Error("failed to remove resource folder",
-			zap.String("folder", folder), zap.Error(err))
-	}
-	b.allocated.Delete(ID(id))
-}
-
-func (b *Broker) AllocatedIDs() []string {
-	b.collectLocalOnce.Do(b.collectLocal)
-
-	var ids []string
-	b.allocated.Range(func(k, v interface{}) bool {
-		ids = append(ids, string(k.(ID)))
-		return true
-	})
-	return ids
-}
-
-func (b *Broker) collectLocal() {
-	entries, err := ioutil.ReadDir(b.pathPrefix)
-	if err != nil {
-		log.L().Error("failed to read local resources", zap.Error(err))
-		return
-	}
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		b.allocated.Store(ID(entry.Name()), struct{}{})
-	}
-}
-
-type MockProxyWithMasterCli struct {
-	*proxy
-	MockMasterCli *client.MockServerMasterClient
-}
-
-func NewMockProxy(id string) MockProxyWithMasterCli {
-	p, err := newProxy(context.TODO(), "unit_test_resources", id)
-	if err != nil {
-		log.L().Panic("failed in NewMockProxy",
-			zap.String("resourceID", id),
-			zap.Error(err))
-	}
-	mockMasterCli := &client.MockServerMasterClient{}
-	p.masterCli = mockMasterCli
-	return MockProxyWithMasterCli{
-		proxy:         p,
-		MockMasterCli: mockMasterCli,
-	}
+func (b *BrokerImpl) OnWorkerClosed(
+	ctx context.Context,
+	workerID model.WorkerID,
+	jobID model.JobID,
+) {
+	// TODO implement me
 }

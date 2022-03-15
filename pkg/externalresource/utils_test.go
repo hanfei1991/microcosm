@@ -19,7 +19,7 @@ func TestIgnoreAfterSuccClient(t *testing.T) {
 	req := &pb.UpdateResourceRequest{}
 
 	// mock expect once
-	mockCli.Mock.On("PersistResource", mock.Anything, mock.Anything).
+	mockCli.Mock.On("UpdateResource", mock.Anything, mock.Anything).
 		Return(&pb.UpdateResourceResponse{
 			Error: &pb.ResourceError{ErrorCode: pb.ResourceErrorCode_ResourceOK},
 		}, nil)

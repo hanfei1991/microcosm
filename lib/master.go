@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hanfei1991/microcosm/pkg/externalresource"
+	resourceModel "github.com/hanfei1991/microcosm/pkg/externalresource/model"
 
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
@@ -82,7 +82,7 @@ type BaseMaster interface {
 	OnError(err error)
 	// CreateWorker registers worker handler and dispatches worker to executor
 	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit,
-		requirements ...externalresource.ID) (WorkerID, error)
+		requirements ...resourceModel.ResourceID) (WorkerID, error)
 }
 
 type DefaultBaseMaster struct {
@@ -516,7 +516,7 @@ func (m *DefaultBaseMaster) CreateWorker(
 	workerType WorkerType,
 	config WorkerConfig,
 	cost model.RescUnit,
-	requirements ...externalresource.ID,
+	requirements ...resourceModel.ResourceID,
 ) (WorkerID, error) {
 	log.L().Info("CreateWorker",
 		zap.Int64("worker-type", int64(workerType)),

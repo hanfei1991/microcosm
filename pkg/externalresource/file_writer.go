@@ -1,32 +1,39 @@
-package storage
+package externalresource
 
 import (
 	"context"
+
+	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb/br/pkg/storage"
+
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/model"
-	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/br/pkg/storage"
 )
 
-type fileWriter struct {
+type FileWriterImpl struct {
 	storage.ExternalFileWriter
 
-	resourceID model.ResourceID
-	executorID model.ExecutorID
-	workerID   model.WorkerID
-	masterCli  client.MasterClient
+	ResourceID model.ResourceID
+	ExecutorID model.ExecutorID
+	WorkerID   model.WorkerID
+	MasterCli  client.MasterClient
 }
 
-func (f *fileWriter) Close(ctx context.Context) error {
+func (f *FileWriterImpl) Close(ctx context.Context) error {
 	err := f.ExternalFileWriter.Close(ctx)
 	if err != nil {
 		return err
 	}
+
+	if f.MasterCli == nil {
+		return nil
+	}
+
 	// failing here will generate trash files, need clean it
-	resp, err := f.masterCli.UpdateResource(ctx, &pb.UpdateResourceRequest{
-		WorkerId:   f.workerID,
-		ResourceId: f.resourceID,
+	resp, err := f.MasterCli.UpdateResource(ctx, &pb.UpdateResourceRequest{
+		WorkerId:   f.WorkerID,
+		ResourceId: f.ResourceID,
 		// We are using the timeout lease as the default lease for persistence.
 		// The alternative may be a job lease.
 		LeaseType: pb.ResourceLeaseType_LeaseTimeout,

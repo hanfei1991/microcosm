@@ -1,47 +1,43 @@
-package storage
+package externalresource
 
 import (
 	"context"
 
-	"github.com/hanfei1991/microcosm/pkg/externalresource/internal"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/model"
-	"github.com/pingcap/tidb/br/pkg/storage"
+	brStorage "github.com/pingcap/tidb/br/pkg/storage"
 )
 
 // Proxy represents a handle to a storage space.
 // It is used directly by the business logic to perform
 // file-related operations.
 type Proxy interface {
+	brStorage.ExternalStorage
+
 	ID() model.ResourceID
 	CreateFile(ctx context.Context, path string) (FileWriter, error)
-	URI() string
 }
 
 // FileWriter supports two methods:
 // - Write: classical IO API.
 // - Close: close the file and completes the upload if needed.
 type FileWriter interface {
-	storage.ExternalFileWriter
+	brStorage.ExternalFileWriter
 }
 
 type ProxyImpl struct {
-	*internal.BaseProxy
-	Storage storage.ExternalStorage
+	*BaseProxy
+	brStorage.ExternalStorage
 }
 
 func (p *ProxyImpl) CreateFile(ctx context.Context, path string) (FileWriter, error) {
-	writer, err := p.Storage.Create(ctx, path)
+	writer, err := p.ExternalStorage.Create(ctx, path)
 	if err != nil {
 		return nil, err
 	}
-	return &fileWriter{
+	return &FileWriterImpl{
 		ExternalFileWriter: writer,
-		resourceID:         p.ResourceID,
-		executorID:         p.ExecutorID,
-		masterCli:          p.MasterCli,
+		ResourceID:         p.ResourceID,
+		ExecutorID:         p.ExecutorID,
+		MasterCli:          p.MasterCli,
 	}, nil
-}
-
-func (p *ProxyImpl) URI() string {
-	return p.Storage.URI()
 }

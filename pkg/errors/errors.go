@@ -107,4 +107,5 @@ var (
 	ErrResourceNotFound      = errors.Normalize("resource not found: %s", errors.RFCCodeText("DFLOW:ErrResourceNotFound"))
 	ErrResourceMetaCorrupted = errors.Normalize("resource metadata store has been corrupted: %s", errors.RFCCodeText("DFLOW:ErrResourceMetaCorrupted"))
 	ErrCreateResourceFailed  = errors.Normalize("creating resource failed for unexpected reason: %s", errors.RFCCodeText("DFLOW:ErrCreateResourceFailed"))
+	ErrResourceTypeNotFound  = errors.Normalize("resource type not found for path: %s", errors.RFCCodeText("DFLOW:ErrResourceTypeNotFound"))
 )

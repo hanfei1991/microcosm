@@ -4,17 +4,16 @@ package lib
 // can finish its unit tests.
 
 import (
-	"context"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/hanfei1991/microcosm/pb"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/deps"
 	"github.com/hanfei1991/microcosm/pkg/externalresource"
+	resourceModel "github.com/hanfei1991/microcosm/pkg/externalresource/model"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
@@ -30,7 +29,7 @@ func MockBaseWorker(
 		MessageHandlerManager: p2p.NewMockMessageHandlerManager(),
 		MessageSender:         p2p.NewMockMessageSender(),
 		MetaKVClient:          metadata.NewMetaMock(),
-		ResourceProxy:         externalresource.NewMockProxy(workerID),
+		ResourceBroker:        externalresource.NewMockBroker(),
 	}
 	err := dp.Provide(func() workerParamListForTest {
 		return params
@@ -71,17 +70,15 @@ func MockBaseWorkerWaitUpdateStatus(
 	}, time.Second, 100*time.Millisecond)
 }
 
-func MockBaseWorkerPersistResource(
+func MockBaseWorkerOpenResource(
 	t *testing.T,
 	worker *DefaultBaseWorker,
+	resourcePath resourceModel.ResourceID,
 ) {
-	// TODO more detailed checks on the method call.
-	proxy, err := worker.Resource(context.Background(), "fake-resource")
+	broker := worker.resourceBroker.(*externalresource.MockBroker)
+	proxy, err := externalresource.NewSimpleProxy(resourcePath, resourcePath)
 	require.NoError(t, err)
 
-	proxy.(externalresource.MockProxyWithMasterCli).MockMasterCli.
-		Mock.On("UpdateResource", mock.Anything, mock.Anything).
-		Return(&pb.UpdateResourceResponse{
-			Error: &pb.ResourceError{ErrorCode: pb.ResourceErrorCode_ResourceOK},
-		}, nil)
+	broker.On("OpenStorage", mock.Anything, worker.id, worker.masterID, resourcePath).
+		Return(proxy, nil)
 }

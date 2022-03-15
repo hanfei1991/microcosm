@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"sync"
 
+	"github.com/hanfei1991/microcosm/pkg/externalresource"
+
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/mock"
 	"go.uber.org/atomic"
@@ -15,7 +17,6 @@ import (
 	"github.com/hanfei1991/microcosm/pb"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/deps"
-	"github.com/hanfei1991/microcosm/pkg/externalresource"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
@@ -66,7 +67,7 @@ type masterParamListForTest struct {
 	MetaKVClient          metadata.MetaKV
 	ExecutorClientManager client.ClientsManager
 	ServerMasterClient    client.MasterClient
-	ResourceProxy         externalresource.Proxy
+	ResourceBroker        externalresource.Broker
 }
 
 func (m *MockMasterImpl) Reset() {
@@ -85,7 +86,6 @@ func (m *MockMasterImpl) Reset() {
 			MetaKVClient:          m.metaKVClient,
 			ExecutorClientManager: m.executorClientManager,
 			ServerMasterClient:    m.serverMasterClient,
-			ResourceProxy:         externalresource.NewMockProxy(m.id),
 		}
 	})
 	if err != nil {

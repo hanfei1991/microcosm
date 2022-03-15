@@ -17,6 +17,7 @@ import (
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/externalresource"
+	resourceModel "github.com/hanfei1991/microcosm/pkg/externalresource/model"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
@@ -60,7 +61,7 @@ type BaseWorker interface {
 	MetaKVClient() metadata.MetaKV
 	UpdateStatus(ctx context.Context, status WorkerStatus) error
 	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) (bool, error)
-	Resource(ctx context.Context, id externalresource.ID) (externalresource.Proxy, error)
+	Resource(ctx context.Context, id resourceModel.ResourceID) (externalresource.Proxy, error)
 	// Exit should be called when worker (in user logic) wants to exit
 	// - If err is nil, it means worker exits normally
 	// - If err is not nil, it means worker meets error, and after worker exits
@@ -74,7 +75,7 @@ type DefaultBaseWorker struct {
 	messageHandlerManager p2p.MessageHandlerManager
 	messageSender         p2p.MessageSender
 	metaKVClient          metadata.MetaKV
-	resourceBroker        *externalresource.Broker
+	resourceBroker        externalresource.Broker
 
 	masterClient *masterClient
 	masterID     MasterID
@@ -103,7 +104,7 @@ type workerParams struct {
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
 	MetaKVClient          metadata.MetaKV
-	ResourceBroker        *externalresource.Broker
+	ResourceBroker        externalresource.Broker
 }
 
 func NewBaseWorker(
@@ -308,8 +309,8 @@ func (w *DefaultBaseWorker) SendMessage(
 	return w.messageSender.SendToNode(ctx, w.masterClient.MasterNode(), topic, message)
 }
 
-func (w *DefaultBaseWorker) Resource(ctx context.Context, id externalresource.ID) (externalresource.Proxy, error) {
-	return w.resourceBroker.NewProxyForWorker(ctx, id, w.id, w.masterID)
+func (w *DefaultBaseWorker) Resource(ctx context.Context, id resourceModel.ResourceID) (externalresource.Proxy, error) {
+	return w.resourceBroker.OpenStorage(ctx, w.id, w.masterID, id)
 }
 
 func (w *DefaultBaseWorker) Exit(ctx context.Context, status WorkerStatus, err error) error {

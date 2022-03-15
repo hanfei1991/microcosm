@@ -60,7 +60,7 @@ type Server struct {
 	metastore       metadata.MetaKV
 	p2pMsgRouter    p2pImpl.MessageRouter
 	discoveryKeeper *serverutils.DiscoveryKeepaliver
-	resourceBroker  *externalresource.Broker
+	resourceBroker  externalresource.Broker
 }
 
 func NewServer(cfg *Config, ctx *test.Context) *Server {
@@ -134,7 +134,7 @@ func (s *Server) ResumeBatchTasks(ctx context.Context, req *pb.PauseBatchTasksRe
 	return &pb.PauseBatchTasksResponse{}, nil
 }
 
-func (s *Server) buildDeps(wid lib.WorkerID) (*deps.Deps, error) {
+func (s *Server) buildDeps() (*deps.Deps, error) {
 	deps := deps.NewDeps()
 	err := deps.Provide(func() p2p.MessageHandlerManager {
 		return s.msgServer.MakeHandlerManager()
@@ -171,7 +171,7 @@ func (s *Server) buildDeps(wid lib.WorkerID) (*deps.Deps, error) {
 		return nil, err
 	}
 
-	err = deps.Provide(func() *externalresource.Broker {
+	err = deps.Provide(func() externalresource.Broker {
 		return s.resourceBroker
 	})
 	if err != nil {
@@ -194,7 +194,7 @@ func (s *Server) DispatchTask(ctx context.Context, req *pb.DispatchTaskRequest) 
 		ServerMasterClient:    s.cli,
 	}
 
-	dp, err := s.buildDeps(req.GetWorkerId())
+	dp, err := s.buildDeps()
 	if err != nil {
 		return nil, err
 	}
@@ -558,14 +558,14 @@ func getJoinURLs(addrs string) []string {
 }
 
 func (s *Server) reportTaskRescOnce(ctx context.Context) error {
-	resourceIDs := s.resourceBroker.AllocatedIDs()
+	// resourceIDs := s.resourceBroker.AllocatedIDs()
 
 	rescs := s.sch.Resource()
 	req := &pb.ExecWorkloadRequest{
 		// TODO: use which field as ExecutorId is more accurate
 		ExecutorId: s.cfg.WorkerAddr,
 		Workloads:  make([]*pb.ExecWorkload, 0, len(rescs)),
-		ResourceId: resourceIDs,
+		// ResourceId: resourceIDs,
 	}
 	for tp, resc := range rescs {
 		req.Workloads = append(req.Workloads, &pb.ExecWorkload{

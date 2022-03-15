@@ -62,7 +62,11 @@ func (w *exampleWorker) Tick(ctx context.Context) error {
 	w.work.tickCount++
 	count := w.work.tickCount
 	w.work.mu.Unlock()
-	file, err := w.Resource(nil, "").CreateFile(ctx, strconv.Itoa(count)+".txt")
+	proxy, err := w.Resource(ctx, "./unit_test_resources/worker")
+	if err != nil {
+		return err
+	}
+	file, err := proxy.CreateFile(ctx, strconv.Itoa(count)+".txt")
 	if err != nil {
 		return err
 	}
