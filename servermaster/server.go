@@ -11,13 +11,6 @@ import (
 	"sync"
 	"time"
 
-	model2 "github.com/hanfei1991/microcosm/pkg/externalresource/model"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-
-	"github.com/hanfei1991/microcosm/pkg/externalresource"
-	"github.com/hanfei1991/microcosm/pkg/metaclient/kvclient"
-
 	"github.com/google/uuid"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -32,6 +25,8 @@ import (
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/lib"
@@ -42,6 +37,9 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/deps"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/etcdutils"
+	"github.com/hanfei1991/microcosm/pkg/externalresource"
+	resourceModel "github.com/hanfei1991/microcosm/pkg/externalresource/model"
+	"github.com/hanfei1991/microcosm/pkg/meta/kvclient"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/pkg/serverutils"
@@ -400,7 +398,7 @@ func (s *Server) CreateResource(ctx context.Context, request *pb.CreateResourceR
 		ctx,
 		request.GetResourceId(),
 		request.GetJobId(),
-		model2.ExecutorID(request.GetExecutorId()),
+		resourceModel.ExecutorID(request.GetExecutorId()),
 		request.GetWorkerId())
 
 	if err == nil {
@@ -723,6 +721,10 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	defer func() {
 		s.leader.Store(&Member{})
 		s.resign()
+		err := s.jobManager.Close(ctx)
+		if err != nil {
+			log.L().Warn("job manager close with error", zap.Error(err))
+		}
 	}()
 
 	metricTicker := time.NewTicker(defaultMetricInterval)

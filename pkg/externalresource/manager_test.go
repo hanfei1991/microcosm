@@ -11,8 +11,8 @@ import (
 
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/model"
-	"github.com/hanfei1991/microcosm/pkg/metaclient"
-	mock "github.com/hanfei1991/microcosm/pkg/metaclient/kvclient/mock"
+	mock "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
+	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 )
 
 type managerTestSuite struct {
