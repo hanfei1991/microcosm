@@ -5,10 +5,9 @@ import (
 	"sync"
 	"time"
 
-	"go.uber.org/zap"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/zap"
 
 	"github.com/hanfei1991/microcosm/pkg/ctxmu"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
