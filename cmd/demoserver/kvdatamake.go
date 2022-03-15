@@ -25,20 +25,27 @@ import (
 var (
 	DemoAddress = "0.0.0.0:1234"
 	DemoDir     = "/data/demo/"
+	DataNum     = 0
 )
 
 var ready = make(chan struct{})
 
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
-	hint := "demo args should be: --dir dir --addr addr"
+	// Use config file save this chaos.
 	if len(os.Args) > 1 {
-		if len(os.Args) != 5 || os.Args[1] != "--dir" || os.Args[3] != "--addr" {
-			fmt.Print(hint)
-			os.Exit(1)
-		}
+		hint := "demo args should be: -d dir -a port [-r record number]"
+		fmt.Println(hint)
 		DemoAddress = os.Args[4]
 		DemoDir = os.Args[2]
+		if len(os.Args) > 5 {
+			var err error
+			DataNum, err = strconv.Atoi(os.Args[6]) //nolint:gosec
+			if err != nil {
+				fmt.Println(err.Error())
+				os.Exit(1)
+			}
+		}
 	}
 	fmt.Printf("starting demo, dir %s addr %s\n", DemoDir, DemoAddress)
 	err := log.InitLogger(&log.Config{
@@ -64,7 +71,6 @@ func main() {
 			cancel()
 		}
 	}()
-	log.L().Info("start demo", zap.String("dir", DemoDir), zap.String("addr", DemoAddress))
 	StartDataService(ctx)
 	log.L().Info("server exits normally")
 }
@@ -98,12 +104,6 @@ func (s *DataRWServer) GenerateData(ctx context.Context, req *pb.GenerateDataReq
 		value := strconv.Itoa(rand.Intn(int(req.RecordNum)))
 		batch := batches[index]
 		batch.Put([]byte(key), []byte(value))
-		if batch.Count() >= 2048 {
-			err := batch.Commit()
-			if err != nil {
-				return &pb.GenerateDataResponse{ErrMsg: err.Error()}, nil
-			}
-		}
 	}
 	for _, batch := range batches {
 		err := batch.Commit()
@@ -123,7 +123,8 @@ func (s *DataRWServer) GenerateData(ctx context.Context, req *pb.GenerateDataReq
 
 func StartDataService(ctx context.Context) {
 	grpcServer := grpc.NewServer()
-	pb.RegisterDataRWServiceServer(grpcServer, NewDataRWServer(ctx))
+	s := NewDataRWServer(ctx)
+	pb.RegisterDataRWServiceServer(grpcServer, s)
 	lis, err := net.Listen("tcp", DemoAddress) //nolint:gosec
 	if err != nil {
 		log.L().Panic("listen the port failed",
@@ -139,6 +140,22 @@ func StartDataService(ctx context.Context) {
 	wg.Go(func() error {
 		<-ctx.Done()
 		grpcServer.Stop()
+		return nil
+	})
+	wg.Go(func() error {
+		if DataNum == 0 {
+			return nil
+		}
+		log.L().Info("preparing data...", zap.Any("num", DataNum))
+		resp, _ := s.GenerateData(ctx, &pb.GenerateDataRequest{ // nolint: errcheck
+			FileNum:   10,
+			RecordNum: int32(DataNum),
+		})
+		if len(resp.ErrMsg) > 0 {
+			log.L().Error("generate data failed", zap.String("err", resp.ErrMsg))
+			os.Exit(1)
+		}
+		log.L().Info("generate data finish")
 		return nil
 	})
 
