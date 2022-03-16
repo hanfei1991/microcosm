@@ -58,6 +58,11 @@ func NewMockMasterImpl(masterID, id MasterID) *MockMasterImpl {
 	return ret
 }
 
+func (m *MockMasterImpl) OverrideMetaKVClient(cli metadata.MetaKV) {
+	m.DefaultBaseMaster.metaKVClient = cli
+	m.metaKVClient = cli.(*metadata.MetaMock)
+}
+
 type masterParamListForTest struct {
 	dig.Out
 

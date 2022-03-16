@@ -79,7 +79,6 @@ func (jm *JobManagerImplV2) QueryJob(ctx context.Context, req *pb.QueryJobReques
 			resp := &pb.QueryJobResponse{
 				Tp:     int64(masterMeta.Tp),
 				Config: masterMeta.Config,
-				Status: pb.QueryJobResponse_finished,
 			}
 			switch masterMeta.StatusCode {
 			case lib.MasterStatusFinished:
@@ -89,7 +88,8 @@ func (jm *JobManagerImplV2) QueryJob(ctx context.Context, req *pb.QueryJobReques
 				resp.Status = pb.QueryJobResponse_stopped
 				return resp
 			default:
-				log.L().Warn("load master kv meta from meta store, but status is not expected", zap.Any("id", req.JobId), zap.Any("status", masterMeta.StatusCode))
+				log.L().Warn("load master kv meta from meta store, but status is not expected",
+					zap.Any("id", req.JobId), zap.Any("status", masterMeta.StatusCode), zap.Any("meta", masterMeta))
 			}
 		}
 	}

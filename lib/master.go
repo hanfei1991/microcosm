@@ -149,7 +149,7 @@ func NewBaseMaster(
 		nodeID = ctx.Environ.NodeID
 		advertiseAddr = ctx.Environ.Addr
 		metaBytes := ctx.Environ.MasterMetaBytes
-		err := masterMeta.Unmarshal(metaBytes)
+		err := errors.Trace(masterMeta.Unmarshal(metaBytes))
 		if err != nil {
 			log.L().Warn("invalid master meta", zap.ByteString("data", metaBytes), zap.Error(err))
 		}
