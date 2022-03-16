@@ -9,6 +9,8 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 )
 
+// [Deprecated]
+
 type jobMaster struct {
 	*system.Master
 	config *Config

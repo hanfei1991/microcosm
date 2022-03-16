@@ -25,6 +25,8 @@ import (
 	"google.golang.org/grpc/backoff"
 )
 
+// [Deprecate] file
+
 func RegisterBuilder() {
 	runtime.OpBuilders[model.JobMasterType] = &jobMasterBuilder{}
 }

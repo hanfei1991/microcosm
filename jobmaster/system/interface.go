@@ -8,6 +8,8 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 )
 
+// [Deprecate] file
+
 // JobMaster maintains and manages the submitted job.
 type JobMaster interface {
 	// DispatchJob dispatches new tasks.
@@ -17,7 +19,9 @@ type JobMaster interface {
 	Start(ctx context.Context, metaKV metadata.MetaKV) (runtime.TaskRescUnit, error)
 	// Stop the job master.
 	Stop(ctx context.Context) error
+
 	PauseTasks(tasks ...*model.Task) error
+
 	PauseAllTasks() error
 	// ID returns the current job id.
 	ID() model.ID

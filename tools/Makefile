@@ -27,7 +27,7 @@ statik:
 	go build -o bin/$@ github.com/rakyll/statik
 
 gofumports:
-	go build -o bin/$@ mvdan.cc/gofumpt
+	go build -o bin/$@ mvdan.cc/gofumpt/gofumports
 
 shfmt:
 	go build -o bin/$@ mvdan.cc/sh/v3/cmd/shfmt

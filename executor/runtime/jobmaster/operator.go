@@ -11,6 +11,8 @@ import (
 	"go.uber.org/zap"
 )
 
+// [Deprecate] file
+
 type jobMasterAgent struct {
 	metaKV metadata.MetaKV
 	master system.JobMaster

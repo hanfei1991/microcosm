@@ -3,6 +3,7 @@ package cvstask
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -30,25 +31,24 @@ type strPair struct {
 }
 
 type Config struct {
-	Idx      int    `json:"Idx"`
 	SrcHost  string `json:"SrcHost"`
+	SrcDir   string `json:"SrcDir"`
 	DstHost  string `json:"DstHost"`
-	DstDir   string `json:"DstIdx"`
-	StartLoc string `json:"StartLoc"`
+	DstDir   string `json:"DstDir"`
+	StartLoc int64  `json:"StartLoc"`
 }
 
 type cvsTask struct {
 	lib.BaseWorker
-	srcHost   string
-	srcDir    string
-	dstHost   string
-	dstDir    string
-	counter   *atomic.Int64
-	recordIdx string
-	fileIdx   int
-	cancelFn  func()
-	buffer    chan strPair
-	isEOF     bool
+	srcHost  string
+	srcDir   string
+	dstHost  string
+	dstDir   string
+	counter  *atomic.Int64
+	index    int64
+	cancelFn func()
+	buffer   chan strPair
+	isEOF    bool
 
 	statusCode struct {
 		sync.RWMutex
@@ -74,10 +74,10 @@ func NewCvsTask(ctx *dcontext.Context, _workerID lib.WorkerID, masterID lib.Mast
 	cfg := conf.(*Config)
 	task := &cvsTask{
 		srcHost:           cfg.SrcHost,
-		fileIdx:           cfg.Idx,
+		srcDir:            cfg.SrcDir,
 		dstHost:           cfg.DstHost,
 		dstDir:            cfg.DstDir,
-		recordIdx:         cfg.StartLoc,
+		index:             cfg.StartLoc,
 		buffer:            make(chan strPair, BUFFERSIZE),
 		statusRateLimiter: rate.NewLimiter(rate.Every(time.Second), 1),
 		counter:           atomic.NewInt64(0),
@@ -93,18 +93,16 @@ func (task *cvsTask) InitImpl(ctx context.Context) error {
 		err := task.Receive(ctx)
 		if err != nil {
 			log.L().Error("error happened when reading data from the upstream ", zap.String("id", task.ID()), zap.Any("message", err.Error()))
-			task.setRunError(err)
 			task.setStatusCode(lib.WorkerStatusError)
+			task.setRunError(err)
 		}
 	}()
 	go func() {
 		err := task.Send(ctx)
 		if err != nil {
 			log.L().Error("error happened when writing data to the downstream ", zap.String("id", task.ID()), zap.Any("message", err.Error()))
-			task.setRunError(err)
 			task.setStatusCode(lib.WorkerStatusError)
-		} else {
-			task.setStatusCode(lib.WorkerStatusFinished)
+			task.setRunError(err)
 		}
 	}()
 
@@ -164,7 +162,7 @@ func (task *cvsTask) Receive(ctx context.Context) error {
 	}
 	client := pb.NewDataRWServiceClient(conn)
 	defer conn.Close()
-	reader, err := client.ReadLines(ctx, &pb.ReadLinesRequest{FileIdx: int32(task.fileIdx), LineNo: []byte(task.recordIdx)})
+	reader, err := client.ReadLines(ctx, &pb.ReadLinesRequest{FileName: task.srcDir, LineNo: task.index})
 	if err != nil {
 		log.L().Error("read data from file failed ", zap.String("id", task.ID()), zap.Any("message", task.srcDir))
 		return err
@@ -183,10 +181,14 @@ func (task *cvsTask) Receive(ctx context.Context) error {
 			close(task.buffer)
 			break
 		}
+		strs := strings.Split(reply.Linestr, ",")
+		if len(strs) < 2 {
+			continue
+		}
 		select {
 		case <-ctx.Done():
 			return nil
-		case task.buffer <- strPair{firstStr: string(reply.Key), secondStr: string(reply.Val)}:
+		case task.buffer <- strPair{firstStr: strs[0], secondStr: strs[1]}:
 		}
 		// waiting longer time to read lines slowly
 	}
@@ -196,7 +198,7 @@ func (task *cvsTask) Receive(ctx context.Context) error {
 func (task *cvsTask) Send(ctx context.Context) error {
 	conn, err := grpc.Dial(task.dstHost, grpc.WithInsecure())
 	if err != nil {
-		log.L().Error("can't connect with the destination address ", zap.Any("message", task.dstHost))
+		log.L().Error("cann't connect with the destination address ", zap.Any("message", task.dstHost))
 		return err
 	}
 	client := pb.NewDataRWServiceClient(conn)
@@ -211,17 +213,12 @@ func (task *cvsTask) Send(ctx context.Context) error {
 		select {
 		case kv, more := <-task.buffer:
 			if !more {
-				log.L().Info("Reach the end of the file ", zap.String("id", task.ID()))
-				resp, err := writer.CloseAndRecv()
-				if err != nil {
-					return err
-				}
-				if len(resp.ErrMsg) > 0 {
-					log.L().Warn("close writing meet error", zap.String("id", task.ID()))
-				}
-				return nil
+				log.L().Info("Reach the end of the file ")
+				task.setStatusCode(lib.WorkerStatusFinished)
+				_, err = writer.CloseAndRecv()
+				return err
 			}
-			err := writer.Send(&pb.WriteLinesRequest{FileIdx: int32(task.fileIdx), Key: []byte(kv.firstStr), Value: []byte(kv.secondStr), Dir: task.dstDir})
+			err := writer.Send(&pb.WriteLinesRequest{FileName: task.dstDir, Key: kv.firstStr, Value: kv.secondStr})
 			task.counter.Add(1)
 			if err != nil {
 				log.L().Error("call write data rpc failed ", zap.String("id", task.ID()), zap.Error(err))

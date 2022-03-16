@@ -8,6 +8,7 @@ import (
 	"time"
 
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
+	"github.com/hanfei1991/microcosm/pkg/metaclient"
 
 	"github.com/pingcap/tiflow/pkg/workerpool"
 	"github.com/stretchr/testify/require"
@@ -16,7 +17,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/deps"
-	"github.com/hanfei1991/microcosm/pkg/metadata"
+	mockkv "github.com/hanfei1991/microcosm/pkg/metaclient/kvclient/mock"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
@@ -32,7 +33,7 @@ type digParamList struct {
 
 	MessageSender         p2p.MessageSender
 	MessageHandlerManager p2p.MessageHandlerManager
-	MetaClient            metadata.MetaKV
+	MetaClient            metaclient.KVClient
 	Pool                  workerpool.AsyncPool
 }
 
@@ -58,7 +59,7 @@ func newWorkerManagerTestSuite(ctx context.Context) *workerManagerTestSuite {
 		digParamList: digParamList{
 			MessageSender:         p2p.NewMockMessageSender(),
 			MessageHandlerManager: p2p.NewMockMessageHandlerManager(),
-			MetaClient:            metadata.NewMetaMock(),
+			MetaClient:            mockkv.NewMetaMock(),
 			Pool:                  pool,
 		},
 		wg:     wg,
@@ -350,9 +351,10 @@ func TestWorkerManagerInitialization(t *testing.T) {
 		return manager.fsmState.Load() == workerManagerWaitingHeartbeats
 	}, 1*time.Second, 10*time.Millisecond)
 
-	clockDelta := manager.timeoutConfig.workerTimeoutDuration +
-		manager.timeoutConfig.workerTimeoutGracefulDuration +
-		10*time.Second
+	clockDelta :=
+		manager.timeoutConfig.workerTimeoutDuration +
+			manager.timeoutConfig.workerTimeoutGracefulDuration +
+			10*time.Second
 	manager.clock.(*clock.Mock).Set(time.Now().Add(clockDelta))
 
 	require.Eventually(t, func() bool {

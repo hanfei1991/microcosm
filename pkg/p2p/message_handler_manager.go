@@ -19,7 +19,9 @@ const (
 // NOTE: for each topic, only one handler is allowed.
 type MessageHandlerManager interface {
 	RegisterHandler(ctx context.Context, topic Topic, tpi TypeInformation, fn HandlerFunc) (bool, error)
+
 	UnregisterHandler(ctx context.Context, topic Topic) (bool, error)
+
 	CheckError(ctx context.Context) error
 
 	// Clean unregisters all existing handlers.

@@ -8,7 +8,7 @@ import (
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/errors"
-	"github.com/hanfei1991/microcosm/pkg/metadata"
+	mockkv "github.com/hanfei1991/microcosm/pkg/metaclient/kvclient/mock"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -96,8 +96,8 @@ func TestJobManagerRecover(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// prepare metadata with two job masters
-	metaKVClient := metadata.NewMetaMock()
+	// prepare mockvk with two job masters
+	metaKVClient := mockkv.NewMetaMock()
 	meta := []*lib.MasterMetaKVData{
 		{
 			ID: "master-1",

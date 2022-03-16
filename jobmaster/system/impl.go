@@ -20,6 +20,8 @@ import (
 	"golang.org/x/time/rate"
 )
 
+// [Deprecated]
+
 func arrangeTasksByExecID(tasks []*model.Task) map[model.ExecutorID]scheduleGroup {
 	arrangement := make(map[model.ExecutorID]scheduleGroup)
 	for _, task := range tasks {

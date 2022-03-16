@@ -13,7 +13,7 @@ import (
 	"github.com/hanfei1991/microcosm/pb"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/deps"
-	"github.com/hanfei1991/microcosm/pkg/metadata"
+	mockkv "github.com/hanfei1991/microcosm/pkg/metaclient/kvclient/mock"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/pkg/resource"
 )
@@ -28,8 +28,8 @@ func MockBaseWorker(
 	params := workerParamListForTest{
 		MessageHandlerManager: p2p.NewMockMessageHandlerManager(),
 		MessageSender:         p2p.NewMockMessageSender(),
-		MetaKVClient:          metadata.NewMetaMock(),
 		ResourceProxy:         resource.NewMockProxy(workerID),
+		MetaKVClient:          mockkv.NewMetaMock(),
 	}
 	err := dp.Provide(func() workerParamListForTest {
 		return params
