@@ -62,7 +62,13 @@ func (w *exampleWorker) Tick(ctx context.Context) error {
 	w.work.tickCount++
 	count := w.work.tickCount
 	w.work.mu.Unlock()
-	file, err := w.Resource().CreateFile(ctx, strconv.Itoa(count)+".txt")
+
+	storage, err := w.OpenStorage(nil, "")
+	if err != nil {
+		return err
+	}
+
+	file, err := storage.BrExternalStorage().Create(ctx, strconv.Itoa(count)+".txt")
 	if err != nil {
 		return err
 	}
@@ -70,7 +76,11 @@ func (w *exampleWorker) Tick(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return file.Close(ctx)
+
+	if err := file.Close(ctx); err != nil {
+		return err
+	}
+	return storage.Persist(ctx)
 }
 
 func (w *exampleWorker) Status() lib.WorkerStatus {

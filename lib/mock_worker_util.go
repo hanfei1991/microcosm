@@ -4,6 +4,8 @@ package lib
 // can finish its unit tests.
 
 import (
+	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
+	"github.com/hanfei1991/microcosm/pkg/externalresource/storagecfg"
 	"testing"
 	"time"
 
@@ -25,6 +27,9 @@ func MockBaseWorker(
 ) *DefaultBaseWorker {
 	ctx := dcontext.Background()
 	dp := deps.NewDeps()
+
+	brk := broker.NewBroker(
+		&storagecfg.Config{Local: &storagecfg.LocalFileConfig{BaseDir: "./unit-test-resource"}}, "executor-1", meta)
 	params := workerParamListForTest{
 		MessageHandlerManager: p2p.NewMockMessageHandlerManager(),
 		MessageSender:         p2p.NewMockMessageSender(),
