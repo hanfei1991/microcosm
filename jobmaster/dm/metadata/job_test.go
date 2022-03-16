@@ -11,6 +11,11 @@ import (
 )
 
 func TestJobStore(t *testing.T) {
+	var (
+		source1 = "mysql-replica-01"
+		source2 = "mysql-replica-02"
+	)
+
 	t.Parallel()
 
 	jobStore := NewJobStore("job_test", meta.NewMetaMock())
@@ -37,29 +42,29 @@ func TestJobStore(t *testing.T) {
 
 	job = state.(*Job)
 	require.Len(t, job.Tasks, len(jobCfg.Upstreams))
-	require.Contains(t, job.Tasks, "127.0.0.1:3306")
-	require.Contains(t, job.Tasks, "127.0.0.1:3307")
-	require.Equal(t, job.Tasks["127.0.0.1:3306"].Stage, StageInit)
-	require.Equal(t, job.Tasks["127.0.0.1:3307"].Stage, StageInit)
+	require.Contains(t, job.Tasks, source1)
+	require.Contains(t, job.Tasks, source1)
+	require.Equal(t, job.Tasks[source1].Stage, StageInit)
+	require.Equal(t, job.Tasks[source2].Stage, StageInit)
 
 	require.Error(t, jobStore.Operate(context.Background(), []string{"task-not-exist"}, StageRunning))
-	require.Error(t, jobStore.Operate(context.Background(), []string{"127.0.0.1:3306", "task-not-exist"}, StageRunning))
+	require.Error(t, jobStore.Operate(context.Background(), []string{source1, "task-not-exist"}, StageRunning))
 	state, _ = jobStore.Get(context.Background())
 	job = state.(*Job)
-	require.Equal(t, job.Tasks["127.0.0.1:3306"].Stage, StageInit)
-	require.Equal(t, job.Tasks["127.0.0.1:3307"].Stage, StageInit)
+	require.Equal(t, job.Tasks[source1].Stage, StageInit)
+	require.Equal(t, job.Tasks[source2].Stage, StageInit)
 
-	require.NoError(t, jobStore.Operate(context.Background(), []string{"127.0.0.1:3306", "127.0.0.1:3307"}, StageRunning))
-	require.Equal(t, job.Tasks["127.0.0.1:3306"].Stage, StageInit)
-	require.Equal(t, job.Tasks["127.0.0.1:3307"].Stage, StageInit)
+	require.NoError(t, jobStore.Operate(context.Background(), []string{source1, source2}, StageRunning))
+	require.Equal(t, job.Tasks[source1].Stage, StageInit)
+	require.Equal(t, job.Tasks[source2].Stage, StageInit)
 	state, _ = jobStore.Get(context.Background())
 	job = state.(*Job)
-	require.Equal(t, job.Tasks["127.0.0.1:3306"].Stage, StageRunning)
-	require.Equal(t, job.Tasks["127.0.0.1:3307"].Stage, StageRunning)
+	require.Equal(t, job.Tasks[source1].Stage, StageRunning)
+	require.Equal(t, job.Tasks[source2].Stage, StageRunning)
 
-	require.NoError(t, jobStore.Operate(context.Background(), []string{"127.0.0.1:3307"}, StageFinished))
+	require.NoError(t, jobStore.Operate(context.Background(), []string{source2}, StageFinished))
 	state, _ = jobStore.Get(context.Background())
 	job = state.(*Job)
-	require.Equal(t, job.Tasks["127.0.0.1:3306"].Stage, StageRunning)
-	require.Equal(t, job.Tasks["127.0.0.1:3307"].Stage, StageFinished)
+	require.Equal(t, job.Tasks[source1].Stage, StageRunning)
+	require.Equal(t, job.Tasks[source2].Stage, StageFinished)
 }
