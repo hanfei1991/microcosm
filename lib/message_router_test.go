@@ -76,7 +76,6 @@ func testMessageRouter(t *testing.T, suite *messageSuite) {
 
 	cancel()
 	wg.Wait()
-
 }
 
 func TestMessageRouter(t *testing.T) {
@@ -89,7 +88,6 @@ func TestMessageRouter(t *testing.T) {
 		},
 	}
 	testMessageRouter(t, suite)
-
 }
 
 func TestMessageRouterOverflow(t *testing.T) {
