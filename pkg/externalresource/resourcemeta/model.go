@@ -28,3 +28,11 @@ type GCTodoEntry struct {
 	Job          JobID      `json:"job"`
 	TargetGCTime time.Time  `json:"target_gc_time"`
 }
+
+// ResourceType represents the type of the resource
+type ResourceType string
+
+const (
+	ResourceTypeLocalFile = ResourceType("local")
+	ResourceTypeS3        = ResourceType("s3")
+)
