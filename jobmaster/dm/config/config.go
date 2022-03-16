@@ -2,7 +2,6 @@ package config
 
 import (
 	"os"
-	"strconv"
 
 	"github.com/pingcap/errors"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
@@ -133,11 +132,6 @@ func (c *JobCfg) Clone() (*JobCfg, error) {
 	return clone, err
 }
 
-// Generate task-id by host:port
-func GenerateTaskID(upstreamCfg *UpstreamCfg) string {
-	return upstreamCfg.DBCfg.Host + ":" + strconv.Itoa(upstreamCfg.DBCfg.Port)
-}
-
 func (c *JobCfg) ToTaskConfigs() map[string]*TaskCfg {
 	taskCfgs := make(map[string]*TaskCfg, len(c.Upstreams))
 	for _, mysqlInstance := range c.Upstreams {
@@ -146,14 +140,14 @@ func (c *JobCfg) ToTaskConfigs() map[string]*TaskCfg {
 		jobCfg.Upstreams = []*UpstreamCfg{mysqlInstance}
 
 		taskCfg := (*TaskCfg)(jobCfg)
-		taskCfgs[GenerateTaskID(mysqlInstance)] = taskCfg
+		taskCfgs[mysqlInstance.SourceID] = taskCfg
 	}
 	return taskCfgs
 }
 
 // ToDMSubtaskCfg adapts a TaskCfg to a SubTaskCfg for worker now.
 // TODO: fully support all fields
-func (c *TaskCfg) ToDMSubTaskCfg(sourceID string) *dmconfig.SubTaskConfig {
+func (c *TaskCfg) ToDMSubTaskCfg() *dmconfig.SubTaskConfig {
 	cfg := &dmconfig.SubTaskConfig{}
 	cfg.IsSharding = c.IsSharding
 	cfg.ShardMode = c.ShardMode
@@ -172,6 +166,7 @@ func (c *TaskCfg) ToDMSubTaskCfg(sourceID string) *dmconfig.SubTaskConfig {
 	cfg.To = *c.TargetDB
 	cfg.Experimental = c.Experimental
 	cfg.CollationCompatible = c.CollationCompatible
+	cfg.SourceID = c.Upstreams[0].SourceID
 
 	cfg.RouteRules = make([]*router.TableRule, len(c.Upstreams[0].RouteRules))
 	for j, name := range c.Upstreams[0].RouteRules {
@@ -196,7 +191,6 @@ func (c *TaskCfg) ToDMSubTaskCfg(sourceID string) *dmconfig.SubTaskConfig {
 	cfg.MydumperConfig = *c.Upstreams[0].Mydumper
 	cfg.LoaderConfig = *c.Upstreams[0].Loader
 	cfg.SyncerConfig = *c.Upstreams[0].Syncer
-	cfg.SourceID = sourceID
 
 	return cfg
 }

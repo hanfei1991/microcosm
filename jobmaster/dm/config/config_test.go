@@ -29,8 +29,8 @@ func TestTaskCfg(t *testing.T) {
 	require.NoError(t, jobCfg.DecodeFile("./job_template.yaml"))
 
 	taskCfgs := jobCfg.ToTaskConfigs()
-	for task, taskCfg := range taskCfgs {
-		subTaskCfg := taskCfg.ToDMSubTaskCfg(task)
+	for _, taskCfg := range taskCfgs {
+		subTaskCfg := taskCfg.ToDMSubTaskCfg()
 		expectCfg := &dmconfig.SubTaskConfig{}
 		_, err := toml.DecodeFile(fmt.Sprintf("./dm_subtask_%d.toml", taskCfg.Upstreams[0].DBCfg.Port), expectCfg)
 		require.NoError(t, err)
