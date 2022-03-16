@@ -82,6 +82,7 @@ type DefaultBaseWorker struct {
 
 	workerMetaClient *WorkerMetadataClient
 	statusSender     *StatusSender
+	messageRouter    *MessageRouter
 
 	id            WorkerID
 	timeoutConfig TimeoutConfig
@@ -189,6 +190,11 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) error {
 	w.workerMetaClient = NewWorkerMetadataClient(w.masterID, w.metaKVClient)
 
 	w.statusSender = NewStatusSender(w.id, w.masterClient, w.workerMetaClient, w.messageSender, w.pool)
+	w.messageRouter = NewMessageRouter(w.id, defaultMessageRouterBufferSize,
+		func(topic p2p.Topic, msg p2p.MessageValue) error {
+			return w.Impl.OnMasterMessage(topic, msg)
+		},
+	)
 
 	if err := w.initMessageHandlers(ctx); err != nil {
 		return errors.Trace(err)
@@ -226,6 +232,10 @@ func (w *DefaultBaseWorker) doPoll(ctx context.Context) error {
 	}
 
 	if err := w.statusSender.Tick(ctx); err != nil {
+		return errors.Trace(err)
+	}
+
+	if err := w.messageRouter.Tick(ctx); err != nil {
 		return errors.Trace(err)
 	}
 
@@ -409,8 +419,12 @@ func (w *DefaultBaseWorker) initMessageHandlers(ctx context.Context) error {
 		topic,
 		&StatusChangeRequest{},
 		func(sender p2p.NodeID, value p2p.MessageValue) error {
-			msg := value.(*StatusChangeRequest)
-			return w.Impl.OnMasterMessage(topic, msg)
+			msg, ok := value.(*StatusChangeRequest)
+			if !ok {
+				return derror.ErrInvalidMasterMessage.GenWithStackByArgs(value)
+			}
+			w.messageRouter.AppendMessage(topic, msg)
+			return nil
 		})
 	if err != nil {
 		return errors.Trace(err)

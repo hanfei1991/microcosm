@@ -56,6 +56,7 @@ var (
 	ErrMasterConcurrencyExceeded      = errors.Normalize("master has reached concurrency quota", errors.RFCCodeText("DFLOW:ErrMasterConcurrencyExceeded"))
 	ErrMasterInvalidMeta              = errors.Normalize("invalid master meta data: %s", errors.RFCCodeText("DFLOW:ErrMasterInvalidMeta"))
 	ErrInvalidServerMasterID          = errors.Normalize("invalid server master id: %s", errors.RFCCodeText("DFLOW:ErrInvalidServerMasterID"))
+	ErrInvalidMasterMessage           = errors.Normalize("invalid master message: %s", errors.RFCCodeText("DFLOW:ErrInvalidMasterMessage"))
 
 	ErrWorkerTypeNotFound         = errors.Normalize("worker type is not found: type %d", errors.RFCCodeText("DFLOW:ErrWorkerTypeNotFound"))
 	ErrWorkerNotFound             = errors.Normalize("worker is not found: worker ID %s", errors.RFCCodeText("DFLOW:ErrWorkerNotFound"))
