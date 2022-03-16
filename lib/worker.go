@@ -190,7 +190,7 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) error {
 	w.workerMetaClient = NewWorkerMetadataClient(w.masterID, w.metaKVClient)
 
 	w.statusSender = NewStatusSender(w.id, w.masterClient, w.workerMetaClient, w.messageSender, w.pool)
-	w.messageRouter = NewMessageRouter(w.id, defaultMessageRouterBufferSize,
+	w.messageRouter = NewMessageRouter(w.id, w.pool, defaultMessageRouterBufferSize,
 		func(topic p2p.Topic, msg p2p.MessageValue) error {
 			return w.Impl.OnMasterMessage(topic, msg)
 		},

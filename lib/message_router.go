@@ -29,11 +29,13 @@ type MessageRouter struct {
 
 func NewMessageRouter(
 	workerID WorkerID,
+	pool workerpool.AsyncPool,
 	bufferSize int,
 	routeFn func(topic p2p.Topic, msg p2p.MessageValue) error,
 ) *MessageRouter {
 	return &MessageRouter{
 		workerID: workerID,
+		pool:     pool,
 		buffer:   make(chan messageWrapper, bufferSize),
 		errCh:    make(chan error, 1),
 		routeFn:  routeFn,
