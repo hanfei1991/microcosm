@@ -4,7 +4,7 @@ import (
 	"sync"
 
 	"github.com/hanfei1991/microcosm/pkg/errors"
-	"github.com/hanfei1991/microcosm/pkg/metaclient"
+	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 )
 
 type MetaStoreManager interface {

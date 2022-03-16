@@ -10,7 +10,8 @@ import (
 	"github.com/hanfei1991/microcosm/lib/fake"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/deps"
-	"github.com/hanfei1991/microcosm/pkg/metadata"
+	extKV "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
+	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/pkg/resource"
 )
@@ -20,7 +21,7 @@ type paramList struct {
 
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
-	MetaKVClient          metadata.MetaKV
+	MetaKVClient          metaclient.KVClient
 	ResourceProxy         resource.Proxy
 }
 
@@ -30,7 +31,7 @@ func makeCtxWithMockDeps(t *testing.T) *dcontext.Context {
 		return paramList{
 			MessageHandlerManager: p2p.NewMockMessageHandlerManager(),
 			MessageSender:         p2p.NewMockMessageSender(),
-			MetaKVClient:          metadata.NewMetaMock(),
+			MetaKVClient:          extKV.NewMetaMock(),
 			ResourceProxy:         resource.NewMockProxy("makeCtxWithMockDeps"),
 		}
 	})

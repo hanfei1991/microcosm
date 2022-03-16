@@ -89,6 +89,11 @@ func (m *MetaMock) Get(ctx context.Context, key string, opts ...metaclient.OpOpt
 	return ret, nil
 }
 
+func (m *MetaMock) Do(ctx context.Context, op metaclient.Op) (metaclient.OpResponse, metaclient.Error) {
+	//[TODO] implement
+	return metaclient.OpResponse{}, nil
+}
+
 func (m *MetaMock) Txn(ctx context.Context) metaclient.Txn {
 	return &mockTxn{
 		m: m,

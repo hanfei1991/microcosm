@@ -14,7 +14,7 @@ import (
 
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/model"
-	mockkv "github.com/hanfei1991/microcosm/pkg/metaclient/kvclient/mock"
+	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 

@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/hanfei1991/microcosm/pkg/clock"
-	mockkv "github.com/hanfei1991/microcosm/pkg/metaclient/kvclient/mock"
+	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 

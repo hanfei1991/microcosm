@@ -19,8 +19,8 @@ import (
 
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/pkg/deps"
-	"github.com/hanfei1991/microcosm/pkg/metaclient"
-	extKV "github.com/hanfei1991/microcosm/pkg/metaclient/extention"
+	extKV "github.com/hanfei1991/microcosm/pkg/meta/extention"
+	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 )

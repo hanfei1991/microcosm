@@ -26,7 +26,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/etcdutils"
-	"github.com/hanfei1991/microcosm/pkg/metaclient"
+	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.etcd.io/etcd/server/v3/embed"
 	"go.uber.org/zap"

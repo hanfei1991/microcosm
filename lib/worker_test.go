@@ -9,7 +9,7 @@ import (
 	runtime "github.com/hanfei1991/microcosm/executor/worker"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	"github.com/hanfei1991/microcosm/pkg/clock"
-	"github.com/hanfei1991/microcosm/pkg/metaclient"
+	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"

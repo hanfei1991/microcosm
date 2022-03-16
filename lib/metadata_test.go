@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	mockkv "github.com/hanfei1991/microcosm/pkg/metaclient/kvclient/mock"
+	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
 	"github.com/stretchr/testify/require"
 )
 

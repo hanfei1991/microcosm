@@ -39,8 +39,6 @@ services:
                         - "server-executor:10241"
                 depends_on:
                         - "server-master"
-                        - "frame-etcd-standalone"
-                        - "user-etcd-standalone"
                 restart: "on-failure"
         frame-etcd-standalone:
                 image: quay.io/coreos/etcd

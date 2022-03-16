@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/hanfei1991/microcosm/pkg/deps"
-	"github.com/hanfei1991/microcosm/pkg/metaclient"
-	extKV "github.com/hanfei1991/microcosm/pkg/metaclient/extention"
-	"github.com/hanfei1991/microcosm/pkg/metaclient/kvclient"
+	extKV "github.com/hanfei1991/microcosm/pkg/meta/extention"
+	"github.com/hanfei1991/microcosm/pkg/meta/kvclient"
+	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/tenant"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
