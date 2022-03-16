@@ -17,7 +17,8 @@ import (
 
 // 1. parse config
 // 2. init logger
-// 3. start server
+// 3. print log
+// 4. start server
 func main() {
 	// 1. parse config
 	cfg := servermaster.NewConfig()
