@@ -227,18 +227,19 @@ func (fsm *JobFsm) JobOffline(worker lib.WorkerHandle, needFailover bool) {
 	defer fsm.jobsMu.Unlock()
 
 	job, ok := fsm.onlineJobs[worker.ID()]
-	if !ok {
+	if ok {
+		delete(fsm.onlineJobs, worker.ID())
+	} else {
 		job, ok = fsm.waitAckJobs[worker.ID()]
 		if !ok {
 			log.L().Warn("unknown worker, ignore it", zap.String("id", worker.ID()))
 			return
 		}
+		delete(fsm.waitAckJobs, worker.ID())
 	}
 	if needFailover {
 		fsm.pendingJobs[worker.ID()] = job.MasterMetaKVData
 	}
-	delete(fsm.onlineJobs, worker.ID())
-	delete(fsm.waitAckJobs, worker.ID())
 }
 
 func (fsm *JobFsm) JobDispatchFailed(worker lib.WorkerHandle) error {
