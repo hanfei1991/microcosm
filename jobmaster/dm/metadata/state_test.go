@@ -30,6 +30,24 @@ func (ds *DummyStore) Key() string {
 	return "dummy store"
 }
 
+type FailedState struct {
+	State
+	I int
+	i int
+}
+
+type FailedStore struct {
+	*DefaultStore
+}
+
+func (fs *FailedStore) CreateState() State {
+	return &FailedState{}
+}
+
+func (fs *FailedStore) Key() string {
+	return "failed store"
+}
+
 func TestDefaultStore(t *testing.T) {
 	t.Parallel()
 
@@ -73,4 +91,11 @@ func TestDefaultStore(t *testing.T) {
 
 	dummyState = state.(*DummyState)
 	require.Equal(t, dummyState.String(), "dummy state")
+
+	failedState := &FailedState{I: 1}
+	failedStore := &FailedStore{
+		DefaultStore: NewDefaultStore(kvClient),
+	}
+	failedStore.DefaultStore.Store = failedStore
+	require.Error(t, failedStore.Put(context.Background(), failedState))
 }

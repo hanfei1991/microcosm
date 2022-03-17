@@ -3,6 +3,7 @@ package metadata
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 	"sync"
 
 	"github.com/pingcap/errors"
@@ -45,7 +46,28 @@ func (ds *DefaultStore) DeleteOp() metaclient.Op {
 	return metaclient.OpDelete(ds.Key())
 }
 
+// checkAllFieldsIsPublic check all fields of a pointer is public.
+func checkAllFieldsIsPublic(state State) bool {
+	v := reflect.ValueOf(state)
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+	if v.Kind() != reflect.Struct {
+		return false
+	}
+	for i := 0; i < v.NumField(); i++ {
+		if !v.Field(i).CanSet() {
+			return false
+		}
+	}
+	return true
+}
+
 func (ds *DefaultStore) Put(ctx context.Context, state State) error {
+	if !checkAllFieldsIsPublic(state) {
+		return errors.New("fields of state should all be public")
+	}
+
 	ds.mu.Lock()
 	defer ds.mu.Unlock()
 
