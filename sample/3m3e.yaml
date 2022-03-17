@@ -85,7 +85,6 @@ services:
                         - "server-master-0"
                         - "server-master-2"
                         - "server-master-1"
-                restart: "on-failure"
         server-executor-1:
                 image: dataflow:test
                 volumes:
@@ -105,7 +104,6 @@ services:
                         - "server-master-0"
                         - "server-master-2"
                         - "server-master-1"
-                restart: "on-failure"
         server-executor-2:
                 image: dataflow:test
                 volumes:
@@ -125,4 +123,3 @@ services:
                         - "server-master-0"
                         - "server-master-2"
                         - "server-master-1"
-                restart: "on-failure"

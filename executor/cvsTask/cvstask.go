@@ -219,7 +219,7 @@ func (task *cvsTask) Send(ctx context.Context) error {
 		select {
 		case kv, more := <-task.buffer:
 			if !more {
-				log.L().Info("Reach the end of the file ", zap.String("id", task.ID()), zap.Any("cnt", task.counter.Load()), zap.String("last write", string(task.curLoc)))
+				log.L().Info("Reach the end of the file ", zap.String("id", task.ID()), zap.Any("cnt", task.counter.Load()), zap.String("last write", task.curLoc))
 				resp, err := writer.CloseAndRecv()
 				if err != nil {
 					return err
