@@ -92,7 +92,7 @@ func TestDefaultStore(t *testing.T) {
 	dummyState = state.(*DummyState)
 	require.Equal(t, dummyState.String(), "dummy state")
 
-	failedState := &FailedState{I: 1}
+	failedState := &FailedState{I: 1, i: 2}
 	failedStore := &FailedStore{
 		DefaultStore: NewDefaultStore(kvClient),
 	}
