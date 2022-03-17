@@ -117,7 +117,7 @@ func TestJobManagerQueryJob(t *testing.T) {
 			pb.QueryJobResponse_stopped,
 		},
 	}
-	metaKVClient := metadata.NewMetaMock()
+	metaKVClient := mockkv.NewMetaMock()
 	for _, tc := range testCases {
 		cli := lib.NewMasterMetadataClient(tc.meta.ID, metaKVClient)
 		err := cli.Store(ctx, tc.meta)

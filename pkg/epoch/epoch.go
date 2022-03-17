@@ -9,11 +9,11 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
-type EpochGenerator interface {
+type Generator interface {
 	GenerateEpoch(ctx context.Context) (lib.Epoch, error)
 }
 
-func NewEpochGenerator(cli *clientv3.Client) EpochGenerator {
+func NewEpochGenerator(cli *clientv3.Client) Generator {
 	return &epochGenerator{
 		cli: cli,
 	}
@@ -36,7 +36,7 @@ func (e *epochGenerator) GenerateEpoch(ctx context.Context) (lib.Epoch, error) {
 	return resp.Header.Revision, nil
 }
 
-func NewMockEpochGenerator() EpochGenerator {
+func NewMockEpochGenerator() Generator {
 	return &mockEpochGenerator{}
 }
 

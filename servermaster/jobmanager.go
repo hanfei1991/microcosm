@@ -44,7 +44,7 @@ type JobManagerImplV2 struct {
 
 	masterMetaClient *lib.MasterMetadataClient
 	uuidGen          uuid.Generator
-	epochGen         epoch.EpochGenerator
+	epochGen         epoch.Generator
 }
 
 func (jm *JobManagerImplV2) PauseJob(ctx context.Context, req *pb.PauseJobRequest) *pb.PauseJobResponse {
@@ -173,7 +173,7 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 func NewJobManagerImplV2(
 	dctx *dcontext.Context,
 	id lib.MasterID,
-	epochGen epoch.EpochGenerator,
+	epochGen epoch.Generator,
 ) (*JobManagerImplV2, error) {
 	masterMetaClient, err := dctx.Deps().Construct(func(metaKV metaclient.KVClient) (*lib.MasterMetadataClient, error) {
 		return lib.NewMasterMetadataClient(id, metaKV), nil
