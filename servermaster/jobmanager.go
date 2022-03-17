@@ -176,7 +176,8 @@ func NewJobManagerImplV2(
 		id,
 	)
 
-	ctx, _ := context.WithTimeout(dctx, time.Second*3)
+	ctx, cancel := context.WithTimeout(dctx, time.Second*3)
+	defer cancel()
 	epoch, err := impl.epochGen.GenerateEpoch(ctx)
 	if err != nil {
 		return nil, err
@@ -311,5 +312,5 @@ func (e *EpochGenerator) GenerateEpoch(ctx context.Context) (lib.Epoch, error) {
 		return lib.Epoch(0), errors.Wrap(errors.ErrMasterEtcdEpochFail, err)
 	}
 
-	return lib.Epoch(resp.Header.Revision), nil
+	return resp.Header.Revision, nil
 }

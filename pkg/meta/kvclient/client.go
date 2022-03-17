@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/hanfei1991/microcosm/pkg/meta/extention"
+	"github.com/hanfei1991/microcosm/pkg/meta/extension"
 	"github.com/hanfei1991/microcosm/pkg/meta/kvclient/etcdkv"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/meta/namespace"
@@ -21,7 +21,7 @@ type etcdKVClient struct {
 }
 
 // NewPrefixKVClient return a kvclient with namespace
-func NewPrefixKVClient(cli extention.KVClientEx, tenantID string) metaclient.KVClient {
+func NewPrefixKVClient(cli extension.KVClientEx, tenantID string) metaclient.KVClient {
 	pfKV := namespace.NewPrefixKV(cli, namespace.MakeNamespacePrefix(tenantID))
 	return &etcdKVClient{
 		Closer:   cli,
@@ -31,7 +31,7 @@ func NewPrefixKVClient(cli extention.KVClientEx, tenantID string) metaclient.KVC
 }
 
 // NewKVClient return a kvclient without namespace for inner use
-func NewKVClient(conf *metaclient.StoreConfigParams) (extention.KVClientEx, error) {
+func NewKVClient(conf *metaclient.StoreConfigParams) (extension.KVClientEx, error) {
 	return etcdkv.NewEtcdImpl(conf)
 }
 
