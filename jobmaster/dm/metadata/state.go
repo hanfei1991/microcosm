@@ -46,7 +46,7 @@ func (ds *DefaultStore) DeleteOp() metaclient.Op {
 	return metaclient.OpDelete(ds.Key())
 }
 
-// checkAllFieldsIsPublic check all fields of a pointer is public.
+// checkAllFieldsIsPublic check all fields of a state is public.
 func checkAllFieldsIsPublic(state State) bool {
 	v := reflect.ValueOf(state)
 	if v.Kind() == reflect.Ptr {
@@ -116,9 +116,7 @@ func (ds *DefaultStore) Get(ctx context.Context) (State, error) {
 
 	// check again with write lock
 	if ds.state != nil {
-		clone, err := ds.cloneState()
-		ds.mu.RUnlock()
-		return clone, err
+		return ds.cloneState()
 	}
 
 	resp, err := ds.kvClient.Get(ctx, ds.Key())

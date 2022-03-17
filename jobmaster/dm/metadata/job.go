@@ -36,8 +36,8 @@ func NewJob(jobCfg *config.JobCfg) *Job {
 		Tasks: make(map[string]*Task, len(taskCfgs)),
 	}
 
-	for source, taskCfg := range taskCfgs {
-		job.Tasks[source] = NewTask(taskCfg)
+	for taskID, taskCfg := range taskCfgs {
+		job.Tasks[taskID] = NewTask(taskCfg)
 	}
 	return job
 }
