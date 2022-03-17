@@ -126,7 +126,7 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 		if worker.waitingRecover {
 			duration := jm.clocker.Since(worker.waitAckStartTime)
 			if duration > 16*time.Second {
-				wid, err := jm.CreateWorker(lib.CdcTask, getTaskConfig(worker, jm.syncInfo), 10)
+				wid, err := jm.CreateWorker(lib.CvsTask, getTaskConfig(worker, jm.syncInfo), 10)
 				if err != nil {
 					return err
 				}
@@ -172,7 +172,7 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 		jm.syncFilesInfo[new.id] = new
 	}
 	for _, old := range oldWorkers {
-		jm.syncFilesInfo[old.id] = old
+		delete(jm.syncFilesInfo, old.id)
 	}
 	return nil
 }
@@ -220,13 +220,14 @@ func (jm *JobMaster) OnMasterRecovered(ctx context.Context) (err error) {
 				aliveMap[idx] = newWorker
 			}
 		} else {
+			log.L().Info("workers has finished, we don't need to recover them", zap.Any("master id", jm.ID()), zap.Any("worker id", workerID), zap.Any("file id", taskStatus.TaskConfig.Idx))
 			delete(aliveMap, idx)
 		}
 	}
 	jm.syncFilesInfo = make(map[string]*workerInfo)
 	for fileID, worker := range aliveMap {
 		if worker.id == "" {
-			log.L().Info("recovering file has no worker, will create new ones", zap.Any("file", fileID), zap.Any("id", jm.ID()))
+			log.L().Info("recovering file has no worker, will create new ones", zap.Any("file", fileID), zap.Any("master id", jm.ID()))
 			conf := cvsTask.Config{
 				SrcHost:  jm.syncInfo.SrcHost,
 				DstHost:  jm.syncInfo.DstHost,
@@ -240,7 +241,7 @@ func (jm *JobMaster) OnMasterRecovered(ctx context.Context) (err error) {
 			}
 			jm.syncFilesInfo[workerID] = worker
 		} else {
-			log.L().Info("recovering file has worker, will create wait hb", zap.Any("file", fileID), zap.Any("id", jm.ID()))
+			log.L().Info("recovering file has worker, will create wait hb", zap.Any("file", fileID), zap.Any("id", jm.ID()), zap.Any("worker id", worker.id))
 			worker.waitAckStartTime = jm.clocker.Now()
 			worker.waitingRecover = true
 			jm.syncFilesInfo[worker.id] = worker
@@ -262,7 +263,7 @@ func (jm *JobMaster) OnWorkerOnline(worker lib.WorkerHandle) error {
 	if !exist {
 		log.L().Panic("phantom worker found", zap.Any("id", worker.ID()))
 	} else {
-		log.L().Info("worker online ", zap.Any("id", worker.ID()))
+		log.L().Info("worker online ", zap.Any("id", worker.ID()), zap.Any("master id", jm.ID()))
 	}
 	syncInfo.handle.Store(worker)
 	syncInfo.waitingRecover = false
