@@ -6,14 +6,13 @@ import (
 	"time"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
 
 	cvs "github.com/hanfei1991/microcosm/jobmaster/cvsJob"
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/pb"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
-	"github.com/hanfei1991/microcosm/pkg/errors"
+	"github.com/hanfei1991/microcosm/pkg/epoch"
 	derrors "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
@@ -45,7 +44,7 @@ type JobManagerImplV2 struct {
 
 	masterMetaClient *lib.MasterMetadataClient
 	uuidGen          uuid.Generator
-	epochGen         EpochGenerator
+	epochGen         epoch.EpochGenerator
 }
 
 func (jm *JobManagerImplV2) PauseJob(ctx context.Context, req *pb.PauseJobRequest) *pb.PauseJobResponse {
@@ -154,7 +153,7 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 func NewJobManagerImplV2(
 	dctx *dcontext.Context,
 	id lib.MasterID,
-	epochGen EpochGenerator,
+	epochGen epoch.EpochGenerator,
 ) (*JobManagerImplV2, error) {
 	masterMetaClient, err := dctx.Deps().Construct(func(metaKV metaclient.KVClient) (*lib.MasterMetadataClient, error) {
 		return lib.NewMasterMetadataClient(id, metaKV), nil
@@ -293,24 +292,4 @@ func (jm *JobManagerImplV2) OnWorkerMessage(worker lib.WorkerHandle, topic p2p.T
 // CloseImpl implements lib.MasterImpl.CloseImpl
 func (jm *JobManagerImplV2) CloseImpl(ctx context.Context) error {
 	return nil
-}
-
-func NewEpochGenerator(cli *clientv3.Client) EpochGenerator {
-	return EpochGenerator{
-		cli: cli,
-	}
-}
-
-type EpochGenerator struct {
-	cli *clientv3.Client
-}
-
-// GenerateEpoch generate increasing epoch for job master epoch
-func (e *EpochGenerator) GenerateEpoch(ctx context.Context) (lib.Epoch, error) {
-	resp, err := e.cli.Get(ctx, "/fake-key")
-	if err != nil {
-		return lib.Epoch(0), errors.Wrap(errors.ErrMasterEtcdEpochFail, err)
-	}
-
-	return resp.Header.Revision, nil
 }

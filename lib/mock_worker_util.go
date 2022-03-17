@@ -30,6 +30,7 @@ func MockBaseWorker(
 		MessageSender:         p2p.NewMockMessageSender(),
 		ResourceProxy:         resource.NewMockProxy(workerID),
 		MetaKVClient:          mockkv.NewMetaMock(),
+		UserRawKVClient:       mockkv.NewMetaMock(),
 	}
 	err := dp.Provide(func() workerParamListForTest {
 		return params

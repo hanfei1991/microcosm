@@ -31,6 +31,7 @@ func MockBaseMaster(id MasterID, masterImpl MasterImpl) *DefaultBaseMaster {
 			MessageHandlerManager: p2p.NewMockMessageHandlerManager(),
 			MessageSender:         p2p.NewMockMessageSender(),
 			MetaKVClient:          mockkv.NewMetaMock(),
+			UserRawKVClient:       mockkv.NewMetaMock(),
 			ExecutorClientManager: client.NewClientManager(),
 			ServerMasterClient:    &client.MockServerMasterClient{},
 		}

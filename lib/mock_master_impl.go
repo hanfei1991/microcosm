@@ -15,6 +15,7 @@ import (
 	"github.com/hanfei1991/microcosm/pb"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/deps"
+	extkv "github.com/hanfei1991/microcosm/pkg/meta/extension"
 	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
@@ -38,6 +39,7 @@ type MockMasterImpl struct {
 	messageHandlerManager *p2p.MockMessageHandlerManager
 	messageSender         p2p.MessageSender
 	metaKVClient          *mockkv.MetaMock
+	userRawKVClient       *mockkv.MetaMock
 	executorClientManager *client.Manager
 	serverMasterClient    *client.MockServerMasterClient
 }
@@ -53,6 +55,7 @@ func NewMockMasterImpl(masterID, id MasterID) *MockMasterImpl {
 	ret.messageHandlerManager = ret.DefaultBaseMaster.messageHandlerManager.(*p2p.MockMessageHandlerManager)
 	ret.messageSender = ret.DefaultBaseMaster.messageSender
 	ret.metaKVClient = ret.DefaultBaseMaster.metaKVClient.(*mockkv.MetaMock)
+	ret.userRawKVClient = ret.DefaultBaseMaster.metaKVClient.(*mockkv.MetaMock)
 	ret.executorClientManager = ret.DefaultBaseMaster.executorClientManager.(*client.Manager)
 	ret.serverMasterClient = ret.DefaultBaseMaster.serverMasterClient.(*client.MockServerMasterClient)
 
@@ -65,6 +68,7 @@ type masterParamListForTest struct {
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
 	MetaKVClient          metaclient.KVClient
+	UserRawKVClient       extkv.KVClientEx
 	ExecutorClientManager client.ClientsManager
 	ServerMasterClient    client.MasterClient
 	ResourceProxy         resource.Proxy
@@ -84,6 +88,7 @@ func (m *MockMasterImpl) Reset() {
 			MessageHandlerManager: m.messageHandlerManager,
 			MessageSender:         m.messageSender,
 			MetaKVClient:          m.metaKVClient,
+			UserRawKVClient:       m.userRawKVClient,
 			ExecutorClientManager: m.executorClientManager,
 			ServerMasterClient:    m.serverMasterClient,
 			ResourceProxy:         resource.NewMockProxy(m.id),

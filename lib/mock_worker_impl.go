@@ -8,6 +8,7 @@ import (
 	"go.uber.org/atomic"
 	"go.uber.org/dig"
 
+	extkv "github.com/hanfei1991/microcosm/pkg/meta/extension"
 	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
@@ -35,6 +36,7 @@ type workerParamListForTest struct {
 	MessageSender         p2p.MessageSender
 	ResourceProxy         resource.Proxy
 	MetaKVClient          metaclient.KVClient
+	UserRawKVClient       extkv.KVClientEx
 }
 
 //nolint:unparam

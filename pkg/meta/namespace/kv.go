@@ -140,7 +140,7 @@ func (kv *kvPrefix) prefixOp(op metaclient.Op) metaclient.Op {
 }
 
 func (kv *kvPrefix) unprefixGetResponse(resp *metaclient.GetResponse) {
-	for i := range resp.Kvs {
+	for i, _ := range resp.Kvs {
 		resp.Kvs[i].Key = resp.Kvs[i].Key[len(kv.pfx):]
 	}
 }
