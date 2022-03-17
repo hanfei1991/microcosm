@@ -214,10 +214,6 @@ func (m *DefaultBaseMaster) Init(ctx context.Context) error {
 }
 
 func (m *DefaultBaseMaster) doInit(ctx context.Context) (isFirstStartUp bool, err error) {
-	if err := m.registerMessageHandlers(ctx); err != nil {
-		return false, errors.Trace(err)
-	}
-
 	isInit, epoch, err := m.refreshMetadata(ctx)
 	if err != nil {
 		return false, errors.Trace(err)
@@ -238,6 +234,10 @@ func (m *DefaultBaseMaster) doInit(ctx context.Context) (isFirstStartUp bool, er
 		!isInit,
 		epoch,
 		&m.timeoutConfig)
+
+	if err := m.registerMessageHandlers(ctx); err != nil {
+		return false, errors.Trace(err)
+	}
 
 	m.startBackgroundTasks()
 	return isInit, nil
