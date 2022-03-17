@@ -6,8 +6,12 @@ import (
 
 	"github.com/hanfei1991/microcosm/jobmaster/dm/config"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
-	meta "github.com/hanfei1991/microcosm/pkg/metadata"
+	"github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
 	"github.com/stretchr/testify/require"
+)
+
+const (
+	job_template_path = "../config/job_template.yaml"
 )
 
 func TestJobStore(t *testing.T) {
@@ -15,10 +19,9 @@ func TestJobStore(t *testing.T) {
 		source1 = "mysql-replica-01"
 		source2 = "mysql-replica-02"
 	)
-
 	t.Parallel()
 
-	jobStore := NewJobStore("job_test", meta.NewMetaMock())
+	jobStore := NewJobStore("job_test", mock.NewMetaMock())
 	key := jobStore.Key()
 	keys, err := adapter.DMJobKeyAdapter.Decode(key)
 	require.NoError(t, err)
@@ -31,7 +34,7 @@ func TestJobStore(t *testing.T) {
 	require.IsType(t, &Job{}, state)
 
 	jobCfg := &config.JobCfg{}
-	require.NoError(t, jobCfg.DecodeFile("../config/job_template.yaml"))
+	require.NoError(t, jobCfg.DecodeFile(job_template_path))
 
 	job := NewJob(jobCfg)
 	require.NoError(t, jobStore.Put(context.Background(), job))

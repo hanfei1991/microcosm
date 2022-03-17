@@ -6,7 +6,7 @@ import (
 	"github.com/hanfei1991/microcosm/jobmaster/dm/config"
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
-	"github.com/hanfei1991/microcosm/pkg/metadata"
+	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/pingcap/errors"
 )
 
@@ -57,14 +57,14 @@ func NewTask(taskCfg *config.TaskCfg) *Task {
 
 // JobStore manages the state of a job.
 type JobStore struct {
-	DefaultStore
+	*DefaultStore
 
 	id lib.MasterID
 }
 
-func NewJobStore(id lib.MasterID, kvClient metadata.MetaKV) *JobStore {
+func NewJobStore(id lib.MasterID, kvClient metaclient.KVClient) *JobStore {
 	jobStore := &JobStore{
-		DefaultStore: *NewDefaultStore(kvClient),
+		DefaultStore: NewDefaultStore(kvClient),
 		id:           id,
 	}
 	jobStore.DefaultStore.Store = jobStore

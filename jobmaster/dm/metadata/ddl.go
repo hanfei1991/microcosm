@@ -2,7 +2,7 @@ package metadata
 
 import (
 	"github.com/hanfei1991/microcosm/lib"
-	"github.com/hanfei1991/microcosm/pkg/metadata"
+	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 )
 
 // DDL represents the state of ddls.
@@ -14,14 +14,14 @@ type DDL struct {
 // DDLStore manages the state of ddls.
 // Write by DDLCoordinator.
 type DDLStore struct {
-	DefaultStore
+	*DefaultStore
 
 	id lib.MasterID
 }
 
-func NewDDLStore(id lib.MasterID, kvClient metadata.MetaKV) *DDLStore {
+func NewDDLStore(id lib.MasterID, kvClient metaclient.KVClient) *DDLStore {
 	ddlStore := &DDLStore{
-		DefaultStore: *NewDefaultStore(kvClient),
+		DefaultStore: NewDefaultStore(kvClient),
 		id:           id,
 	}
 	ddlStore.DefaultStore.Store = ddlStore

@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	meta "github.com/hanfei1991/microcosm/pkg/metadata"
+	"github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -15,7 +15,7 @@ type DummyState struct {
 }
 
 type DummyStore struct {
-	DefaultStore
+	*DefaultStore
 }
 
 func (ds *DummyStore) CreateState() State {
@@ -29,10 +29,10 @@ func (ds *DummyStore) Key() string {
 func TestDefaultStore(t *testing.T) {
 	t.Parallel()
 
-	metakv := meta.NewMetaMock()
+	kvClient := mock.NewMetaMock()
 	dummyState := &DummyState{I: 1}
 	dummyStore := &DummyStore{
-		DefaultStore: *NewDefaultStore(metakv),
+		DefaultStore: NewDefaultStore(kvClient),
 	}
 	dummyStore.DefaultStore.Store = dummyStore
 
@@ -59,7 +59,7 @@ func TestDefaultStore(t *testing.T) {
 
 	v, err := json.Marshal(dummyState)
 	require.NoError(t, err)
-	metakv.Put(context.Background(), dummyStore.Key(), string(v))
+	kvClient.Put(context.Background(), dummyStore.Key(), string(v))
 	state, err = dummyStore.Get(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, dummyState, state)
