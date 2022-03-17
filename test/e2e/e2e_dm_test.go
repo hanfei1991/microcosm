@@ -3,7 +3,6 @@ package e2e_test
 import (
 	"context"
 	"io/ioutil"
-	"os"
 	"testing"
 	"time"
 
@@ -15,16 +14,9 @@ import (
 )
 
 func TestDMSubtask(t *testing.T) {
-	configPath := os.Getenv("CONFIG")
-	if configPath == "" {
-		configPath = "./docker.json"
-	}
-	config, err := NewConfigFromFile(configPath)
-	require.NoError(t, err)
-
 	ctx := context.Background()
-	masterClient, err := client.NewMasterClient(ctx, config.MasterAddrs)
-	require.Nil(t, err)
+	masterClient, err := client.NewMasterClient(ctx, []string{"127.0.0.1:10240"})
+	require.NoError(t, err)
 
 	mysqlCfg := util.DBConfig{
 		Host:     "127.0.0.1",
