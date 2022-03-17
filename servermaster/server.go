@@ -611,6 +611,10 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	defer func() {
 		s.leader.Store(&Member{})
 		s.resign()
+		err := s.jobManager.Close(ctx)
+		if err != nil {
+			log.L().Warn("job manager close with error", zap.Error(err))
+		}
 	}()
 
 	metricTicker := time.NewTicker(defaultMetricInterval)
@@ -695,15 +699,13 @@ func (s *Server) rpcForwardIfNeeded(ctx context.Context, req interface{}, respPo
 		return false
 	}
 	if needForward {
-		leader, exist := s.checkLeader()
+		_, exist := s.checkLeader()
 		if !exist {
 			respType := reflect.ValueOf(respPointer).Elem().Type()
 			reflect.ValueOf(respPointer).Elem().Set(reflect.Zero(respType))
 			*errPointer = errors.ErrMasterRPCNotForward.GenWithStackByArgs()
 			return true
 		}
-		log.L().Info("will forward rpc request", zap.String("from", s.name()),
-			zap.String("to", leader.Name), zap.String("request", methodName))
 
 		params := []reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(req)}
 		s.leaderClient.RLock()

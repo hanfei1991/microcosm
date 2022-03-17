@@ -6,7 +6,6 @@ services:
                         - "10245:10240"
                 volumes:
                         - ./config/master.toml:/config.toml
-                        - /tmp/df0:/tmp/df
                 command:
                         - "./bin/master"
                         - "--name"
@@ -29,7 +28,6 @@ services:
                         - "10246:10240"
                 volumes:
                         - ./config/master.toml:/config.toml
-                        - /tmp/df1:/tmp/df
                 command:
                         - "./bin/master"
                         - "--name"
@@ -52,7 +50,6 @@ services:
                         - "10247:10240"
                 volumes:
                         - ./config/master.toml:/config.toml
-                        - /tmp/df2:/tmp/df
                 command:
                         - "./bin/master"
                         - "--name"
@@ -89,6 +86,8 @@ services:
                         - "server-master-2"
                         - "server-master-1"
                 restart: "on-failure"
+                extra_hosts:
+                        - "host.docker.internal:host-gateway"
         server-executor-1:
                 image: dataflow:test
                 volumes:
@@ -109,6 +108,8 @@ services:
                         - "server-master-2"
                         - "server-master-1"
                 restart: "on-failure"
+                extra_hosts:
+                        - "host.docker.internal:host-gateway"
         server-executor-2:
                 image: dataflow:test
                 volumes:
@@ -129,3 +130,5 @@ services:
                         - "server-master-2"
                         - "server-master-1"
                 restart: "on-failure"
+                extra_hosts:
+                        - "host.docker.internal:host-gateway"
