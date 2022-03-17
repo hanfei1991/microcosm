@@ -95,6 +95,8 @@ services:
                         - "server-master-2"
                         - "server-master-1"
                 restart: "on-failure"
+                extra_hosts:
+                        - "host.docker.internal:host-gateway"
         server-executor-1:
                 image: dataflow:test
                 volumes:
@@ -115,6 +117,8 @@ services:
                         - "server-master-2"
                         - "server-master-1"
                 restart: "on-failure"
+                extra_hosts:
+                        - "host.docker.internal:host-gateway"
         server-executor-2:
                 image: dataflow:test
                 volumes:
@@ -135,12 +139,13 @@ services:
                         - "server-master-2"
                         - "server-master-1"
                 restart: "on-failure"
+                extra_hosts:
+                        - "host.docker.internal:host-gateway"
         frame-etcd-standalone:
                 image: quay.io/coreos/etcd
                 container_name: frame-etcd-standalone
                 volumes:
                         - ./config/etcd.yml:/etcd.yml
-                        - /tmp/dataflow-etcd:/tmp/dataflow-etcd
                 command:
                         - "etcd"
                         - "--config-file"
@@ -153,7 +158,6 @@ services:
                 container_name: user-etcd-standalone
                 volumes:
                         - ./config/etcd.yml:/etcd.yml
-                        - /tmp/dataflow-etcd2:/tmp/dataflow-etcd
                 command:
                         - "etcd"
                         - "--config-file"

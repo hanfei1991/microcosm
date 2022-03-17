@@ -57,6 +57,7 @@ type MasterImpl interface {
 	OnWorkerOnline(worker WorkerHandle) error
 
 	// OnWorkerOffline is called when a worker exits or has timed out.
+	// Worker exit scenario contains normal finish and manually stop
 	OnWorkerOffline(worker WorkerHandle, reason error) error
 
 	// OnWorkerMessage is called when a customized message is received.
@@ -162,7 +163,7 @@ func NewBaseMaster(
 		nodeID = ctx.Environ.NodeID
 		advertiseAddr = ctx.Environ.Addr
 		metaBytes := ctx.Environ.MasterMetaBytes
-		err := masterMeta.Unmarshal(metaBytes)
+		err := errors.Trace(masterMeta.Unmarshal(metaBytes))
 		if err != nil {
 			log.L().Warn("invalid master meta", zap.ByteString("data", metaBytes), zap.Error(err))
 		}
@@ -230,10 +231,6 @@ func (m *DefaultBaseMaster) Init(ctx context.Context) error {
 }
 
 func (m *DefaultBaseMaster) doInit(ctx context.Context) (isFirstStartUp bool, err error) {
-	if err := m.registerMessageHandlers(ctx); err != nil {
-		return false, errors.Trace(err)
-	}
-
 	isInit, epoch, err := m.refreshMetadata(ctx)
 	if err != nil {
 		return false, errors.Trace(err)
@@ -254,6 +251,10 @@ func (m *DefaultBaseMaster) doInit(ctx context.Context) (isFirstStartUp bool, er
 		!isInit,
 		epoch,
 		&m.timeoutConfig)
+
+	if err := m.registerMessageHandlers(ctx); err != nil {
+		return false, errors.Trace(err)
+	}
 
 	m.startBackgroundTasks()
 	return isInit, nil
@@ -293,6 +294,7 @@ func (m *DefaultBaseMaster) registerMessageHandlers(ctx context.Context) error {
 	if !ok {
 		log.L().Panic("duplicate handler", zap.String("topic", WorkerStatusUpdatedTopic(m.id)))
 	}
+
 	return nil
 }
 
@@ -421,9 +423,12 @@ func (m *DefaultBaseMaster) runWorkerCheck(ctx context.Context) error {
 			log.L().Info("worker is offline", zap.Any("master-id", m.id), zap.Any("worker-info", workerInfo), zap.Any("work-status", status))
 			tombstoneHandle := NewTombstoneWorkerHandle(workerInfo.ID, *status, nil)
 			var offlineError error
-			if status.Code == WorkerStatusFinished {
+			switch status.Code {
+			case WorkerStatusFinished:
 				offlineError = derror.ErrWorkerFinish.FastGenByArgs()
-			} else {
+			case WorkerStatusStopped:
+				offlineError = derror.ErrWorkerStop.FastGenByArgs()
+			default:
 				offlineError = derror.ErrWorkerOffline.FastGenByArgs(workerInfo.ID)
 			}
 
