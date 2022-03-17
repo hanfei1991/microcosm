@@ -2,7 +2,7 @@ package cvstask
 
 import (
 	"context"
-	"fmt"
+	"encoding/json"
 	"sync"
 	"time"
 
@@ -37,18 +37,20 @@ type Config struct {
 	StartLoc string `json:"StartLoc"`
 }
 
+type Status struct {
+	TaskConfig Config `json:"Config"`
+	CurrentLoc string `json:"CurLoc"`
+	Count      int64  `json:"Cnt"`
+}
+
 type cvsTask struct {
 	lib.BaseWorker
-	srcHost   string
-	srcDir    string
-	dstHost   string
-	dstDir    string
-	counter   *atomic.Int64
-	recordIdx string
-	fileIdx   int
-	cancelFn  func()
-	buffer    chan strPair
-	isEOF     bool
+	Config
+	counter  *atomic.Int64
+	curLoc   string
+	cancelFn func()
+	buffer   chan strPair
+	isEOF    bool
 
 	statusCode struct {
 		sync.RWMutex
@@ -73,11 +75,8 @@ func RegisterWorker() {
 func NewCvsTask(ctx *dcontext.Context, _workerID lib.WorkerID, masterID lib.MasterID, conf lib.WorkerConfig) *cvsTask {
 	cfg := conf.(*Config)
 	task := &cvsTask{
-		srcHost:           cfg.SrcHost,
-		fileIdx:           cfg.Idx,
-		dstHost:           cfg.DstHost,
-		dstDir:            cfg.DstDir,
-		recordIdx:         cfg.StartLoc,
+		Config:            *cfg,
+		curLoc:            cfg.StartLoc,
 		buffer:            make(chan strPair, BUFFERSIZE),
 		statusRateLimiter: rate.NewLimiter(rate.Every(time.Second), 1),
 		counter:           atomic.NewInt64(0),
@@ -132,9 +131,18 @@ func (task *cvsTask) Tick(ctx context.Context) error {
 
 // Status returns a short worker status to be periodically sent to the master.
 func (task *cvsTask) Status() lib.WorkerStatus {
+	stats := &Status{
+		TaskConfig: task.Config,
+		CurrentLoc: task.curLoc,
+		Count:      task.counter.Load(),
+	}
+	statsBytes, err := json.Marshal(stats)
+	if err != nil {
+		log.L().Panic("get stats error", zap.String("id", task.ID()), zap.Error(err))
+	}
 	return lib.WorkerStatus{
 		Code: task.getStatusCode(), ErrorMessage: "",
-		ExtBytes: []byte(fmt.Sprintf("%d", task.counter.Load())),
+		ExtBytes: statsBytes,
 	}
 }
 
@@ -157,16 +165,16 @@ func (task *cvsTask) CloseImpl(ctx context.Context) error {
 }
 
 func (task *cvsTask) Receive(ctx context.Context) error {
-	conn, err := grpc.Dial(task.srcHost, grpc.WithInsecure())
+	conn, err := grpc.Dial(task.SrcHost, grpc.WithInsecure())
 	if err != nil {
-		log.L().Error("cann't connect with the source address ", zap.String("id", task.ID()), zap.Any("message", task.srcHost))
+		log.L().Error("cann't connect with the source address ", zap.String("id", task.ID()), zap.Any("message", task.SrcHost))
 		return err
 	}
 	client := pb.NewDataRWServiceClient(conn)
 	defer conn.Close()
-	reader, err := client.ReadLines(ctx, &pb.ReadLinesRequest{FileIdx: int32(task.fileIdx), LineNo: []byte(task.recordIdx)})
+	reader, err := client.ReadLines(ctx, &pb.ReadLinesRequest{FileIdx: int32(task.Idx), LineNo: []byte(task.StartLoc)})
 	if err != nil {
-		log.L().Error("read data from file failed ", zap.String("id", task.ID()), zap.Any("message", task.srcDir))
+		log.L().Error("read data from file failed ", zap.String("id", task.ID()), zap.Error(err))
 		return err
 	}
 	for {
@@ -179,7 +187,7 @@ func (task *cvsTask) Receive(ctx context.Context) error {
 			return err
 		}
 		if reply.IsEof {
-			log.L().Info("Reach the end of the file ", zap.String("id", task.ID()), zap.Any("fileName:", task.srcDir))
+			log.L().Info("Reach the end of the file ", zap.String("id", task.ID()), zap.Any("fileID:", task.Idx))
 			close(task.buffer)
 			break
 		}
@@ -194,9 +202,9 @@ func (task *cvsTask) Receive(ctx context.Context) error {
 }
 
 func (task *cvsTask) Send(ctx context.Context) error {
-	conn, err := grpc.Dial(task.dstHost, grpc.WithInsecure())
+	conn, err := grpc.Dial(task.DstHost, grpc.WithInsecure())
 	if err != nil {
-		log.L().Error("can't connect with the destination address ", zap.Any("message", task.dstHost))
+		log.L().Error("can't connect with the destination address ", zap.Any("id", task.ID()), zap.Error(err))
 		return err
 	}
 	client := pb.NewDataRWServiceClient(conn)
@@ -221,13 +229,14 @@ func (task *cvsTask) Send(ctx context.Context) error {
 				}
 				return nil
 			}
-			err := writer.Send(&pb.WriteLinesRequest{FileIdx: int32(task.fileIdx), Key: []byte(kv.firstStr), Value: []byte(kv.secondStr), Dir: task.dstDir})
-			task.counter.Add(1)
+			err := writer.Send(&pb.WriteLinesRequest{FileIdx: int32(task.Idx), Key: []byte(kv.firstStr), Value: []byte(kv.secondStr), Dir: task.DstDir})
 			if err != nil {
 				log.L().Error("call write data rpc failed ", zap.String("id", task.ID()), zap.Error(err))
 				task.cancelFn()
 				return err
 			}
+			task.counter.Add(1)
+			task.curLoc = kv.firstStr
 		case <-ctx.Done():
 			return ctx.Err()
 		}

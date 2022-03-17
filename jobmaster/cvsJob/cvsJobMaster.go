@@ -2,8 +2,10 @@ package cvs
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"strconv"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -17,7 +19,9 @@ import (
 	"github.com/hanfei1991/microcosm/lib/registry"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
+	"github.com/hanfei1991/microcosm/pkg/clock"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
+	derrors "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
@@ -29,9 +33,12 @@ type Config struct {
 }
 
 type workerInfo struct {
-	idx    int
-	curLoc int64
-	handle lib.WorkerHandle
+	id               lib.WorkerID
+	idx              int
+	curLoc           string
+	handle           atomic.Value
+	waitingRecover   bool
+	waitAckStartTime time.Time
 }
 
 type errorInfo struct {
@@ -45,12 +52,14 @@ func (e *errorInfo) Error() string {
 type JobMaster struct {
 	lib.BaseJobMaster
 	syncInfo          *Config
+	mu                sync.Mutex
 	syncFilesInfo     map[lib.WorkerID]*workerInfo
 	counter           int64
 	workerID          lib.WorkerID
 	status            lib.WorkerStatusCode
 	filesNum          int
 	statusRateLimiter *rate.Limiter
+	clocker           clock.Clock
 }
 
 func RegisterWorker() {
@@ -67,7 +76,8 @@ func NewCVSJobMaster(ctx *dcontext.Context, workerID lib.WorkerID, masterID lib.
 	jm.syncInfo = conf.(*Config)
 	jm.syncFilesInfo = make(map[lib.WorkerID]*workerInfo)
 	jm.statusRateLimiter = rate.NewLimiter(rate.Every(time.Second*2), 1)
-	log.L().Info("new cvs jobmaster ", zap.Any("id :", jm.workerID))
+	jm.clocker = clock.New()
+	log.L().Info("new cvs jobmaster ", zap.Any("id", jm.workerID))
 	return jm
 }
 
@@ -93,7 +103,7 @@ func (jm *JobMaster) InitImpl(ctx context.Context) (err error) {
 			// todo : handle the error case, should recover for failing to create worker
 			return err
 		}
-		jm.syncFilesInfo[workerID] = &workerInfo{idx: idx, curLoc: 0, handle: nil}
+		jm.syncFilesInfo[workerID] = &workerInfo{id: workerID, idx: idx}
 	}
 	return nil
 }
@@ -109,19 +119,37 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 			jm.status = lib.WorkerStatusNormal
 		}
 	}
+	jm.mu.Lock()
+	defer jm.mu.Unlock()
+	var oldWorkers, newWorkers []*workerInfo
 	for _, worker := range jm.syncFilesInfo {
-		if worker.handle == nil {
+		if worker.waitingRecover {
+			duration := jm.clocker.Since(worker.waitAckStartTime)
+			if duration > 16*time.Second {
+				wid, err := jm.CreateWorker(lib.CdcTask, getTaskConfig(worker, jm.syncInfo), 10)
+				if err != nil {
+					return err
+				}
+				oldWorkers = append(oldWorkers, worker)
+				newWorkers = append(newWorkers, &workerInfo{
+					id:  wid,
+					idx: worker.idx,
+				})
+			}
+		}
+		if worker.handle.Load() == nil {
 			continue
 		}
-		status := worker.handle.Status()
+		status := worker.handle.Load().(lib.WorkerHandle).Status()
 		if status.Code == lib.WorkerStatusNormal || status.Code == lib.WorkerStatusFinished {
-			num, err := strconv.ParseInt(string(status.ExtBytes), 10, 64)
+			taskStatus := &cvsTask.Status{}
+			err := json.Unmarshal(status.ExtBytes, taskStatus)
 			if err != nil {
 				return err
 			}
-			worker.curLoc = num
-			jm.counter += num
-			log.L().Debug("cvs job tmp num ", zap.Any("id", worker.handle.ID()), zap.Int64("counter", num), zap.Any("status", status.Code))
+			worker.curLoc = taskStatus.CurrentLoc
+			jm.counter += taskStatus.Count
+			log.L().Debug("cvs job tmp num ", zap.Any("id", worker.handle.Load().(lib.WorkerHandle).ID()), zap.Any("status", string(status.ExtBytes)))
 			// todo : store the sync progress into the meta store for each file
 			if status.Code == lib.WorkerStatusFinished {
 				filesNum++
@@ -140,10 +168,85 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 		log.L().Info("cvs job master finished")
 		return jm.BaseJobMaster.Exit(ctx, jm.Status(), nil)
 	}
+	for _, new := range newWorkers {
+		jm.syncFilesInfo[new.id] = new
+	}
+	for _, old := range oldWorkers {
+		jm.syncFilesInfo[old.id] = old
+	}
 	return nil
 }
 
-func (jm *JobMaster) OnMasterRecovered(ctx context.Context) error {
+func workInfoFromStatus(stats *cvsTask.Status, id lib.WorkerID) *workerInfo {
+	return &workerInfo{
+		id:     id,
+		idx:    stats.TaskConfig.Idx,
+		curLoc: stats.CurrentLoc,
+	}
+}
+
+func (jm *JobMaster) OnMasterRecovered(ctx context.Context) (err error) {
+	log.L().Info("recovering job master", zap.Any("id", jm.ID()))
+	filesNum, err := jm.listSrcFiles(ctx)
+	if err != nil {
+		return err
+	}
+	aliveMap := make(map[int]*workerInfo)
+	for i := 0; i < filesNum; i++ {
+		aliveMap[i] = &workerInfo{
+			idx: i,
+		}
+	}
+	metaClt := lib.NewWorkerMetadataClient(jm.workerID, jm.MetaKVClient())
+	workerMaps, err := metaClt.LoadAllWorkers(ctx)
+	if err != nil {
+		return err
+	}
+	for workerID, status := range workerMaps {
+		taskStatus := &cvsTask.Status{}
+		err := json.Unmarshal(status.ExtBytes, taskStatus)
+		if err != nil {
+			return err
+		}
+		idx := taskStatus.TaskConfig.Idx
+		oldWorker, ok := aliveMap[idx]
+		if !ok {
+			// this file idx has finished
+			continue
+		}
+		if status.Code != lib.WorkerStatusFinished {
+			newWorker := workInfoFromStatus(taskStatus, workerID)
+			if newWorker.curLoc > oldWorker.curLoc {
+				aliveMap[idx] = newWorker
+			}
+		} else {
+			delete(aliveMap, idx)
+		}
+	}
+	jm.syncFilesInfo = make(map[string]*workerInfo)
+	for fileID, worker := range aliveMap {
+		if worker.id == "" {
+			log.L().Info("recovering file has no worker, will create new ones", zap.Any("file", fileID), zap.Any("id", jm.ID()))
+			conf := cvsTask.Config{
+				SrcHost:  jm.syncInfo.SrcHost,
+				DstHost:  jm.syncInfo.DstHost,
+				DstDir:   jm.syncInfo.DstDir,
+				StartLoc: worker.curLoc,
+				Idx:      worker.idx,
+			}
+			workerID, err := jm.CreateWorker(lib.CvsTask, conf, 10)
+			if err != nil {
+				return err
+			}
+			jm.syncFilesInfo[workerID] = worker
+		} else {
+			log.L().Info("recovering file has worker, will create wait hb", zap.Any("file", fileID), zap.Any("id", jm.ID()))
+			worker.waitAckStartTime = jm.clocker.Now()
+			worker.waitingRecover = true
+			jm.syncFilesInfo[worker.id] = worker
+		}
+	}
+	jm.filesNum = len(jm.syncFilesInfo)
 	return nil
 }
 
@@ -153,39 +256,56 @@ func (jm *JobMaster) OnWorkerDispatched(worker lib.WorkerHandle, result error) e
 
 func (jm *JobMaster) OnWorkerOnline(worker lib.WorkerHandle) error {
 	// todo : add the worker information to the sync files map
+	jm.mu.Lock()
+	defer jm.mu.Unlock()
 	syncInfo, exist := jm.syncFilesInfo[worker.ID()]
 	if !exist {
 		log.L().Panic("phantom worker found", zap.Any("id", worker.ID()))
 	} else {
 		log.L().Info("worker online ", zap.Any("id", worker.ID()))
 	}
-	syncInfo.handle = worker
+	syncInfo.handle.Store(worker)
+	syncInfo.waitingRecover = false
 	return nil
 }
 
+func getTaskConfig(info *workerInfo, jobConfig *Config) *cvsTask.Config {
+	return &cvsTask.Config{
+		SrcHost:  jobConfig.SrcHost,
+		DstHost:  jobConfig.DstHost,
+		DstDir:   jobConfig.DstDir,
+		StartLoc: info.curLoc,
+		Idx:      info.idx,
+	}
+}
+
 func (jm *JobMaster) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
+	jm.mu.Lock()
 	syncInfo, exist := jm.syncFilesInfo[worker.ID()]
+	jm.mu.Unlock()
 	log.L().Info("on worker offline ", zap.Any(" worker :", worker.ID()))
 	if !exist {
 		log.L().Panic("bad worker found", zap.Any("message", worker.ID()))
 	}
-	// Force to set worker handle, in case of worker finishes before OnWorkerOnline
-	// is fired and worker handle is missing
-	syncInfo.handle = worker
-	log.L().Info("worker finished", zap.String("worker-id", worker.ID()), zap.Any("status", worker.Status()), zap.Error(reason))
-	// TODO failover
+	if derrors.ErrWorkerFinish.Equal(reason) {
+		log.L().Info("worker finished", zap.String("worker-id", worker.ID()), zap.Any("status", worker.Status()), zap.Error(reason))
+		return nil
+	}
+
+	workerID, err := jm.CreateWorker(lib.CvsTask, getTaskConfig(syncInfo, jm.syncInfo), 10)
+	if err != nil {
+		log.L().Info("create worker failed ", zap.String(" information :", err.Error()))
+	}
+	jm.mu.Lock()
+	defer jm.mu.Unlock()
+
+	delete(jm.syncFilesInfo, worker.ID())
+	jm.syncFilesInfo[workerID] = &workerInfo{
+		id:     workerID,
+		idx:    syncInfo.idx,
+		curLoc: syncInfo.curLoc,
+	}
 	return nil
-	//var err error
-	//dstDir := jm.syncInfo.DstDir + "/" + syncInfo.file
-	//srcDir := jm.syncInfo.SrcDir + "/" + syncInfo.file
-	//conf := cvsTask.Config{SrcHost: jm.syncInfo.SrcHost, SrcDir: srcDir, DstHost: jm.syncInfo.DstHost, DstDir: dstDir, StartLoc: syncInfo.curLoc}
-	//workerID, err := jm.CreateWorker(lib.CvsTask, conf, 10)
-	//if err != nil {
-	//	log.L().Info("create worker failed ", zap.String(" information :", err.Error()))
-	//}
-	//delete(jm.syncFilesInfo, worker.ID())
-	//// todo : if the worker id is empty ,the sync file will be lost.
-	//jm.syncFilesInfo[workerID] = &workerInfo{file: syncInfo.file, curLoc: syncInfo.curLoc, handle: nil}
 }
 
 func (jm *JobMaster) OnWorkerMessage(worker lib.WorkerHandle, topic p2p.Topic, message interface{}) error {
