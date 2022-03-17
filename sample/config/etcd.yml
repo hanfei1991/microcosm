@@ -4,10 +4,10 @@
 name: 'dataflow-etcd'
 
 # Path to the data directory.
-data-dir: '/tmp/dataflow-etcd'
+#data-dir: '/tmp/dataflow-etcd'
 
 # Path to the dedicated wal directory.
-wal-dir:  '/tmp/dataflow-etcd'
+#wal-dir:  '/tmp/dataflow-etcd'
 
 # Number of committed transactions to trigger a snapshot to disk.
 snapshot-count: 10000
