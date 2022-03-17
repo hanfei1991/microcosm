@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	job_template_path = "../config/job_template.yaml"
+	jobTemplatePath = "../config/job_template.yaml"
 )
 
 func TestJobStore(t *testing.T) {
@@ -34,7 +34,7 @@ func TestJobStore(t *testing.T) {
 	require.IsType(t, &Job{}, state)
 
 	jobCfg := &config.JobCfg{}
-	require.NoError(t, jobCfg.DecodeFile(job_template_path))
+	require.NoError(t, jobCfg.DecodeFile(jobTemplatePath))
 
 	job := NewJob(jobCfg)
 	require.NoError(t, jobStore.Put(context.Background(), job))

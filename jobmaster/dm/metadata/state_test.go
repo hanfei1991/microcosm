@@ -14,6 +14,10 @@ type DummyState struct {
 	I int
 }
 
+func (ds *DummyState) String() string {
+	return "dummy state"
+}
+
 type DummyStore struct {
 	*DefaultStore
 }
@@ -66,4 +70,7 @@ func TestDefaultStore(t *testing.T) {
 	state, err = dummyStore.Get(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, dummyState, state)
+
+	dummyState = state.(*DummyState)
+	require.Equal(t, dummyState.String(), "dummy state")
 }
