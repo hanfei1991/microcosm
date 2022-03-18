@@ -85,6 +85,8 @@ services:
                         - "server-master-0"
                         - "server-master-2"
                         - "server-master-1"
+                extra_hosts:
+                        - "host.docker.internal:host-gateway"
         server-executor-1:
                 image: dataflow:test
                 volumes:
@@ -104,6 +106,8 @@ services:
                         - "server-master-0"
                         - "server-master-2"
                         - "server-master-1"
+                extra_hosts:
+                        - "host.docker.internal:host-gateway"
         server-executor-2:
                 image: dataflow:test
                 volumes:
@@ -123,3 +127,5 @@ services:
                         - "server-master-0"
                         - "server-master-2"
                         - "server-master-1"
+                extra_hosts:
+                        - "host.docker.internal:host-gateway"
