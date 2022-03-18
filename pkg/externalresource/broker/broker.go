@@ -7,9 +7,9 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 
+	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/storagecfg"
-	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 )
 
 type Broker interface {
@@ -33,13 +33,13 @@ type Impl struct {
 	factory *Factory
 }
 
-func NewBroker(config *storagecfg.Config, executorID resourcemeta.ExecutorID, client metaclient.KV) *Impl {
+func NewBroker(config *storagecfg.Config, executorID resourcemeta.ExecutorID, client pb.ResourceManagerClient) *Impl {
 	return &Impl{
 		config:     config,
 		executorID: executorID,
 		factory: &Factory{
-			config:   config,
-			accessor: resourcemeta.NewMetadataAccessor(client),
+			config: config,
+			client: client,
 		},
 	}
 }
@@ -51,7 +51,7 @@ func (i *Impl) OpenStorage(
 	resourcePath resourcemeta.ResourceID,
 ) (Handle, error) {
 	if strings.HasPrefix(resourcePath, "/"+string(resourcemeta.ResourceTypeLocalFile)+"/") {
-		return i.factory.NewHandleForLocalFile(ctx, workerID, jobID)
+		return i.factory.NewHandleForLocalFile(ctx, jobID, workerID, resourcePath)
 	}
 	log.L().Panic("unsupported resource type", zap.String("resource-path", resourcePath))
 	// TODO implement S3 support

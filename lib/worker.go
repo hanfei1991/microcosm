@@ -2,10 +2,11 @@ package lib
 
 import (
 	"context"
-	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
-	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
 	"sync"
 	"time"
+
+	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
+	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"

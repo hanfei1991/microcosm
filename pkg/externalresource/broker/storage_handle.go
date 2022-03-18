@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/hanfei1991/microcosm/pb"
+
 	"github.com/pingcap/errors"
 	brStorage "github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -31,8 +33,8 @@ type BrExternalStorageHandle struct {
 	workerID   resourcemeta.WorkerID
 	executorID resourcemeta.ExecutorID
 
-	inner    brStorage.ExternalStorage
-	accessor *resourcemeta.MetadataAccessor
+	inner  brStorage.ExternalStorage
+	client pb.ResourceManagerClient
 }
 
 func (h *BrExternalStorageHandle) ID() resourcemeta.ResourceID {
@@ -44,18 +46,14 @@ func (h *BrExternalStorageHandle) BrExternalStorage() brStorage.ExternalStorage 
 }
 
 func (h *BrExternalStorageHandle) Persist(ctx context.Context) error {
-	ok, err := h.accessor.CreateResource(ctx, &resourcemeta.ResourceMeta{
-		ID:       h.id,
-		Job:      h.jobID,
-		Worker:   h.workerID,
-		Executor: h.executorID,
-		Deleted:  false,
+	_, err := h.client.CreateResource(ctx, &pb.CreateResourceRequest{
+		ResourceId:      h.id,
+		CreatorExecutor: string(h.executorID),
+		JobId:           h.jobID,
+		CreatorWorkerId: h.workerID,
 	})
 	if err != nil {
-		return err
-	}
-	if !ok {
-		return derror.ErrDuplicateResourceID.GenWithStackByArgs(h.id)
+		return errors.Trace(err)
 	}
 	return nil
 }
@@ -66,12 +64,13 @@ func (h *BrExternalStorageHandle) Discard(ctx context.Context) error {
 }
 
 type Factory struct {
-	config   *storagecfg.Config
-	accessor *resourcemeta.MetadataAccessor
+	config *storagecfg.Config
+	client pb.ResourceManagerClient
 }
 
 func (f *Factory) NewHandleForLocalFile(
 	ctx context.Context,
+	jobID resourcemeta.JobID,
 	workerID resourcemeta.WorkerID,
 	resourceID resourcemeta.ResourceID,
 ) (Handle, error) {
@@ -89,8 +88,12 @@ func (f *Factory) NewHandleForLocalFile(
 	}
 
 	return &BrExternalStorageHandle{
-		inner:    ls,
-		accessor: f.accessor,
+		inner:  ls,
+		client: f.client,
+
+		id:       resourceID,
+		jobID:    jobID,
+		workerID: workerID,
 	}, nil
 }
 

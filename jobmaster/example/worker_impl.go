@@ -63,7 +63,7 @@ func (w *exampleWorker) Tick(ctx context.Context) error {
 	count := w.work.tickCount
 	w.work.mu.Unlock()
 
-	storage, err := w.OpenStorage(nil, "")
+	storage, err := w.OpenStorage(nil, "/local/example")
 	if err != nil {
 		return err
 	}

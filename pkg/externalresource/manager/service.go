@@ -13,7 +13,7 @@ import (
 )
 
 type Service struct {
-	mu *ctxmu.CtxMutex
+	mu       *ctxmu.CtxMutex
 	accessor *resourcemeta.MetadataAccessor
 }
 
@@ -21,7 +21,7 @@ func (s *Service) CreateResource(
 	ctx context.Context,
 	request *pb.CreateResourceRequest,
 ) (*pb.CreateResourceResponse, error) {
-	if !s.mu.Lock(ctx){
+	if !s.mu.Lock(ctx) {
 		return nil, status.Error(codes.Canceled, ctx.Err().Error())
 	}
 	defer s.mu.Unlock()
@@ -35,8 +35,8 @@ func (s *Service) CreateResource(
 	})
 	if err != nil {
 		st, stErr := status.New(codes.Internal, err.Error()).WithDetails(&pb.ResourceError{
-			ErrorCode:    pb.ResourceErrorCode_ResourceManagerInternalError,
-			StackTrace:   errors.ErrorStack(err),
+			ErrorCode:  pb.ResourceErrorCode_ResourceManagerInternalError,
+			StackTrace: errors.ErrorStack(err),
 		})
 		if stErr != nil {
 			return nil, stErr
@@ -44,9 +44,9 @@ func (s *Service) CreateResource(
 		return nil, st.Err()
 	}
 
-	if !ok{
+	if !ok {
 		st, stErr := status.New(codes.Internal, err.Error()).WithDetails(&pb.ResourceError{
-			ErrorCode:    pb.ResourceErrorCode_ResourceIDConflict,
+			ErrorCode: pb.ResourceErrorCode_ResourceIDConflict,
 		})
 		if stErr != nil {
 			return nil, stErr
