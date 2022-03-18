@@ -111,7 +111,12 @@ func (s *SubTaskMaster) buildDMUnit(tp lib.WorkerType) unit.Unit {
 }
 
 func (s *SubTaskMaster) Tick(ctx context.Context) error {
-	status := s.GetWorkers()[s.currWorkerID].Status()
+	worker := s.GetWorkers()[s.currWorkerID]
+	if worker == nil {
+		// not ready? will this happen?
+		return nil
+	}
+	status := worker.Status()
 	switch status.Code {
 	case lib.WorkerStatusFinished:
 		log.L().Info("worker finished", zap.String("currWorkerID", s.currWorkerID))
@@ -169,11 +174,21 @@ func (s *SubTaskMaster) OnJobManagerFailover(reason lib.MasterFailoverReason) er
 	return nil
 }
 
+func (s *SubTaskMaster) OnJobManagerMessage(topic p2p.Topic, message p2p.MessageValue) error {
+	log.L().Info("on job manager message", zap.Any("message", message))
+	return nil
+}
+
 func (s *SubTaskMaster) IsJobMasterImpl() {
 	log.L().Info("is job master impl")
 }
 
 func (s *SubTaskMaster) OnMasterFailover(reason lib.MasterFailoverReason) error {
 	log.L().Info("on master failover")
+	return nil
+}
+
+func (s *SubTaskMaster) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
+	log.L().Info("on master message", zap.Any("message", message))
 	return nil
 }
