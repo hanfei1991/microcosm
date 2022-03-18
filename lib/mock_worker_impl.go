@@ -4,12 +4,11 @@ import (
 	"context"
 	"sync"
 
-	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
-
 	"github.com/stretchr/testify/mock"
 	"go.uber.org/atomic"
 	"go.uber.org/dig"
 
+	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )

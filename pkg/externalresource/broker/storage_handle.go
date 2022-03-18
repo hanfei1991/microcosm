@@ -5,13 +5,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/hanfei1991/microcosm/pb"
-
 	"github.com/pingcap/errors"
 	brStorage "github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 
+	"github.com/hanfei1991/microcosm/pb"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/storagecfg"
