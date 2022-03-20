@@ -97,5 +97,5 @@ func TestDefaultStore(t *testing.T) {
 		DefaultStore: NewDefaultStore(kvClient),
 	}
 	failedStore.DefaultStore.Store = failedStore
-	require.Error(t, failedStore.Put(context.Background(), failedState))
+	require.EqualError(t, failedStore.Put(context.Background(), failedState), "fields of state should all be public")
 }

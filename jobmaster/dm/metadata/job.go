@@ -42,7 +42,7 @@ func NewJob(jobCfg *config.JobCfg) *Job {
 	return job
 }
 
-// Task represents the status of a upstream task.
+// A job may contain multiple upstream and it will be converted into multiple tasks.
 type Task struct {
 	Cfg   *config.TaskCfg
 	Stage TaskStage
@@ -79,8 +79,8 @@ func (jobStore *JobStore) Key() string {
 	return adapter.DMJobKeyAdapter.Encode(jobStore.id)
 }
 
-// Operate will be called if user operate job.
-func (jobStore *JobStore) Operate(ctx context.Context, taskIDs []string, stage TaskStage) error {
+// UpdateStages will be called if user operate job.
+func (jobStore *JobStore) UpdateStages(ctx context.Context, taskIDs []string, stage TaskStage) error {
 	state, err := jobStore.Get(ctx)
 	if err != nil {
 		return errors.Trace(err)
