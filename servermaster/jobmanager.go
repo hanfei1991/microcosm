@@ -122,9 +122,10 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 	meta := &lib.MasterMetaKVData{
 		// TODO: we can use job name provided from user, but we must check the
 		// job name is unique before using it.
-		ID:     jm.uuidGen.NewString(),
-		Epoch:  epoch,
-		Config: req.Config,
+		ID:         jm.uuidGen.NewString(),
+		Config:     req.Config,
+		StatusCode: lib.MasterStatusUninit,
+		Epoch:      epoch,
 	}
 	switch req.Tp {
 	case pb.JobType_CVSDemo:

@@ -117,20 +117,20 @@ func TestJobManagerQueryJob(t *testing.T) {
 			pb.QueryJobResponse_stopped,
 		},
 	}
-	metaKVClient := mockkv.NewMetaMock()
+
+	mockMaster := lib.NewMockMasterImpl("", "job-manager-query-job-test")
 	for _, tc := range testCases {
-		cli := lib.NewMasterMetadataClient(tc.meta.ID, metaKVClient)
+		cli := lib.NewMasterMetadataClient(tc.meta.ID, mockMaster.MetaKVClient())
 		err := cli.Store(ctx, tc.meta)
 		require.Nil(t, err)
 	}
 
-	mockMaster := lib.NewMockMasterImpl("", "job-manager-query-job-test")
-	mockMaster.OverrideMetaKVClient(metaKVClient)
 	mgr := &JobManagerImplV2{
 		BaseMaster:       mockMaster.DefaultBaseMaster,
 		JobFsm:           NewJobFsm(),
 		uuidGen:          uuid.NewGenerator(),
-		masterMetaClient: lib.NewMasterMetadataClient(lib.JobManagerUUID, metaKVClient),
+		masterMetaClient: lib.NewMasterMetadataClient(lib.JobManagerUUID, mockMaster.MetaKVClient()),
+		epochGen:         epoch.NewMockEpochGenerator(),
 	}
 
 	for _, tc := range testCases {
