@@ -18,8 +18,8 @@ import (
 	extkv "github.com/hanfei1991/microcosm/pkg/meta/extension"
 	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
+	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
-	"github.com/hanfei1991/microcosm/pkg/resource"
 )
 
 type MockMasterImpl struct {
@@ -71,7 +71,7 @@ type masterParamListForTest struct {
 	UserRawKVClient       extkv.KVClientEx
 	ExecutorClientManager client.ClientsManager
 	ServerMasterClient    client.MasterClient
-	ResourceProxy         resource.Proxy
+	ResourceBroker        broker.Broker
 }
 
 func (m *MockMasterImpl) Reset() {
@@ -91,7 +91,7 @@ func (m *MockMasterImpl) Reset() {
 			UserRawKVClient:       m.userRawKVClient,
 			ExecutorClientManager: m.executorClientManager,
 			ServerMasterClient:    m.serverMasterClient,
-			ResourceProxy:         resource.NewMockProxy(m.id),
+			ResourceBroker:        broker.NewBrokerForTesting("executor-1"),
 		}
 	})
 	if err != nil {

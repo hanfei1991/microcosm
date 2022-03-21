@@ -6,15 +6,13 @@ import (
 	"testing"
 	"time"
 
-	dcontext "github.com/hanfei1991/microcosm/pkg/context"
-	"github.com/hanfei1991/microcosm/pkg/deps"
-
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/model"
-	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
+	dcontext "github.com/hanfei1991/microcosm/pkg/context"
+	"github.com/hanfei1991/microcosm/pkg/deps"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 

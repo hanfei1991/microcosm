@@ -2,7 +2,6 @@ package example
 
 import (
 	"context"
-	"os"
 	"testing"
 	"time"
 
@@ -31,20 +30,16 @@ func TestExampleWorker(t *testing.T) {
 	err := worker.Init(ctx)
 	require.NoError(t, err)
 
-	lib.MockBaseWorkerPersistResource(t, worker.BaseWorker.(*lib.DefaultBaseWorker))
-
 	// tick twice
 	err = worker.Tick(ctx)
 	require.NoError(t, err)
 	err = worker.Tick(ctx)
 	require.NoError(t, err)
 
-	require.FileExists(t, "./unit_test_resources/worker/1.txt")
-	require.FileExists(t, "./unit_test_resources/worker/2.txt")
-	defer func() {
-		err = os.RemoveAll("./unit_test_resources/worker")
-		require.NoError(t, err)
-	}()
+	broker := worker.BaseWorker.(*lib.BaseWorkerForTesting).Broker
+	broker.AssertPersisted(t, "/local/example")
+	broker.AssertFileExists(t, workerID, "/local/example", "1.txt")
+	broker.AssertFileExists(t, workerID, "/local/example", "2.txt")
 
 	time.Sleep(time.Second)
 	require.Eventually(t, func() bool {
@@ -56,7 +51,7 @@ func TestExampleWorker(t *testing.T) {
 	require.Len(t, resp.Kvs, 1)
 	require.Equal(t, "2", string(resp.Kvs[0].Value))
 
-	lib.MockBaseWorkerCheckSendMessage(t, worker.BaseWorker.(*lib.DefaultBaseWorker), testTopic, testMsg)
+	lib.MockBaseWorkerCheckSendMessage(t, worker.BaseWorker.(*lib.BaseWorkerForTesting).DefaultBaseWorker, testTopic, testMsg)
 	err = worker.Close(ctx)
 	require.NoError(t, err)
 }

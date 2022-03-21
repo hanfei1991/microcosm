@@ -11,8 +11,8 @@ import (
 	extkv "github.com/hanfei1991/microcosm/pkg/meta/extension"
 	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
+	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
-	"github.com/hanfei1991/microcosm/pkg/resource"
 )
 
 type mockWorkerImpl struct {
@@ -34,9 +34,9 @@ type workerParamListForTest struct {
 
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
-	ResourceProxy         resource.Proxy
 	MetaKVClient          metaclient.KVClient
 	UserRawKVClient       extkv.KVClientEx
+	ResourceBroker        broker.Broker
 }
 
 //nolint:unparam
@@ -45,7 +45,7 @@ func newMockWorkerImpl(workerID WorkerID, masterID MasterID) *mockWorkerImpl {
 		id: workerID,
 	}
 
-	ret.DefaultBaseWorker = MockBaseWorker(workerID, masterID, ret)
+	ret.DefaultBaseWorker = MockBaseWorker(workerID, masterID, ret).DefaultBaseWorker
 	ret.messageHandlerManager = ret.DefaultBaseWorker.messageHandlerManager.(*p2p.MockMessageHandlerManager)
 	ret.messageSender = ret.DefaultBaseWorker.messageSender.(*p2p.MockMessageSender)
 	ret.metaKVClient = ret.DefaultBaseWorker.metaKVClient.(*mockkv.MetaMock)

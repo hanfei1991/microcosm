@@ -5,6 +5,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
+	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/pkg/workerpool"
@@ -66,7 +69,7 @@ type BaseWorker interface {
 	MetaKVClient() metaclient.KVClient
 	UpdateStatus(ctx context.Context, status WorkerStatus) error
 	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) (bool, error)
-	Resource() resource.Proxy
+	OpenStorage(ctx context.Context, resourcePath resourcemeta.ResourceID) (broker.Handle, error)
 	// Exit should be called when worker (in user logic) wants to exit
 	// Worker should update its worker status code to correct value before calling Exit
 	Exit(ctx context.Context, status WorkerStatus, err error) error
@@ -82,6 +85,7 @@ type DefaultBaseWorker struct {
 	metaKVClient metaclient.KVClient
 	// user metastore raw kvclient
 	userRawKVClient extKV.KVClientEx
+	resourceBroker        broker.Broker
 
 	masterClient *masterClient
 	masterID     MasterID
@@ -114,9 +118,9 @@ type workerParams struct {
 
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
-	ResourceProxy         resource.Proxy
 	MetaKVClient          metaclient.KVClient
 	UserRawKVClient       extKV.KVClientEx
+	ResourceBroker        broker.Broker
 }
 
 func NewBaseWorker(
@@ -136,8 +140,8 @@ func NewBaseWorker(
 		messageHandlerManager: params.MessageHandlerManager,
 		messageSender:         params.MessageSender,
 		metaKVClient:          params.MetaKVClient,
-		resourceProxy:         params.ResourceProxy,
 		userRawKVClient:       params.UserRawKVClient,
+		resourceBroker:        params.ResourceBroker,
 
 		masterID:      masterID,
 		id:            workerID,
@@ -333,8 +337,8 @@ func (w *DefaultBaseWorker) SendMessage(
 	return w.messageSender.SendToNode(ctx, w.masterClient.MasterNode(), topic, message)
 }
 
-func (w *DefaultBaseWorker) Resource() resource.Proxy {
-	return w.resourceProxy
+func (w *DefaultBaseWorker) OpenStorage(ctx context.Context, resourcePath resourcemeta.ResourceID) (broker.Handle, error) {
+	return w.resourceBroker.OpenStorage(ctx, w.id, w.masterID, resourcePath)
 }
 
 func (w *DefaultBaseWorker) Exit(ctx context.Context, status WorkerStatus, err error) error {

@@ -13,8 +13,8 @@ import (
 	extkv "github.com/hanfei1991/microcosm/pkg/meta/extension"
 	"github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
+	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
-	"github.com/hanfei1991/microcosm/pkg/resource"
 )
 
 type paramList struct {
@@ -24,7 +24,7 @@ type paramList struct {
 	MessageSender         p2p.MessageSender
 	MetaKVClient          metaclient.KVClient
 	UserRawKVClient       extkv.KVClientEx
-	ResourceProxy         resource.Proxy
+	ResourceBroker        broker.Broker
 }
 
 func makeCtxWithMockDeps(t *testing.T) *dcontext.Context {
@@ -35,7 +35,7 @@ func makeCtxWithMockDeps(t *testing.T) *dcontext.Context {
 			MessageSender:         p2p.NewMockMessageSender(),
 			MetaKVClient:          mock.NewMetaMock(),
 			UserRawKVClient:       mock.NewMetaMock(),
-			ResourceProxy:         resource.NewMockProxy("makeCtxWithMockDeps"),
+			ResourceBroker:        broker.NewBrokerForTesting("executor-1"),
 		}
 	})
 	require.NoError(t, err)

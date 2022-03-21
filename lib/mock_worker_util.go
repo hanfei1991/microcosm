@@ -7,30 +7,36 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/hanfei1991/microcosm/pb"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/deps"
 	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
+	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
-	"github.com/hanfei1991/microcosm/pkg/resource"
 )
+
+type BaseWorkerForTesting struct {
+	*DefaultBaseWorker
+	Broker *broker.LocalBroker
+}
 
 func MockBaseWorker(
 	workerID WorkerID,
 	masterID MasterID,
 	workerImpl WorkerImpl,
-) *DefaultBaseWorker {
+) *BaseWorkerForTesting {
 	ctx := dcontext.Background()
 	dp := deps.NewDeps()
+
+	resourceBroker := broker.NewBrokerForTesting("executor-1")
 	params := workerParamListForTest{
 		MessageHandlerManager: p2p.NewMockMessageHandlerManager(),
 		MessageSender:         p2p.NewMockMessageSender(),
-		ResourceProxy:         resource.NewMockProxy(workerID),
 		MetaKVClient:          mockkv.NewMetaMock(),
 		UserRawKVClient:       mockkv.NewMetaMock(),
+		ResourceBroker:        resourceBroker,
+
 	}
 	err := dp.Provide(func() workerParamListForTest {
 		return params
@@ -45,14 +51,18 @@ func MockBaseWorker(
 		workerImpl,
 		workerID,
 		masterID)
-	return ret.(*DefaultBaseWorker)
+	return &BaseWorkerForTesting{
+		ret.(*DefaultBaseWorker),
+		resourceBroker,
+	}
 }
 
 func MockBaseWorkerCheckSendMessage(
 	t *testing.T,
 	worker *DefaultBaseWorker,
 	topic p2p.Topic,
-	message interface{}) {
+	message interface{},
+) {
 	masterNode := worker.masterClient.MasterNode()
 	got, ok := worker.messageSender.(*p2p.MockMessageSender).TryPop(masterNode, topic)
 	require.True(t, ok)
@@ -69,13 +79,4 @@ func MockBaseWorkerWaitUpdateStatus(
 		_, ok := worker.messageSender.(*p2p.MockMessageSender).TryPop(masterNode, topic)
 		return ok
 	}, time.Second, 100*time.Millisecond)
-}
-
-func MockBaseWorkerPersistResource(
-	t *testing.T,
-	worker *DefaultBaseWorker,
-) {
-	worker.resourceProxy.(resource.MockProxyWithMasterCli).MockMasterCli.
-		Mock.On("PersistResource", mock.Anything, mock.Anything).
-		Return(&pb.PersistResourceResponse{}, nil)
 }

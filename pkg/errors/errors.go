@@ -107,4 +107,11 @@ var (
 	ErrMetaCommittedTxn     = errors.Normalize("meta already committed txn", errors.RFCCodeText("DFLOW:ErrMetaCommittedTxn"))
 	ErrMetaStoreIDDuplicate = errors.Normalize("metastore id duplicated", errors.RFCCodeText("DFLOW:ErrMetaStoreIDDuplicate"))
 	ErrMetaStoreUnfounded   = errors.Normalize("metastore unfounded:%s", errors.RFCCodeText("DFLOW:ErrMetaStoreUnfounded"))
+
+	// DataSet errors
+	ErrDatasetEntryNotFound = errors.Normalize("dataset entry not found. Key: %s", errors.RFCCodeText("DFLOW:ErrDatasetEntryNotFound"))
+
+	// Resource related errors
+	ErrUnexpectedResourcePath = errors.Normalize("unexpected resource path: %s", errors.RFCCodeText("DFLOW:ErrUnexpectedResourcePath"))
+	ErrDuplicateResourceID    = errors.Normalize("duplicate resource ID: %s", errors.RFCCodeText("DFLOW:ErrDuplicateResourceID"))
 )

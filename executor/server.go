@@ -34,8 +34,10 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/config"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/errors"
+	"github.com/hanfei1991/microcosm/pkg/externalresource"
+	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
+	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
-	"github.com/hanfei1991/microcosm/pkg/resource"
 	"github.com/hanfei1991/microcosm/pkg/serverutils"
 	"github.com/hanfei1991/microcosm/test"
 	"github.com/hanfei1991/microcosm/test/mock"
@@ -67,7 +69,7 @@ type Server struct {
 	userRawKVClient extKV.KVClientEx
 	p2pMsgRouter    p2pImpl.MessageRouter
 	discoveryKeeper *serverutils.DiscoveryKeepaliver
-	resourceBroker  *resource.Broker
+	resourceBroker  *externalresource.Broker
 }
 
 func NewServer(cfg *Config, ctx *test.Context) *Server {
@@ -189,8 +191,16 @@ func (s *Server) buildDeps(wid lib.WorkerID) (*deps.Deps, error) {
 	if err != nil {
 		return nil, err
 	}
-	err = deps.Provide(func() resource.Proxy {
+	err = deps.Provide(func() externalresource.Proxy {
 		return proxy
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	err = deps.Provide(func() broker.Broker {
+		// TODO: use correct broker.Broker
+		return nil
 	})
 	if err != nil {
 		return nil, err
@@ -374,7 +384,7 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 
 	// TODO: make the prefix configurable later
-	s.resourceBroker = resource.NewBroker(s.cfg.Name, s.cfg.Name, s.cli)
+	s.resourceBroker = externalresource.NewBroker(s.cfg.Name, s.cfg.Name, s.cli)
 
 	s.p2pMsgRouter = p2p.NewMessageRouter(p2p.NodeID(s.info.ID), s.info.Addr)
 
