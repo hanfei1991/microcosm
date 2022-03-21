@@ -420,7 +420,7 @@ func (m *DefaultBaseMaster) runWorkerCheck(ctx context.Context) error {
 					zap.Any("worker-info", workerInfo),
 				)
 			}
-			log.L().Info("worker is offline", zap.Any("master-id", m.id), zap.Any("worker-info", workerInfo), zap.Any("work-status", status))
+			log.L().Info("worker is offline", zap.Any("master-id", m.id), zap.Any("worker-info", workerInfo), zap.Any("worker-status", status))
 			tombstoneHandle := NewTombstoneWorkerHandle(workerInfo.ID, *status, nil)
 			var offlineError error
 			switch status.Code {
