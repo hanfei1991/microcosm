@@ -2,7 +2,6 @@ package example
 
 import (
 	"context"
-	"os"
 	"testing"
 	"time"
 
@@ -41,13 +40,8 @@ func TestExampleWorker(t *testing.T) {
 
 	broker := worker.BaseWorker.(*lib.BaseWorkerForTesting).Broker
 	broker.AssertPersisted(t, "/local/example")
-	broker.AssertFileExists(t, "worker", "local/example", "1.txt")
-	broker.AssertFileExists(t, "worker", "local/example", "2.txt")
-
-	defer func() {
-		err = os.RemoveAll("./unit_test_resources/worker")
-		require.NoError(t, err)
-	}()
+	broker.AssertFileExists(t, workerID, "/local/example", "1.txt")
+	broker.AssertFileExists(t, workerID, "/local/example", "2.txt")
 
 	time.Sleep(time.Second)
 	require.Eventually(t, func() bool {

@@ -26,7 +26,7 @@ type LocalBroker struct {
 }
 
 func NewBrokerForTesting(executorID resourcemeta.ExecutorID) *LocalBroker {
-	dir, err := ioutil.TempDir("/tmp", "-localfiles")
+	dir, err := ioutil.TempDir("/tmp", "*-localfiles")
 	if err != nil {
 		log.L().Panic("failed to make tempdir")
 	}
