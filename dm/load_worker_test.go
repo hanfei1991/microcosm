@@ -22,7 +22,7 @@ func TestLoadWorker(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	workerWrapped, err := registry.GlobalWorkerRegistry().CreateWorker(
-		dcontext.Background(), lib.WorkerDMLoad, workerID, masterID, mockWorkerConfig())
+		dcontext.Background(), lib.WorkerDMLoad, workerID, masterID, "", mockWorkerConfig())
 	require.NoError(t, err)
 
 	worker := workerWrapped.(*loadWorker)

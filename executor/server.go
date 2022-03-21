@@ -222,6 +222,7 @@ func (s *Server) DispatchTask(ctx context.Context, req *pb.DispatchTaskRequest) 
 		lib.WorkerType(req.GetTaskTypeId()),
 		req.GetWorkerId(),
 		req.GetMasterId(),
+		req.GetUserId(),
 		req.GetTaskConfig())
 	if err != nil {
 		log.L().Error("Failed to create worker", zap.Error(err))

@@ -97,6 +97,62 @@ func (c *MasterMetadataClient) GenerateEpoch(ctx context.Context) (Epoch, error)
 	return resp.Header.Revision, nil
 }
 
+type UserMetadataClient struct {
+	userID       UserID
+	metaKVClient metadata.MetaKV
+}
+
+func (c *UserMetadataClient) userMetaKey(key string) string {
+	return adapter.UserKeyAdapter.Encode(c.userID, key)
+}
+
+func (c *UserMetadataClient) Load(ctx context.Context, key string) (string, error) {
+	rawResp, err := c.metaKVClient.Get(ctx, c.userMetaKey(key))
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	resp := rawResp.(*clientv3.GetResponse)
+	if len(resp.Kvs) == 0 {
+		return "", derror.ErrWorkerNoMeta.GenWithStackByArgs()
+	}
+	return string(resp.Kvs[0].Value), nil
+}
+
+func (c *UserMetadataClient) Remove(ctx context.Context, key string) (bool, error) {
+	raw, err := c.metaKVClient.Delete(ctx, c.userMetaKey(key))
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	if raw == nil {
+		// This is in order to be compatible with MetaMock.
+		// TODO remove this check when we migrate to the new metaclient.
+		return true, nil
+	}
+	resp := raw.(*clientv3.DeleteResponse)
+	if resp.Deleted != 1 {
+		return false, nil
+	}
+	return true, nil
+}
+
+func (c *UserMetadataClient) Store(ctx context.Context, key string, value string) error {
+	_, err := c.metaKVClient.Put(ctx, c.userMetaKey(key), value)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+func NewUserMetadataClient(
+	userID UserID,
+	metaKVClient metadata.MetaKV,
+) *UserMetadataClient {
+	return &UserMetadataClient{
+		userID:       userID,
+		metaKVClient: metaKVClient,
+	}
+}
+
 type WorkerMetadataClient struct {
 	masterID     MasterID
 	metaKVClient metadata.MetaKV

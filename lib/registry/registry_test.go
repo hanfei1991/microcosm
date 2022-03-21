@@ -27,6 +27,7 @@ func TestGlobalRegistry(t *testing.T) {
 		fakeWorkerType,
 		"worker-1",
 		"master-1",
+		"",
 		[]byte(`{"target-tick":10}`))
 	require.NoError(t, err)
 	require.IsType(t, &lib.DefaultBaseWorker{}, worker)
@@ -52,7 +53,7 @@ func TestRegistryDuplicateType(t *testing.T) {
 func TestRegistryWorkerTypeNotFound(t *testing.T) {
 	registry := NewRegistry()
 	ctx := dcontext.Background()
-	_, err := registry.CreateWorker(ctx, fakeWorkerType, "worker-1", "master-1", []byte(`{"Val"":0}`))
+	_, err := registry.CreateWorker(ctx, fakeWorkerType, "worker-1", "master-1", "", []byte(`{"Val"":0}`))
 	require.Error(t, err)
 }
 

@@ -54,11 +54,10 @@ type JobMaster struct {
 	syncFilesInfo     map[int]*WorkerInfo
 	counter           int64
 	workerID          lib.WorkerID
-	filesNum          int
 	statusRateLimiter *rate.Limiter
 
-	workerIDFileIDMap sync.Map
-	statusCode        struct {
+	launchedWorkers sync.Map
+	statusCode      struct {
 		sync.RWMutex
 		code lib.WorkerStatusCode
 	}
@@ -90,32 +89,32 @@ func NewCVSJobMaster(ctx *dcontext.Context, workerID lib.WorkerID, masterID lib.
 func (jm *JobMaster) InitImpl(ctx context.Context) (err error) {
 	log.L().Info("initializing the cvs jobmaster  ", zap.Any("id :", jm.workerID))
 	jm.setStatusCode(lib.WorkerStatusInit)
-	jm.filesNum, err = jm.listSrcFiles(ctx)
+	filesNum, err := jm.listSrcFiles(ctx)
 	if err != nil {
 		return err
 	}
-	if jm.filesNum == 0 {
+	if filesNum == 0 {
 		log.L().Panic("no file found under the folder ", zap.Any("id", jm.workerID))
 	}
-	log.L().Info("cvs jobmaster list file success", zap.Any("id", jm.workerID), zap.Any("file number", jm.filesNum))
+	log.L().Info("cvs jobmaster list file success", zap.Any("id", jm.workerID), zap.Any("file number", filesNum))
 	// todo: store the jobmaster information into the metastore
-	for idx := 0; idx < jm.filesNum; idx++ {
-		conf := cvsTask.Config{
-			SrcHost: jm.jobStatus.SrcHost,
-			Idx:     idx,
-			DstHost: jm.jobStatus.DstHost,
-			DstDir:  jm.jobStatus.DstDir,
-		}
-		workerID, err := jm.CreateWorker(lib.CvsTask, conf, 10 /* TODO add cost */)
-		if err != nil {
-			// todo : handle the error case, should recover for failing to create worker
-			return err
-		}
+	for idx := 0; idx < filesNum; idx++ {
 		jm.jobStatus.FileInfos = append(jm.jobStatus.FileInfos, &SyncFileInfo{Idx: idx})
 		jm.syncFilesInfo[idx] = &WorkerInfo{
-			handle: *atomic.NewUnsafePointer(unsafe.Pointer(nil)),
+			needCreate: *atomic.NewBool(true),
+			handle:     *atomic.NewUnsafePointer(unsafe.Pointer(nil)),
 		}
-		jm.workerIDFileIDMap.Store(workerID, idx)
+	}
+
+	// Then persist the checkpoint for recovery
+	// This persistence has to succeed before we set this master to normal status.
+	statusBytes, err := json.Marshal(jm.jobStatus)
+	if err != nil {
+		return err
+	}
+	err = jm.UserMetaKVClient().Store(ctx, jm.workerID, string(statusBytes))
+	if err != nil {
+		return err
 	}
 	jm.setStatusCode(lib.WorkerStatusNormal)
 	return nil
@@ -125,7 +124,7 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 	filesNum := 0
 	jm.counter = 0
 	if !jm.IsMasterReady() {
-		log.L().Info("job is not ready", zap.Any("master id", jm.workerID))
+		log.L().Info("jobmaster is not ready", zap.Any("master id", jm.workerID))
 		return nil
 	}
 
@@ -136,15 +135,17 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 			if err != nil {
 				log.L().Warn("create worker failed, try next time", zap.Any("master id", jm.workerID), zap.Error(err))
 			} else {
-				jm.workerIDFileIDMap.Store(workerID, idx)
+				jm.launchedWorkers.Store(workerID, idx)
 				workerInfo.needCreate.Store(false)
 			}
 			continue
 		}
+
 		// still awaiting online
 		if workerInfo.handle.Load() == nil {
 			continue
 		}
+
 		// update job status
 		handle := *(*lib.WorkerHandle)(workerInfo.handle.Load())
 		status := handle.Status()
@@ -171,7 +172,11 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 		}
 	}
 	if jm.statusRateLimiter.Allow() {
-		err := jm.UpdateJobStatus(ctx, jm.Status())
+		statsBytes, err := json.Marshal(jm.jobStatus)
+		if err != nil {
+			log.L().Warn("serialize job status failed, try next time", zap.Any("master id", jm.workerID), zap.Error(err))
+		}
+		err = jm.UserMetaKVClient().Store(ctx, jm.workerID, string(statsBytes))
 		if err != nil {
 			log.L().Warn("update job status, try next time", zap.Any("master id", jm.workerID), zap.Error(err))
 		}
@@ -181,7 +186,7 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 		log.L().Info("cvs job master stopped")
 		return jm.BaseJobMaster.Exit(ctx, jm.Status(), nil)
 	}
-	if filesNum == jm.filesNum {
+	if filesNum == len(jm.jobStatus.FileInfos) {
 		jm.setStatusCode(lib.WorkerStatusFinished)
 		log.L().Info("cvs job master finished")
 		return jm.BaseJobMaster.Exit(ctx, jm.Status(), nil)
@@ -192,13 +197,13 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 func (jm *JobMaster) OnMasterRecovered(ctx context.Context) (err error) {
 	log.L().Info("recovering job master", zap.Any("id", jm.ID()))
 	// load self status
-	metaClt := lib.NewWorkerMetadataClient(jm.workerID, jm.MetaKVClient())
-	status, err := metaClt.Load(ctx, jm.workerID)
+	statusBytes, err := jm.UserMetaKVClient().Load(ctx, jm.workerID)
 	if err != nil {
+		log.L().Warn("load status failed", zap.Any("master id", jm.ID), zap.Error(err))
 		return err
 	}
-	log.L().Info("jobmaster recover from meta", zap.Any("master id", jm.ID()), zap.String("status", string(status.ExtBytes)))
-	err = json.Unmarshal(status.ExtBytes, jm.jobStatus)
+	log.L().Info("jobmaster recover from meta", zap.Any("master id", jm.ID()), zap.String("status", statusBytes))
+	err = json.Unmarshal([]byte(statusBytes), jm.jobStatus)
 	if err != nil {
 		return err
 	}
@@ -215,8 +220,7 @@ func (jm *JobMaster) OnWorkerDispatched(worker lib.WorkerHandle, result error) e
 }
 
 func (jm *JobMaster) OnWorkerOnline(worker lib.WorkerHandle) error {
-	// todo : add the worker information to the sync files map
-	id, exist := jm.workerIDFileIDMap.Load(worker.ID())
+	id, exist := jm.launchedWorkers.Load(worker.ID())
 	if !exist {
 		log.L().Info("job master recovering and get new worker", zap.Any("id", worker.ID()), zap.Any("master id", jm.ID()))
 		if jm.IsMasterReady() {
@@ -235,7 +239,7 @@ func (jm *JobMaster) OnWorkerOnline(worker lib.WorkerHandle) error {
 	}
 	jm.syncFilesInfo[id.(int)].handle.Store(unsafe.Pointer(&worker))
 	jm.syncFilesInfo[id.(int)].needCreate.Store(false)
-	jm.workerIDFileIDMap.Store(worker.ID(), id.(int))
+	jm.launchedWorkers.Store(worker.ID(), id.(int))
 	return nil
 }
 
@@ -250,7 +254,7 @@ func getTaskConfig(jobStatus *Status, id int) *cvsTask.Config {
 }
 
 func (jm *JobMaster) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
-	val, exist := jm.workerIDFileIDMap.Load(worker.ID())
+	val, exist := jm.launchedWorkers.Load(worker.ID())
 	log.L().Info("on worker offline ", zap.Any(" worker :", worker.ID()))
 	if !exist {
 		log.L().Panic("bad worker found", zap.Any("message", worker.ID()))
@@ -307,7 +311,7 @@ func (jm *JobMaster) OnJobManagerMessage(topic p2p.Topic, message p2p.MessageVal
 					continue
 				}
 				handle := *(*lib.WorkerHandle)(worker.handle.Load())
-				
+
 				wTopic := lib.WorkerStatusChangeRequestTopic(jm.BaseJobMaster.ID(), handle.ID())
 				wMessage := &lib.StatusChangeRequest{
 					SendTime:     jm.clocker.Mono(),

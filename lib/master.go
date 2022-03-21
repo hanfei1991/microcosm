@@ -486,7 +486,7 @@ func (m *DefaultBaseMaster) markStatusCodeInMetadata(
 //   marshal it to byte slice as returned config, and generate a random WorkerID.
 func (m *DefaultBaseMaster) prepareWorkerConfig(
 	workerType WorkerType, config WorkerConfig,
-) (rawConfig []byte, workerID string, err error) {
+) (rawConfig []byte, workerID WorkerID, userID UserID, err error) {
 	switch workerType {
 	case CvsJobMaster, FakeJobMaster, DMJobMaster:
 		masterMeta, ok := config.(*MasterMetaKVData)
@@ -496,6 +496,7 @@ func (m *DefaultBaseMaster) prepareWorkerConfig(
 		}
 		rawConfig = masterMeta.Config
 		workerID = masterMeta.ID
+		userID = masterMeta.UserID
 	case WorkerDMDump, WorkerDMLoad, WorkerDMSync:
 		var b bytes.Buffer
 		err = toml.NewEncoder(&b).Encode(config)
@@ -524,7 +525,7 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 		return "", derror.ErrMasterConcurrencyExceeded.GenWithStackByArgs()
 	}
 
-	configBytes, workerID, err := m.prepareWorkerConfig(workerType, config)
+	configBytes, workerID, userID, err := m.prepareWorkerConfig(workerType, config)
 	if err != nil {
 		return "", err
 	}
@@ -582,6 +583,7 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 				TaskConfig: configBytes,
 				MasterId:   m.id,
 				WorkerId:   workerID,
+				UserId:     userID,
 			},
 		})
 		if err != nil {
