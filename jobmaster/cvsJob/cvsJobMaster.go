@@ -151,6 +151,7 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 		log.L().Info("cvs job master status", zap.Any("id", jm.workerID), zap.Int64("counter", jm.counter), zap.Any("status", jm.getStatusCode()))
 	}
 	if jm.getStatusCode() == lib.WorkerStatusStopped {
+		jm.setStatusCode(lib.WorkerStatusStopped)
 		log.L().Info("cvs job master stopped")
 		return jm.BaseJobMaster.Exit(ctx, jm.Status(), nil)
 	}
