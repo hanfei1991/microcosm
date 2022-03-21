@@ -23,7 +23,6 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/meta/kvclient"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
-	"github.com/hanfei1991/microcosm/pkg/resource"
 	"github.com/hanfei1991/microcosm/pkg/tenant"
 )
 
@@ -80,12 +79,11 @@ type DefaultBaseWorker struct {
 
 	messageHandlerManager p2p.MessageHandlerManager
 	messageSender         p2p.MessageSender
-	resourceProxy         resource.Proxy
 	// framework metastore prefix kvclient
 	metaKVClient metaclient.KVClient
 	// user metastore raw kvclient
 	userRawKVClient extKV.KVClientEx
-	resourceBroker        broker.Broker
+	resourceBroker  broker.Broker
 
 	masterClient *masterClient
 	masterID     MasterID

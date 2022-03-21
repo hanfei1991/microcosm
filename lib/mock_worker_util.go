@@ -11,8 +11,8 @@ import (
 
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/deps"
-	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
+	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
@@ -36,7 +36,6 @@ func MockBaseWorker(
 		MetaKVClient:          mockkv.NewMetaMock(),
 		UserRawKVClient:       mockkv.NewMetaMock(),
 		ResourceBroker:        resourceBroker,
-
 	}
 	err := dp.Provide(func() workerParamListForTest {
 		return params
