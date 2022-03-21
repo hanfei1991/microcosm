@@ -5,5 +5,5 @@ type Config struct {
 }
 
 type LocalFileConfig struct {
-	BaseDir string `json:"base_dir" toml:"base-dir"`
+	BaseDir string `json:"base-dir" toml:"base-dir"`
 }

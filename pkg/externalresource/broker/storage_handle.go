@@ -100,7 +100,7 @@ func getPathSuffix(prefix resourcemeta.ResourceType, path resourcemeta.ResourceI
 	if !strings.HasPrefix(path, "/"+string(prefix)+"/") {
 		return "", derror.ErrUnexpectedResourcePath.GenWithStackByArgs(path)
 	}
-	return strings.TrimSuffix(path, "/"+string(prefix)+"/"), nil
+	return strings.TrimPrefix(path, "/"+string(prefix)+"/"), nil
 }
 
 func getWorkerDir(config *storagecfg.Config, workerID resourcemeta.WorkerID) string {

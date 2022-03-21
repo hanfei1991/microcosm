@@ -140,6 +140,7 @@ func (m *MetadataAccessor) GetResourcesForExecutor(
 		zap.Int("count", len(resp.Kvs)),
 		zap.Duration("duration", timeCost))
 
+	// TODO optimize this when the backend store supports conditional queries.
 	for _, kv := range resp.Kvs {
 		var resource ResourceMeta
 		if err := json.Unmarshal(kv.Value, &resource); err != nil {
