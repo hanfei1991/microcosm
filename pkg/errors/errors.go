@@ -105,7 +105,7 @@ var (
 	ErrMetaNestedTxn       = errors.Normalize("meta unsupported nested txn", errors.RFCCodeText("DFLOW:ErrMetaNestedTxn"))
 	ErrMetaCommittedTxn    = errors.Normalize("meta already committed txn", errors.RFCCodeText("DFLOW:ErrMetaCommittedTxn"))
 
-  // DataSet errors
+	// DataSet errors
 	ErrDatasetEntryNotFound = errors.Normalize("dataset entry not found. Key: %s", errors.RFCCodeText("DFLOW:ErrDatasetEntryNotFound"))
 
 	// Resource related errors
