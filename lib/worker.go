@@ -107,7 +107,7 @@ type workerParams struct {
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
 	MetaKVClient          metadata.MetaKV
-	ResourceBroker        broker.Broker
+	// ResourceBroker        broker.Broker
 }
 
 func NewBaseWorker(
@@ -127,7 +127,7 @@ func NewBaseWorker(
 		messageHandlerManager: params.MessageHandlerManager,
 		messageSender:         params.MessageSender,
 		metaKVClient:          params.MetaKVClient,
-		resourceBroker:        params.ResourceBroker,
+		// resourceBroker:        params.ResourceBroker,
 
 		masterID:      masterID,
 		id:            workerID,
