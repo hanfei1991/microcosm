@@ -61,7 +61,7 @@ type Server struct {
 	// etcdCli connects to server master embed etcd, it should be used in service
 	// discovery only.
 	etcdCli *clientv3.Client
-	// frame metastore prefix kvclient
+	// framework metastore prefix kvclient
 	metaKVClient metaclient.KVClient
 	// user metastore raw kvclient(reuse for all workers)
 	userRawKVClient extKV.KVClientEx
@@ -290,7 +290,7 @@ func (s *Server) Stop() {
 	if s.metaKVClient != nil {
 		err := s.metaKVClient.Close()
 		if err != nil {
-			log.L().Warn("failed to close connection to frame metastore", zap.Error(err))
+			log.L().Warn("failed to close connection to framework metastore", zap.Error(err))
 		}
 	}
 
@@ -486,7 +486,7 @@ func (s *Server) fetchMetaStore(ctx context.Context) error {
 	}
 	s.etcdCli = etcdCli
 
-	// fetch frame metastore connection endpoint
+	// fetch framework metastore connection endpoint
 	resp, err = s.cli.QueryMetaStore(
 		ctx,
 		&pb.QueryMetaStoreRequest{Tp: pb.StoreType_SystemMetaStore},
@@ -501,7 +501,7 @@ func (s *Server) fetchMetaStore(ctx context.Context) error {
 
 	cliEx, err := kvclient.NewKVClient(&conf)
 	if err != nil {
-		log.L().Error("access frame metastore fail", zap.Any("store-conf", conf), zap.Error(err))
+		log.L().Error("access framework metastore fail", zap.Any("store-conf", conf), zap.Error(err))
 		return err
 	}
 	// [TODO] use FrameTenantID here if support multi-tenant

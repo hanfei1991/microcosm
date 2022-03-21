@@ -78,7 +78,7 @@ type DefaultBaseWorker struct {
 	messageHandlerManager p2p.MessageHandlerManager
 	messageSender         p2p.MessageSender
 	resourceProxy         resource.Proxy
-	// frame metastore prefix kvclient
+	// framework metastore prefix kvclient
 	metaKVClient metaclient.KVClient
 	// user metastore raw kvclient
 	userRawKVClient extKV.KVClientEx

@@ -93,7 +93,7 @@ type Server struct {
 
 	testCtx *test.Context
 
-	// frame metastore prefix kvclient
+	// framework metastore prefix kvclient
 	metaKVClient metaclient.KVClient
 	// user metastore kvclient
 	userMetaKVClient extKV.KVClientEx
@@ -471,14 +471,14 @@ func (s *Server) registerMetaStore() error {
 	// register metastore for framework
 	cfg := s.cfg
 	if err := s.metaStoreManager.Register(cfg.FrameMetaConf.StoreID, cfg.FrameMetaConf); err != nil {
-		log.L().Error("register frame metastore fail", zap.Any("metastore", cfg.FrameMetaConf), zap.Error(err))
+		log.L().Error("register framework metastore fail", zap.Any("metastore", cfg.FrameMetaConf), zap.Error(err))
 		return err
 	}
 	if err := kvclient.CheckAccessForMetaStore(cfg.FrameMetaConf); err != nil {
 		log.L().Error("check access for frame metastore fail", zap.Any("metastore", cfg.FrameMetaConf), zap.Error(err))
 		return err
 	}
-	log.L().Info("register frame metastore successfully", zap.Any("metastore", cfg.FrameMetaConf))
+	log.L().Info("register framework metastore successfully", zap.Any("metastore", cfg.FrameMetaConf))
 
 	// register metastore for user
 	err := s.metaStoreManager.Register(cfg.UserMetaConf.StoreID, cfg.UserMetaConf)
@@ -615,16 +615,16 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	}
 	frameCliEx, err := kvclient.NewKVClient(storeConf)
 	if err != nil {
-		log.L().Error("failed to connect to frame metastore", zap.Any("store-conf", storeConf), zap.Error(err))
+		log.L().Error("failed to connect to framework metastore", zap.Any("store-conf", storeConf), zap.Error(err))
 		return err
 	}
 	// [TODO] use FrameTenantID if support multi-tenant
 	s.metaKVClient = kvclient.NewPrefixKVClient(frameCliEx, tenant.DefaultUserTenantID)
 
-	// job manager user frame metastore as user metastore
+	// job manager user framework metastore as user metastore
 	s.userMetaKVClient, err = kvclient.NewKVClient(storeConf)
 	if err != nil {
-		log.L().Error("failed to connect to frame metastore", zap.Any("store-conf", storeConf), zap.Error(err))
+		log.L().Error("failed to connect to framework metastore", zap.Any("store-conf", storeConf), zap.Error(err))
 		return err
 	}
 

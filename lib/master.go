@@ -93,7 +93,7 @@ type DefaultBaseMaster struct {
 	// dependencies
 	messageHandlerManager p2p.MessageHandlerManager
 	messageSender         p2p.MessageSender
-	// frame metastore prefix kvclient
+	// framework metastore prefix kvclient
 	metaKVClient metaclient.KVClient
 	// user metastore raw kvclient
 	userRawKVClient       extKV.KVClientEx
@@ -140,7 +140,7 @@ type masterParams struct {
 
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
-	// frame metastore prefix kvclient
+	// framework metastore prefix kvclient
 	MetaKVClient metaclient.KVClient
 	// user metastore raw kvclient
 	UserRawKVClient       extKV.KVClientEx
