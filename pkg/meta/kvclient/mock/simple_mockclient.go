@@ -19,10 +19,16 @@ func (t *mockTxn) Do(ops ...metaclient.Op) metaclient.Txn {
 	return t
 }
 
-// [TODO] refine
 func (t *mockTxn) Commit() (*metaclient.TxnResponse, metaclient.Error) {
+	var err metaclient.Error
 	for _, op := range t.ops {
-		_, err := t.m.Put(t.c, string(op.KeyBytes()), string(op.ValueBytes()))
+		switch {
+		case op.IsPut():
+			_, err = t.m.Put(t.c, string(op.KeyBytes()), string(op.ValueBytes()))
+		case op.IsDelete():
+			_, err = t.m.Delete(t.c, string(op.KeyBytes()))
+		default:
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -87,6 +93,31 @@ func (m *MetaMock) Get(ctx context.Context, key string, opts ...metaclient.OpOpt
 	}
 	m.revision++
 	return ret, nil
+}
+
+func (m *MetaMock) Do(ctx context.Context, op metaclient.Op) (metaclient.OpResponse, metaclient.Error) {
+	switch {
+	case op.IsGet():
+		rsp, err := m.Get(ctx, string(op.KeyBytes()))
+		if err != nil {
+			return metaclient.OpResponse{}, err
+		}
+		return rsp.OpResponse(), nil
+	case op.IsDelete():
+		rsp, err := m.Delete(ctx, string(op.KeyBytes()))
+		if err != nil {
+			return metaclient.OpResponse{}, err
+		}
+		return rsp.OpResponse(), nil
+	case op.IsPut():
+		rsp, err := m.Put(ctx, string(op.KeyBytes()), string(op.ValueBytes()))
+		if err != nil {
+			return metaclient.OpResponse{}, err
+		}
+		return rsp.OpResponse(), nil
+	}
+
+	panic("unsupport op type")
 }
 
 func (m *MetaMock) Txn(ctx context.Context) metaclient.Txn {

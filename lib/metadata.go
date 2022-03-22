@@ -6,22 +6,21 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
 
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
-	"github.com/hanfei1991/microcosm/pkg/metadata"
+	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 )
 
 const JobManagerUUID = "dataflow-engine-job-manager"
 
 type MasterMetadataClient struct {
 	masterID     MasterID
-	metaKVClient metadata.MetaKV
+	metaKVClient metaclient.KVClient
 }
 
-func NewMasterMetadataClient(masterID MasterID, metaKVClient metadata.MetaKV) *MasterMetadataClient {
+func NewMasterMetadataClient(masterID MasterID, metaKVClient metaclient.KVClient) *MasterMetadataClient {
 	return &MasterMetadataClient{
 		masterID:     masterID,
 		metaKVClient: metaKVClient,
@@ -30,11 +29,10 @@ func NewMasterMetadataClient(masterID MasterID, metaKVClient metadata.MetaKV) *M
 
 func (c *MasterMetadataClient) Load(ctx context.Context) (*MasterMetaKVData, error) {
 	key := adapter.MasterMetaKey.Encode(c.masterID)
-	rawResp, err := c.metaKVClient.Get(ctx, key)
+	resp, err := c.metaKVClient.Get(ctx, key)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	resp := rawResp.(*clientv3.GetResponse)
 	if len(resp.Kvs) == 0 {
 		// TODO refine handling the situation where the mata key does not exist at this point
 		masterMeta := &MasterMetaKVData{
@@ -69,12 +67,11 @@ func (c *MasterMetadataClient) Store(ctx context.Context, data *MasterMetaKVData
 
 // LoadAllMasters loads all job masters from metastore
 func (c *MasterMetadataClient) LoadAllMasters(ctx context.Context) ([]*MasterMetaKVData, error) {
-	raw, err := c.metaKVClient.Get(ctx, adapter.MasterMetaKey.Path(), clientv3.WithPrefix())
+	resp, err := c.metaKVClient.Get(ctx, adapter.MasterMetaKey.Path(), metaclient.WithPrefix())
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	resp := raw.(*clientv3.GetResponse)
-	meta := make([]*MasterMetaKVData, 0, resp.Count)
+	meta := make([]*MasterMetaKVData, 0, len(resp.Kvs))
 	for _, kv := range resp.Kvs {
 		masterMeta := &MasterMetaKVData{}
 		if err := json.Unmarshal(kv.Value, masterMeta); err != nil {
@@ -87,19 +84,9 @@ func (c *MasterMetadataClient) LoadAllMasters(ctx context.Context) ([]*MasterMet
 	return meta, nil
 }
 
-func (c *MasterMetadataClient) GenerateEpoch(ctx context.Context) (Epoch, error) {
-	rawResp, err := c.metaKVClient.Get(ctx, "/fake-key")
-	if err != nil {
-		return 0, errors.Trace(err)
-	}
-
-	resp := rawResp.(*clientv3.GetResponse)
-	return resp.Header.Revision, nil
-}
-
 type UserMetadataClient struct {
 	userID       UserID
-	metaKVClient metadata.MetaKV
+	metaKVClient metaclient.KVClient
 }
 
 func (c *UserMetadataClient) userMetaKey(key string) string {
@@ -107,11 +94,10 @@ func (c *UserMetadataClient) userMetaKey(key string) string {
 }
 
 func (c *UserMetadataClient) Load(ctx context.Context, key string) (string, error) {
-	rawResp, err := c.metaKVClient.Get(ctx, c.userMetaKey(key))
+	resp, err := c.metaKVClient.Get(ctx, c.userMetaKey(key))
 	if err != nil {
 		return "", errors.Trace(err)
 	}
-	resp := rawResp.(*clientv3.GetResponse)
 	if len(resp.Kvs) == 0 {
 		return "", derror.ErrWorkerNoMeta.GenWithStackByArgs()
 	}
@@ -119,18 +105,9 @@ func (c *UserMetadataClient) Load(ctx context.Context, key string) (string, erro
 }
 
 func (c *UserMetadataClient) Remove(ctx context.Context, key string) (bool, error) {
-	raw, err := c.metaKVClient.Delete(ctx, c.userMetaKey(key))
+	_, err := c.metaKVClient.Delete(ctx, c.userMetaKey(key))
 	if err != nil {
 		return false, errors.Trace(err)
-	}
-	if raw == nil {
-		// This is in order to be compatible with MetaMock.
-		// TODO remove this check when we migrate to the new metaclient.
-		return true, nil
-	}
-	resp := raw.(*clientv3.DeleteResponse)
-	if resp.Deleted != 1 {
-		return false, nil
 	}
 	return true, nil
 }
@@ -145,7 +122,7 @@ func (c *UserMetadataClient) Store(ctx context.Context, key string, value string
 
 func NewUserMetadataClient(
 	userID UserID,
-	metaKVClient metadata.MetaKV,
+	metaKVClient metaclient.KVClient,
 ) *UserMetadataClient {
 	return &UserMetadataClient{
 		userID:       userID,
@@ -155,12 +132,12 @@ func NewUserMetadataClient(
 
 type WorkerMetadataClient struct {
 	masterID     MasterID
-	metaKVClient metadata.MetaKV
+	metaKVClient metaclient.KVClient
 }
 
 func NewWorkerMetadataClient(
 	masterID MasterID,
-	metaClient metadata.MetaKV,
+	metaClient metaclient.KVClient,
 ) *WorkerMetadataClient {
 	return &WorkerMetadataClient{
 		masterID:     masterID,
@@ -170,11 +147,10 @@ func NewWorkerMetadataClient(
 
 func (c *WorkerMetadataClient) LoadAllWorkers(ctx context.Context) (map[WorkerID]*WorkerStatus, error) {
 	loadPrefix := adapter.WorkerKeyAdapter.Encode(c.masterID)
-	raw, err := c.metaKVClient.Get(ctx, loadPrefix, clientv3.WithPrefix())
+	resp, err := c.metaKVClient.Get(ctx, loadPrefix, metaclient.WithPrefix())
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	resp := raw.(*clientv3.GetResponse)
 	ret := make(map[WorkerID]*WorkerStatus, len(resp.Kvs))
 	for _, kv := range resp.Kvs {
 		decoded, err := adapter.WorkerKeyAdapter.Decode(string(kv.Key))
@@ -201,11 +177,10 @@ func (c *WorkerMetadataClient) LoadAllWorkers(ctx context.Context) (map[WorkerID
 }
 
 func (c *WorkerMetadataClient) Load(ctx context.Context, workerID WorkerID) (*WorkerStatus, error) {
-	rawResp, err := c.metaKVClient.Get(ctx, c.workerMetaKey(workerID))
+	resp, err := c.metaKVClient.Get(ctx, c.workerMetaKey(workerID))
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	resp := rawResp.(*clientv3.GetResponse)
 	if len(resp.Kvs) == 0 {
 		return nil, derror.ErrWorkerNoMeta.GenWithStackByArgs()
 	}
@@ -220,18 +195,9 @@ func (c *WorkerMetadataClient) Load(ctx context.Context, workerID WorkerID) (*Wo
 }
 
 func (c *WorkerMetadataClient) Remove(ctx context.Context, id WorkerID) (bool, error) {
-	raw, err := c.metaKVClient.Delete(ctx, c.workerMetaKey(id))
+	_, err := c.metaKVClient.Delete(ctx, c.workerMetaKey(id))
 	if err != nil {
 		return false, errors.Trace(err)
-	}
-	if raw == nil {
-		// This is in order to be compatible with MetaMock.
-		// TODO remove this check when we migrate to the new metaclient.
-		return true, nil
-	}
-	resp := raw.(*clientv3.DeleteResponse)
-	if resp.Deleted != 1 {
-		return false, nil
 	}
 	return true, nil
 }
@@ -261,7 +227,7 @@ func (c *WorkerMetadataClient) workerMetaKey(id WorkerID) string {
 // StoreMasterMeta is exposed to job manager for job master meta persistence
 func StoreMasterMeta(
 	ctx context.Context,
-	metaKVClient metadata.MetaKV,
+	metaKVClient metaclient.KVClient,
 	meta *MasterMetaKVData,
 ) error {
 	metaClient := NewMasterMetadataClient(meta.ID, metaKVClient)
@@ -271,14 +237,8 @@ func StoreMasterMeta(
 			return err
 		}
 	} else {
-		log.L().Warn("master meta exits, will be overwritten", zap.Any("meta", masterMeta))
+		log.L().Warn("master meta exits, will be overwritten", zap.Any("old-meta", masterMeta), zap.Any("meta", meta))
 	}
-
-	epoch, err := metaClient.GenerateEpoch(ctx)
-	if err != nil {
-		return err
-	}
-	meta.Epoch = epoch
 
 	return metaClient.Store(ctx, meta)
 }

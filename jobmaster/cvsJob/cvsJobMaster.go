@@ -175,10 +175,11 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 		statsBytes, err := json.Marshal(jm.jobStatus)
 		if err != nil {
 			log.L().Warn("serialize job status failed, try next time", zap.Any("master id", jm.workerID), zap.Error(err))
+			return err
 		}
 		err = jm.UserMetaKVClient().Store(ctx, jm.workerID, string(statsBytes))
 		if err != nil {
-			log.L().Warn("update job status, try next time", zap.Any("master id", jm.workerID), zap.Error(err))
+			log.L().Warn("update job status failed, try next time", zap.Any("master id", jm.workerID), zap.Error(err))
 		}
 		log.L().Info("cvs job master status", zap.Any("id", jm.workerID), zap.Int64("counter", jm.counter), zap.Any("status", jm.getStatusCode()))
 	}

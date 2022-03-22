@@ -18,6 +18,11 @@ var (
 	TaskKeyAdapter     KeyAdapter = keyHexEncoderDecoder("/data-flow/task/")
 	WorkerKeyAdapter   KeyAdapter = keyHexEncoderDecoder("/data-flow/worker/")
 	UserKeyAdapter     KeyAdapter = keyHexEncoderDecoder("/data-flow/user/")
+
+	ResourceKeyAdapter KeyAdapter = keyHexEncoderDecoder("/data-flow/resources/")
+
+	// TODO: discuss the key prefix
+	DMJobKeyAdapter KeyAdapter = keyHexEncoderDecoder("/data-flow/dm/job/")
 )
 
 type KeyAdapter interface {
