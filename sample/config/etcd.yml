@@ -58,7 +58,7 @@ discovery-proxy:
 discovery-srv:
 
 # Initial cluster configuration for bootstrapping.
-initial-cluster:  'dataflow-etcd=http://dataflow-etcd:2380"'
+initial-cluster:  'dataflow-etcd=http://localhost:2380'
 
 # Initial cluster token for the etcd cluster during bootstrap.
 initial-cluster-token: 'etcd-cluster'
