@@ -24,6 +24,11 @@ const (
 	senderFSMSending
 )
 
+const (
+	safeSendStatusTimeout  = 10 * time.Second
+	safeSendStatusInterval = 10 * time.Millisecond
+)
+
 // StatusSender is used for a worker to send its status to its master.
 type StatusSender struct {
 	workerID WorkerID
@@ -100,18 +105,20 @@ func (s *StatusSender) setLastUnsentStatus(status *WorkerStatus) {
 // SafeSendStatus persists status before sending it, it will try to send status
 // until successfully.
 func (s *StatusSender) SafeSendStatus(ctx context.Context, status WorkerStatus) error {
+	cctx, cancel := context.WithTimeout(ctx, safeSendStatusTimeout)
+	defer cancel()
 	for {
 		select {
-		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
+		case <-cctx.Done():
+			return errors.Trace(cctx.Err())
 		default:
 		}
-		err := s.SyncSendStatus(ctx, status)
+		err := s.SyncSendStatus(cctx, status)
 		if err == nil {
 			return nil
 		}
 		if derror.ErrWorkerUpdateStatusTryAgain.Equal(err) {
-			time.Sleep(time.Millisecond * 10)
+			time.Sleep(safeSendStatusInterval)
 			continue
 		}
 		return errors.Trace(err)
