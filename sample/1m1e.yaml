@@ -41,8 +41,6 @@ services:
                         - "0.0.0.0:10241"
                         - "--advertise-addr"
                         - "server-executor:10241"
-                        - "--log-file"
-                        - "/tmp/dataflow/executor.log"
                 depends_on:
                         - "server-master"
                 restart: "on-failure"
