@@ -111,4 +111,6 @@ var (
 	// Resource related errors
 	ErrUnexpectedResourcePath = errors.Normalize("unexpected resource path: %s", errors.RFCCodeText("DFLOW:ErrUnexpectedResourcePath"))
 	ErrDuplicateResourceID    = errors.Normalize("duplicate resource ID: %s", errors.RFCCodeText("DFLOW:ErrDuplicateResourceID"))
+	ErrIllegalResourcePath    = errors.Normalize("resource path is illegal: %s", errors.RFCCodeText("DFLOW:ErrIllegalResourcePath"))
+	ErrResourceDoesNotExist   = errors.Normalize("resource does not exists: %s", errors.RFCCodeText("DFLOW:ErrResourceDoesNotExist"))
 )
