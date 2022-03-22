@@ -220,14 +220,15 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	if err := w.statusSender.SafeSendStatus(ctx, WorkerStatus{Code: WorkerStatusInit}); err != nil {
-		return errors.Trace(err)
-	}
-
 	return nil
 }
 
 func (w *DefaultBaseWorker) doPostInit(ctx context.Context) error {
+	if err := w.statusSender.SafeSendStatus(
+		ctx, WorkerStatus{Code: WorkerStatusInit}); err != nil {
+		return errors.Trace(err)
+	}
+
 	w.startBackgroundTasks()
 	return nil
 }
