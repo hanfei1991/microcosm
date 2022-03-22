@@ -23,7 +23,6 @@ type Registry interface {
 		tp lib.WorkerType,
 		workerID lib.WorkerID,
 		masterID lib.MasterID,
-		userID lib.UserID,
 		config []byte,
 	) (lib.Worker, error)
 }
@@ -62,7 +61,6 @@ func (r *registryImpl) CreateWorker(
 	tp lib.WorkerType,
 	workerID lib.WorkerID,
 	masterID lib.MasterID,
-	userID lib.UserID,
 	configBytes []byte,
 ) (lib.Worker, error) {
 	factory, ok := r.getWorkerFactory(tp)
@@ -96,7 +94,6 @@ func (r *registryImpl) CreateWorker(
 			impl.(lib.JobMasterImpl),
 			masterID,
 			workerID,
-			userID,
 		)
 		setImplMember(impl, nameOfBaseJobMaster, base)
 		return base, nil

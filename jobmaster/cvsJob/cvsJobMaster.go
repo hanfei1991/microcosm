@@ -112,7 +112,7 @@ func (jm *JobMaster) InitImpl(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
-	err = jm.UserMetaKVClient().Store(ctx, jm.workerID, string(statusBytes))
+	_, err = jm.MetaKVClient().Put(ctx, jm.workerID, string(statusBytes))
 	if err != nil {
 		return err
 	}
@@ -177,7 +177,7 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 			log.L().Warn("serialize job status failed, try next time", zap.Any("master id", jm.workerID), zap.Error(err))
 			return err
 		}
-		err = jm.UserMetaKVClient().Store(ctx, jm.workerID, string(statsBytes))
+		_, err = jm.MetaKVClient().Put(ctx, jm.workerID, string(statsBytes))
 		if err != nil {
 			log.L().Warn("update job status failed, try next time", zap.Any("master id", jm.workerID), zap.Error(err))
 		}
@@ -198,13 +198,17 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 func (jm *JobMaster) OnMasterRecovered(ctx context.Context) (err error) {
 	log.L().Info("recovering job master", zap.Any("id", jm.ID()))
 	// load self status
-	statusBytes, err := jm.UserMetaKVClient().Load(ctx, jm.workerID)
+	resp, err := jm.MetaKVClient().Get(ctx, jm.workerID)
 	if err != nil {
 		log.L().Warn("load status failed", zap.Any("master id", jm.ID), zap.Error(err))
 		return err
 	}
-	log.L().Info("jobmaster recover from meta", zap.Any("master id", jm.ID()), zap.String("status", statusBytes))
-	err = json.Unmarshal([]byte(statusBytes), jm.jobStatus)
+	if len(resp.Kvs) != 1 {
+		log.L().Error("jobmaster meta unexpected result", zap.Any("master id", jm.ID()), zap.Any("meta counts", len(resp.Kvs)))
+	}
+	statusBytes := resp.Kvs[0].Value
+	log.L().Info("jobmaster recover from meta", zap.Any("master id", jm.ID()), zap.String("status", string(statusBytes)))
+	err = json.Unmarshal(statusBytes, jm.jobStatus)
 	if err != nil {
 		return err
 	}

@@ -84,52 +84,6 @@ func (c *MasterMetadataClient) LoadAllMasters(ctx context.Context) ([]*MasterMet
 	return meta, nil
 }
 
-type UserMetadataClient struct {
-	userID       UserID
-	metaKVClient metaclient.KVClient
-}
-
-func (c *UserMetadataClient) userMetaKey(key string) string {
-	return adapter.UserKeyAdapter.Encode(c.userID, key)
-}
-
-func (c *UserMetadataClient) Load(ctx context.Context, key string) (string, error) {
-	resp, err := c.metaKVClient.Get(ctx, c.userMetaKey(key))
-	if err != nil {
-		return "", errors.Trace(err)
-	}
-	if len(resp.Kvs) == 0 {
-		return "", derror.ErrWorkerNoMeta.GenWithStackByArgs()
-	}
-	return string(resp.Kvs[0].Value), nil
-}
-
-func (c *UserMetadataClient) Remove(ctx context.Context, key string) (bool, error) {
-	_, err := c.metaKVClient.Delete(ctx, c.userMetaKey(key))
-	if err != nil {
-		return false, errors.Trace(err)
-	}
-	return true, nil
-}
-
-func (c *UserMetadataClient) Store(ctx context.Context, key string, value string) error {
-	_, err := c.metaKVClient.Put(ctx, c.userMetaKey(key), value)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
-}
-
-func NewUserMetadataClient(
-	userID UserID,
-	metaKVClient metaclient.KVClient,
-) *UserMetadataClient {
-	return &UserMetadataClient{
-		userID:       userID,
-		metaKVClient: metaKVClient,
-	}
-}
-
 type WorkerMetadataClient struct {
 	masterID     MasterID
 	metaKVClient metaclient.KVClient

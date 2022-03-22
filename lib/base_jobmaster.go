@@ -18,7 +18,6 @@ type BaseJobMaster interface {
 	Poll(ctx context.Context) error
 	Close(ctx context.Context) error
 	OnError(err error)
-	UserMetaKVClient() *UserMetadataClient
 	MetaKVClient() metaclient.KVClient
 	GetWorkers() map[WorkerID]WorkerHandle
 	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error)
@@ -45,10 +44,9 @@ type BaseJobMaster interface {
 }
 
 type DefaultBaseJobMaster struct {
-	master      *DefaultBaseMaster
-	worker      *DefaultBaseWorker
-	impl        JobMasterImpl
-	userMetaClt *UserMetadataClient
+	master *DefaultBaseMaster
+	worker *DefaultBaseWorker
+	impl   JobMasterImpl
 }
 
 // JobMasterImpl is the implementation of a job master of dataflow engine.
@@ -79,7 +77,6 @@ func NewBaseJobMaster(
 	jobMasterImpl JobMasterImpl,
 	masterID MasterID,
 	workerID WorkerID,
-	userID UserID,
 ) BaseJobMaster {
 	// master-worker pair: job manager <-> job master(`baseWorker` following)
 	// master-worker pair: job master(`baseMaster` following) <-> real workers
@@ -90,19 +87,14 @@ func NewBaseJobMaster(
 	baseWorker := NewBaseWorker(
 		ctx, &jobMasterImplAsWorkerImpl{jobMasterImpl}, workerID, masterID)
 	return &DefaultBaseJobMaster{
-		master:      baseMaster.(*DefaultBaseMaster),
-		worker:      baseWorker.(*DefaultBaseWorker),
-		impl:        jobMasterImpl,
-		userMetaClt: NewUserMetadataClient(userID, baseMaster.MetaKVClient()),
+		master: baseMaster.(*DefaultBaseMaster),
+		worker: baseWorker.(*DefaultBaseWorker),
+		impl:   jobMasterImpl,
 	}
 }
 
 func (d *DefaultBaseJobMaster) MetaKVClient() metaclient.KVClient {
 	return d.master.MetaKVClient()
-}
-
-func (d *DefaultBaseJobMaster) UserMetaKVClient() *UserMetadataClient {
-	return d.userMetaClt
 }
 
 func (d *DefaultBaseJobMaster) Init(ctx context.Context) error {

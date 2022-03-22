@@ -21,7 +21,6 @@ type (
 	WorkerConfig = interface{}
 	MasterID     = string
 	WorkerID     = string
-	UserID       = string
 )
 
 // Among these statuses, only WorkerStatusCreated is used by the framework
@@ -148,7 +147,6 @@ type StatusChangeRequest struct {
 type (
 	MasterMetaKVData struct {
 		ID         MasterID         `json:"id"`
-		UserID     UserID           `json:"user-id"`
 		Addr       string           `json:"addr"`
 		NodeID     p2p.NodeID       `json:"node-id"`
 		Epoch      Epoch            `json:"epoch"`

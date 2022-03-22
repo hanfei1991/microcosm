@@ -273,7 +273,7 @@ func TestPrepareWorkerConfig(t *testing.T) {
 		},
 	}
 	for _, tc := range testCases {
-		rawConfig, workerID, _, err := master.prepareWorkerConfig(tc.workerType, tc.config)
+		rawConfig, workerID, err := master.prepareWorkerConfig(tc.workerType, tc.config)
 		require.NoError(t, err)
 		require.Equal(t, tc.rawConfig, rawConfig)
 		require.Equal(t, tc.workerID, workerID)
