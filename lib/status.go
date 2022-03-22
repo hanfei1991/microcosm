@@ -120,12 +120,12 @@ func (s *StatusSender) SafeSendStatus(ctx context.Context, status WorkerStatus) 
 
 // AsyncSendStatus wraps sendStatusWrapper with asyncPersist=true
 func (s *StatusSender) AsyncSendStatus(ctx context.Context, status WorkerStatus) error {
-	return s.sendStatusWrapper(ctx, status, true /* asyncPersist */)
+	return s.sendStatusWrapper(ctx, status, true)
 }
 
 // SyncSendStatus wraps sendStatusWrapper with asyncPersist=false
 func (s *StatusSender) SyncSendStatus(ctx context.Context, status WorkerStatus) error {
-	return s.sendStatusWrapper(ctx, status, false /* asyncPersist */)
+	return s.sendStatusWrapper(ctx, status, false)
 }
 
 // sendStatusWrapper is used by the business logic in a worker to notify its master
