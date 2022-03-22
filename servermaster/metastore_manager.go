@@ -46,6 +46,7 @@ func (m *metaStoreManagerImpl) GetMetaStore(id string) *metaclient.StoreConfigPa
 	return nil
 }
 
+// NewFrameMetaConfig return the default framework metastore config
 func NewFrameMetaConfig() *metaclient.StoreConfigParams {
 	return &metaclient.StoreConfigParams{
 		StoreID: metaclient.FrameMetaID,
@@ -55,6 +56,7 @@ func NewFrameMetaConfig() *metaclient.StoreConfigParams {
 	}
 }
 
+// NewDefaultUserMetaConfig return the default user metastore config
 func NewDefaultUserMetaConfig() *metaclient.StoreConfigParams {
 	return &metaclient.StoreConfigParams{
 		StoreID: metaclient.DefaultUserMetaID,

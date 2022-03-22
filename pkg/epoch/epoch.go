@@ -9,6 +9,11 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
+const (
+	FakeKey   = "/fake-key"
+	FakeValue = "/fake-value"
+)
+
 type Generator interface {
 	GenerateEpoch(ctx context.Context) (lib.Epoch, error)
 }
@@ -28,7 +33,7 @@ func (e *epochGenerator) GenerateEpoch(ctx context.Context) (lib.Epoch, error) {
 	if e.cli == nil {
 		return lib.Epoch(0), errors.ErrMasterEtcdEpochFail.GenWithStack("invalid inner client for epoch generator")
 	}
-	resp, err := e.cli.Get(ctx, "/fake-key")
+	resp, err := e.cli.Put(ctx, FakeKey, FakeValue)
 	if err != nil {
 		return lib.Epoch(0), errors.Wrap(errors.ErrMasterEtcdEpochFail, err)
 	}

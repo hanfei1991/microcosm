@@ -35,6 +35,7 @@ func NewKVClient(conf *metaclient.StoreConfigParams) (extension.KVClientEx, erro
 	return etcdkv.NewEtcdImpl(conf)
 }
 
+// CheckAccessForMetaStore check the connectivity of the specify metastore
 func CheckAccessForMetaStore(conf *metaclient.StoreConfigParams) error {
 	cliEx, err := NewKVClient(conf)
 	if err != nil {
