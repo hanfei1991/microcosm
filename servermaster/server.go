@@ -345,7 +345,6 @@ func (s *Server) RegisterMetaStore(
 func (s *Server) QueryMetaStore(
 	ctx context.Context, req *pb.QueryMetaStoreRequest,
 ) (*pb.QueryMetaStoreResponse, error) {
-	log.L().Info("receive query metastore request", zap.Any("req", req.Tp))
 	switch req.Tp {
 	case pb.StoreType_ServiceDiscovery:
 		return &pb.QueryMetaStoreResponse{
