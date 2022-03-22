@@ -250,7 +250,7 @@ func TestStatusSenderSafeSend(t *testing.T) {
 	}()
 
 	msgSender := p2p.NewMockMessageSender()
-	metaClient := metadata.NewMetaMock()
+	metaClient := mockkv.NewMetaMock()
 
 	masterClient := newMasterClient(masterName, workerID1, msgSender, metaClient, clock.MonoNow(), func() error {
 		return nil
