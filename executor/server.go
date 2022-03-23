@@ -636,7 +636,6 @@ func (s *Server) keepHeartbeat(ctx context.Context) error {
 				leaderURL: resp.Leader,
 				urls:      resp.Addrs,
 			}
-			// here
 			select {
 			case s.cliUpdateCh <- info:
 			default:
