@@ -1,7 +1,8 @@
 package resourcemeta
 
 import (
-	"path/filepath"
+	"path"
+	"strings"
 	"time"
 
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
@@ -25,6 +26,11 @@ type ResourceMeta struct {
 	Deleted  bool       `json:"deleted"`
 }
 
+// GetID implements dataset.DataEntry
+func (m *ResourceMeta) GetID() string {
+	return m.ID
+}
+
 // GCTodoEntry records a future need for GC'ing a resource.
 type GCTodoEntry struct {
 	ID           ResourceID `json:"id"`
@@ -41,10 +47,14 @@ const (
 )
 
 // ParseResourcePath returns the ResourceType and the path suffix.
-func ParseResourcePath(path ResourceID) (ResourceType, string, error) {
-	segments := filepath.SplitList(path)
+func ParseResourcePath(rpath ResourceID) (ResourceType, string, error) {
+	if !strings.HasPrefix(rpath, "/") {
+		return "", "", derror.ErrIllegalResourcePath.GenWithStackByArgs(rpath)
+	}
+	rpath = strings.TrimPrefix(rpath, "/")
+	segments := strings.Split(rpath, "/")
 	if len(segments) == 0 {
-		return "", "", derror.ErrIllegalResourcePath.GenWithStackByArgs(path)
+		return "", "", derror.ErrIllegalResourcePath.GenWithStackByArgs(rpath)
 	}
 
 	var resourceType ResourceType
@@ -54,9 +64,9 @@ func ParseResourcePath(path ResourceID) (ResourceType, string, error) {
 	case "s3":
 		resourceType = ResourceTypeS3
 	default:
-		return "", "", derror.ErrIllegalResourcePath.GenWithStackByArgs(path)
+		return "", "", derror.ErrIllegalResourcePath.GenWithStackByArgs(rpath)
 	}
 
-	suffix := filepath.Join(segments[1:]...)
+	suffix := path.Join(segments[1:]...)
 	return resourceType, suffix, nil
 }
