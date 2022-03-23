@@ -50,6 +50,64 @@ func NewService(metaclient metaclient.KV, executorInfoProvider ExecutorInfoProvi
 	}
 }
 
+func (s *Service) QueryResource(ctx context.Context, request *pb.QueryResourceRequest) (*pb.QueryResourceResponse, error) {
+	if !s.checkAllLoaded() {
+		return nil, status.Error(codes.Unavailable, "ResourceManager is initializing")
+	}
+
+	logger := log.L().WithFields(zap.String("resource-id", request.GetResourceId()))
+
+	if !s.mu.Lock(ctx) {
+		return nil, status.Error(codes.Canceled, ctx.Err().Error())
+	}
+	defer s.mu.Unlock()
+
+	record, exists := s.cache[request.GetResourceId()]
+	if exists {
+		logger.Info("cache miss", zap.String("resource-id", request.GetResourceId()))
+		var err error
+
+		startTime := time.Now()
+		record, exists, err = s.accessor.GetResource(ctx, request.ResourceId)
+		getResourceDuration := time.Since(startTime)
+
+		logger.Info("Resource meta fetch completed", zap.Duration("duration", getResourceDuration))
+		if err != nil {
+			st, stErr := status.New(codes.Internal, "resource manager error").WithDetails(&pb.ResourceError{
+				ErrorCode:  pb.ResourceErrorCode_ResourceManagerInternalError,
+				StackTrace: errors.ErrorStack(err),
+			})
+			if stErr != nil {
+				return nil, stErr
+			}
+			return nil, st.Err()
+		}
+		if !exists {
+			st, stErr := status.New(codes.Internal, "resource manager error").WithDetails(&pb.ResourceError{
+				ErrorCode: pb.ResourceErrorCode_ResourceNotFound,
+			})
+			if stErr != nil {
+				return nil, stErr
+			}
+			return nil, st.Err()
+		}
+	} else {
+		log.L().Info("cache hit", zap.String("resource-id", request.GetResourceId()))
+	}
+
+	if record.Deleted {
+		st, stErr := status.New(codes.Internal, "resource manager error").WithDetails(&pb.ResourceError{
+			ErrorCode: pb.ResourceErrorCode_ResourceNotFound,
+		})
+		if stErr != nil {
+			return nil, stErr
+		}
+		return nil, st.Err()
+	}
+
+	return record.ToQueryResourceResponse(), nil
+}
+
 func (s *Service) CreateResource(
 	ctx context.Context,
 	request *pb.CreateResourceRequest,

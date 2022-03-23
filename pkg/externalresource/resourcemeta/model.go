@@ -5,6 +5,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanfei1991/microcosm/pb"
+
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 
 	"github.com/hanfei1991/microcosm/model"
@@ -29,6 +31,15 @@ type ResourceMeta struct {
 // GetID implements dataset.DataEntry
 func (m *ResourceMeta) GetID() string {
 	return m.ID
+}
+
+// ToQueryResourceResponse converts the ResourceMeta to pb.QueryResourceResponse
+func (m *ResourceMeta) ToQueryResourceResponse() *pb.QueryResourceResponse {
+	return &pb.QueryResourceResponse{
+		CreatorExecutor: string(m.Executor),
+		JobId:           m.Job,
+		CreatorWorkerId: m.Worker,
+	}
 }
 
 // GCTodoEntry records a future need for GC'ing a resource.
