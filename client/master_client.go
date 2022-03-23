@@ -26,7 +26,7 @@ type clientHolder struct {
 }
 
 type MasterClient interface {
-	UpdateClients(ctx context.Context, urls []string)
+	UpdateClients(ctx context.Context, urls []string, leaderURL string)
 	Endpoints() []string
 	Heartbeat(ctx context.Context, req *pb.HeartbeatRequest, timeout time.Duration) (resp *pb.HeartbeatResponse, err error)
 	RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorRequest, timeout time.Duration) (resp *pb.RegisterExecutorResponse, err error)
@@ -90,12 +90,21 @@ var mockDialImpl = func(ctx context.Context, addr string) (*clientHolder, error)
 
 // UpdateClients receives a list of server master addresses, dials to server
 // master that is not maintained in current MasterClient.
-func (c *MasterClientImpl) UpdateClients(ctx context.Context, urls []string) {
+func (c *MasterClientImpl) UpdateClients(ctx context.Context, urls []string, leaderURL string) {
 	c.clientsLock.Lock()
 	defer c.clientsLock.Unlock()
+
+	c.leader = leaderURL
+
+	notFound := make(map[string]struct{}, len(c.clients))
+	for addr := range c.clients {
+		notFound[addr] = struct{}{}
+	}
+
 	for _, addr := range urls {
 		// TODO: refine address with and without scheme
 		addr = strings.Replace(addr, "http://", "", 1)
+		delete(notFound, addr)
 		if _, ok := c.clients[addr]; !ok {
 			log.L().Info("add new server master client", zap.String("addr", addr))
 			cliH, err := c.dialer(ctx, addr)
@@ -107,10 +116,17 @@ func (c *MasterClientImpl) UpdateClients(ctx context.Context, urls []string) {
 			c.clients[addr] = cliH
 		}
 	}
+
+	for k := range notFound {
+		if err := c.clients[k].conn.Close(); err != nil {
+			log.L().Warn("close server master client failed", zap.String("addr", k), zap.Error(err))
+		}
+		delete(c.clients, k)
+	}
 }
 
 func (c *MasterClientImpl) init(ctx context.Context, urls []string) error {
-	c.UpdateClients(ctx, urls)
+	c.UpdateClients(ctx, urls, "")
 	if len(c.clients) == 0 {
 		return errors.ErrGrpcBuildConn.GenWithStack("failed to dial to master, urls: %v", urls)
 	}
@@ -129,8 +145,6 @@ func NewMasterClient(ctx context.Context, join []string) (*MasterClientImpl, err
 	if err != nil {
 		return nil, err
 	}
-	// TODO: use correct leader
-	client.leader = client.urls[0]
 	return client, nil
 }
 
@@ -149,9 +163,10 @@ func (c *MasterClientImpl) rpcWrap(ctx context.Context, req interface{}, respPoi
 	c.clientsLock.RLock()
 	defer c.clientsLock.RUnlock()
 	var err error
-	for addr, cliH := range c.clients {
+
+	doRPC := func(addr string, cli pb.MasterClient) (ok bool) {
 		params := []reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(req)}
-		results := reflect.ValueOf(cliH.client).MethodByName(methodName).Call(params)
+		results := reflect.ValueOf(cli).MethodByName(methodName).Call(params)
 		// result's inner types should be (*pb.XXResponse, error), which is same as pb.MasterClient.XXRPCMethod
 		reflect.ValueOf(respPointer).Elem().Set(results[0])
 		errInterface := results[1].Interface()
@@ -167,6 +182,23 @@ func (c *MasterClientImpl) rpcWrap(ctx context.Context, req interface{}, respPoi
 				zap.String("addr", addr), zap.Error(err),
 			)
 		} else {
+			return true
+		}
+		return false
+	}
+
+	// try leader first to avoid rpc forwarding in server master
+	if c.leader != "" {
+		if doRPC(c.leader, c.clients[c.leader].client) {
+			return nil
+		}
+	}
+
+	for addr, cliH := range c.clients {
+		if addr == c.leader {
+			continue
+		}
+		if doRPC(addr, cliH.client) {
 			return nil
 		}
 	}
