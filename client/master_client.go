@@ -178,14 +178,14 @@ func (c *MasterClientImpl) rpcWrap(ctx context.Context, req interface{}, respPoi
 		} else {
 			err = errInterface.(error)
 		}
-		if err != nil {
-			log.L().Debug("rpc to server master failed",
-				zap.Any("payload", req), zap.String("method", methodName),
-				zap.String("addr", addr), zap.Error(err),
-			)
-		} else {
+		if err == nil {
 			return true
 		}
+
+		log.L().Debug("rpc to server master failed",
+			zap.Any("payload", req), zap.String("method", methodName),
+			zap.String("addr", addr), zap.Error(err),
+		)
 		return false
 	}
 
