@@ -189,7 +189,10 @@ func (c *MasterClientImpl) rpcWrap(ctx context.Context, req interface{}, respPoi
 
 	// try leader first to avoid rpc forwarding in server master
 	if c.leader != "" {
-		if doRPC(c.leader, c.clients[c.leader].client) {
+		cliH := c.clients[c.leader]
+		if cliH == nil {
+			log.L().Warn("leader is not in active master clients", zap.String("leader", c.leader))
+		} else if doRPC(c.leader, c.clients[c.leader].client) {
 			return nil
 		}
 	}
