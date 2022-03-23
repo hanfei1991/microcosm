@@ -145,6 +145,8 @@ func NewMasterClient(ctx context.Context, join []string) (*MasterClientImpl, err
 	if err != nil {
 		return nil, err
 	}
+	// leader will be updated on heartbeat
+	client.leader = client.urls[0]
 	return client, nil
 }
 
