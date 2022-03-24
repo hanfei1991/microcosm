@@ -78,7 +78,7 @@ func (s *Service) QueryResource(ctx context.Context, request *pb.QueryResourceRe
 
 		logger.Info("Resource meta fetch completed", zap.Duration("duration", getResourceDuration))
 		if err != nil {
-			st, stErr := status.New(codes.Internal, "resource manager error").WithDetails(&pb.ResourceError{
+			st, stErr := status.New(codes.NotFound, "resource manager error").WithDetails(&pb.ResourceError{
 				ErrorCode:  pb.ResourceErrorCode_ResourceManagerInternalError,
 				StackTrace: errors.ErrorStack(err),
 			})
@@ -88,7 +88,7 @@ func (s *Service) QueryResource(ctx context.Context, request *pb.QueryResourceRe
 			return nil, st.Err()
 		}
 		if !exists {
-			st, stErr := status.New(codes.Internal, "resource manager error").WithDetails(&pb.ResourceError{
+			st, stErr := status.New(codes.NotFound, "resource manager error").WithDetails(&pb.ResourceError{
 				ErrorCode: pb.ResourceErrorCode_ResourceNotFound,
 			})
 			if stErr != nil {
@@ -102,7 +102,7 @@ func (s *Service) QueryResource(ctx context.Context, request *pb.QueryResourceRe
 	}
 
 	if record.Deleted {
-		st, stErr := status.New(codes.Internal, "resource manager error").WithDetails(&pb.ResourceError{
+		st, stErr := status.New(codes.NotFound, "resource manager error").WithDetails(&pb.ResourceError{
 			ErrorCode: pb.ResourceErrorCode_ResourceNotFound,
 		})
 		if stErr != nil {
@@ -167,17 +167,20 @@ func (s *Service) CreateResource(
 		return nil, st.Err()
 	}
 
-	// Note that the cache is updated AFTER the metastore is updated.
-	if _, exists := s.cache[request.GetResourceId()]; exists {
-		log.L().Panic("Cache is inconsistent",
-			zap.String("resource-id", request.GetResourceId()))
-	}
 	s.cache[request.GetResourceId()] = resourceRecord
 
 	// TODO: handle the case where resourceRecord.Deleted == true
 	return &pb.CreateResourceResponse{}, nil
 }
 
+// GetPlacementConstraint is called by the Scheduler to determine whether
+// a resource the worker relies on requires the worker running on a specific
+// executor.
+// Returns:
+// (1) A local resource is required and the resource exists: (executorID, true, nil)
+// (2) A local resource is required but the resource is not found: ("", false, ErrResourceDoesNotExist)
+// (3) No placement constraint is needed: ("", false, nil)
+// (4) Other errors: ("", false, err)
 func (s *Service) GetPlacementConstraint(
 	ctx context.Context,
 	id resourcemeta.ResourceID,

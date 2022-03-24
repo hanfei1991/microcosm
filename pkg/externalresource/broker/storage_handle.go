@@ -95,9 +95,13 @@ func (f *Factory) NewHandleForLocalFile(
 	filePath := filepath.Join(getWorkerDir(f.config, creatorWorkerID), suffix)
 	log.L().Info("Using local storage with path", zap.String("path", filePath))
 
-	ls, err := brStorage.NewLocalStorage(filePath)
+	backend, err := brStorage.ParseBackend(filePath, nil)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, err
+	}
+	ls, err := brStorage.New(ctx, backend, nil)
+	if err != nil {
+		return nil, err
 	}
 
 	return &BrExternalStorageHandle{
