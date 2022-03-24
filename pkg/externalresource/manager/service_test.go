@@ -124,6 +124,15 @@ func TestServiceBasics(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	_, err = suite.service.CreateResource(ctx, &pb.CreateResourceRequest{
+		ResourceId:      "/local/test/6",
+		CreatorExecutor: "executor-1",
+		JobId:           "test-job-1",
+		CreatorWorkerId: "test-worker-4",
+	})
+	require.Error(t, err)
+	require.Equal(t, pb.ResourceErrorCode_ResourceIDConflict, status.Convert(err).Details()[0].(*pb.ResourceError).ErrorCode)
+
 	execID, ok, err := suite.service.GetPlacementConstraint(ctx, "/local/test/6")
 	require.NoError(t, err)
 	require.True(t, ok)
@@ -139,6 +148,14 @@ func TestServiceBasics(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "executor-1", string(execID))
 
+	resp, err := suite.service.QueryResource(ctx, &pb.QueryResourceRequest{ResourceId: "/local/test/2"})
+	require.NoError(t, err)
+	require.Equal(t, &pb.QueryResourceResponse{
+		CreatorExecutor: "executor-1",
+		JobId:           "test-job-1",
+		CreatorWorkerId: "test-worker-1",
+	}, resp)
+
 	suite.OfflineExecutor(t, "executor-1")
 	require.Eventually(t, func() bool {
 		_, _, err := suite.service.GetPlacementConstraint(ctx, "/local/test/2")
@@ -148,6 +165,14 @@ func TestServiceBasics(t *testing.T) {
 		}
 		return false
 	}, 1*time.Second, 1*time.Millisecond)
+
+	_, err = suite.service.QueryResource(ctx, &pb.QueryResourceRequest{ResourceId: "/local/test/2"})
+	require.Error(t, err)
+	require.Equal(t, pb.ResourceErrorCode_ResourceNotFound, status.Convert(err).Details()[0].(*pb.ResourceError).ErrorCode)
+
+	_, err = suite.service.QueryResource(ctx, &pb.QueryResourceRequest{ResourceId: "/local/test/non-existent"})
+	require.Error(t, err)
+	require.Equal(t, pb.ResourceErrorCode_ResourceNotFound, status.Convert(err).Details()[0].(*pb.ResourceError).ErrorCode)
 
 	suite.Stop()
 }
@@ -210,6 +235,14 @@ func TestServiceCacheMiss(t *testing.T) {
 	require.True(t, ok)
 	require.Len(t, st.Details(), 1)
 	require.Equal(t, pb.ResourceErrorCode_ResourceIDConflict, st.Details()[0].(*pb.ResourceError).ErrorCode)
+
+	resp, err := suite.service.QueryResource(ctx, &pb.QueryResourceRequest{ResourceId: "/local/test/2"})
+	require.NoError(t, err)
+	require.Equal(t, &pb.QueryResourceResponse{
+		CreatorExecutor: "executor-1",
+		JobId:           "test-job-1",
+		CreatorWorkerId: "test-worker-1",
+	}, resp)
 
 	suite.Stop()
 }

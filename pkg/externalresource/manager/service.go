@@ -20,6 +20,11 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 )
 
+// Service implements pb.ResourceManagerServer
+// TODOs:
+// (1) Refactor cache-related logic
+// (2) Add RemoveResource method for explicit resource releasing
+// (3) Implement automatic resource GC
 type Service struct {
 	mu       *ctxmu.CtxMutex
 	accessor *resourcemeta.MetadataAccessor
@@ -63,7 +68,7 @@ func (s *Service) QueryResource(ctx context.Context, request *pb.QueryResourceRe
 	defer s.mu.Unlock()
 
 	record, exists := s.cache[request.GetResourceId()]
-	if exists {
+	if !exists {
 		logger.Info("cache miss", zap.String("resource-id", request.GetResourceId()))
 		var err error
 
@@ -168,6 +173,7 @@ func (s *Service) CreateResource(
 	}
 	s.cache[request.GetResourceId()] = resourceRecord
 
+	// TODO: handle the case where resourceRecord.Deleted == true
 	return &pb.CreateResourceResponse{}, nil
 }
 
@@ -211,13 +217,13 @@ func (s *Service) GetPlacementConstraint(
 		getResourceDuration := time.Since(startTime)
 
 		logger.Info("Resource meta fetch completed", zap.Duration("duration", getResourceDuration))
-
 		if err != nil {
 			return "", false, err
 		}
 		if !exists {
 			return "", false, derror.ErrResourceDoesNotExist.GenWithStackByArgs(id)
 		}
+		s.cache[id] = record
 	} else {
 		logger.Info("Resource cache hit")
 	}
