@@ -8,6 +8,7 @@ import (
 	"time"
 
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
+	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 
 	"github.com/pingcap/tiflow/pkg/workerpool"
 	"github.com/stretchr/testify/require"
@@ -16,7 +17,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/deps"
-	"github.com/hanfei1991/microcosm/pkg/metadata"
+	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
@@ -32,7 +33,7 @@ type digParamList struct {
 
 	MessageSender         p2p.MessageSender
 	MessageHandlerManager p2p.MessageHandlerManager
-	MetaClient            metadata.MetaKV
+	MetaClient            metaclient.KVClient
 	Pool                  workerpool.AsyncPool
 }
 
@@ -58,7 +59,7 @@ func newWorkerManagerTestSuite(ctx context.Context) *workerManagerTestSuite {
 		digParamList: digParamList{
 			MessageSender:         p2p.NewMockMessageSender(),
 			MessageHandlerManager: p2p.NewMockMessageHandlerManager(),
-			MetaClient:            metadata.NewMetaMock(),
+			MetaClient:            mockkv.NewMetaMock(),
 			Pool:                  pool,
 		},
 		wg:     wg,
@@ -487,6 +488,56 @@ func TestWorkerTimedOut(t *testing.T) {
 	require.Contains(t, workers, workerID1)
 	handle := workers[workerID1]
 	require.True(t, handle.IsTombStone())
+
+	cancel()
+	suite.Close()
+}
+
+func TestWorkerTerminate(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.TODO(), 10*time.Second)
+	defer cancel()
+
+	suite := newWorkerManagerTestSuite(ctx)
+
+	manager := newWorkerManager(
+		suite.BuildDepsContext(t),
+		masterName,
+		true,
+		1,
+		&defaultTimeoutConfig,
+	).(*workerManagerImpl)
+
+	manager.clock = clock.NewMock()
+	manager.clock.(*clock.Mock).Set(time.Now())
+
+	err := safeAddWorker(manager, workerID1, executorNodeID1)
+	require.NoError(t, err)
+
+	err = manager.HandleHeartbeat(&HeartbeatPingMessage{
+		SendTime:     manager.clock.Mono(),
+		FromWorkerID: workerID1,
+		Epoch:        1,
+	}, executorNodeID1)
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool {
+		offlined, onlined := manager.Tick(ctx)
+		require.Empty(t, offlined)
+		return len(onlined) == 1
+	}, time.Second, 10*time.Millisecond)
+
+	// update worker status, set it finished
+	status := manager.statusReceivers[workerID1]
+	status.statusMu.Lock()
+	status.statusCache.Code = WorkerStatusFinished
+	status.statusMu.Unlock()
+
+	offlined, onlined := manager.Tick(ctx)
+	require.Len(t, offlined, 1)
+	require.Empty(t, onlined)
+	require.Len(t, manager.tombstones, 1)
 
 	cancel()
 	suite.Close()
