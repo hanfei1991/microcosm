@@ -23,6 +23,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 // Context is used to in dm to record some context field like
@@ -106,6 +107,7 @@ type RuntimeDependencies struct {
 	UserRawKVClient       extKV.KVClientEx
 	ExecutorClientManager *client.Manager
 	ServerMasterClient    client.MasterClient
+	InnerEtcdClient       *clientv3.Client
 }
 
 type Environment struct {

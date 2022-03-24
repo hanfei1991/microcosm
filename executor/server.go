@@ -205,6 +205,13 @@ func (s *Server) buildDeps(wid lib.WorkerID) (*deps.Deps, error) {
 		return nil, err
 	}
 
+	err = deps.Provide(func() *clientv3.Client {
+		return s.etcdCli
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	return deps, nil
 }
 
@@ -220,6 +227,7 @@ func (s *Server) DispatchTask(ctx context.Context, req *pb.DispatchTaskRequest) 
 		UserRawKVClient:       s.userRawKVClient,
 		ExecutorClientManager: client.NewClientManager(),
 		ServerMasterClient:    s.cli,
+		InnerEtcdClient:       s.etcdCli,
 	}
 
 	dp, err := s.buildDeps(req.GetWorkerId())
@@ -496,7 +504,6 @@ func (s *Server) fetchMetaStore(ctx context.Context) error {
 	s.etcdCli = etcdCli
 
 	// fetch framework metastore connection endpoint
-	log.L().Info("update framework metastore", zap.String("addr", resp.Address))
 	resp, err = s.cli.QueryMetaStore(
 		ctx,
 		&pb.QueryMetaStoreRequest{Tp: pb.StoreType_SystemMetaStore},
@@ -505,6 +512,7 @@ func (s *Server) fetchMetaStore(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	log.L().Info("update framework metastore", zap.String("addr", resp.Address))
 
 	conf := metaclient.StoreConfigParams{
 		Endpoints: []string{resp.Address},
@@ -519,7 +527,6 @@ func (s *Server) fetchMetaStore(ctx context.Context) error {
 	s.metaKVClient = kvclient.NewPrefixKVClient(cliEx, tenant.DefaultUserTenantID)
 
 	// fetch user metastore connection endpoint
-	log.L().Info("update user metastore", zap.String("addr", resp.Address))
 	resp, err = s.cli.QueryMetaStore(
 		ctx,
 		&pb.QueryMetaStoreRequest{Tp: pb.StoreType_AppMetaStore},
@@ -528,6 +535,7 @@ func (s *Server) fetchMetaStore(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	log.L().Info("update user metastore", zap.String("addr", resp.Address))
 
 	conf = metaclient.StoreConfigParams{
 		Endpoints: []string{resp.Address},
