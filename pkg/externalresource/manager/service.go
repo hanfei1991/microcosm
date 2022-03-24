@@ -96,6 +96,7 @@ func (s *Service) QueryResource(ctx context.Context, request *pb.QueryResourceRe
 			}
 			return nil, st.Err()
 		}
+		s.cache[request.ResourceId] = record
 	} else {
 		log.L().Info("cache hit", zap.String("resource-id", request.GetResourceId()))
 	}
