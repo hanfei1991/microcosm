@@ -23,6 +23,8 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
+var _ lib.JobMasterImpl = &JobMaster{}
+
 type Config struct {
 	SrcHost string `toml:"srcHost" json:"srcHost"`
 	SrcDir  string `toml:"srcDir" json:"srcDir"`
@@ -209,6 +211,10 @@ func (jm *JobMaster) OnWorkerOffline(worker lib.WorkerHandle, reason error) erro
 	//delete(jm.syncFilesInfo, worker.ID())
 	//// todo : if the worker id is empty ,the sync file will be lost.
 	//jm.syncFilesInfo[workerID] = &workerInfo{file: syncInfo.file, curLoc: syncInfo.curLoc, handle: nil}
+}
+
+func (jm *JobMaster) OnWorkerStatusUpdated(worker lib.WorkerHandle, newStatus *lib.WorkerStatus) error {
+	return nil
 }
 
 func (jm *JobMaster) OnWorkerMessage(worker lib.WorkerHandle, topic p2p.Topic, message p2p.MessageValue) error {
