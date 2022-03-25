@@ -7,6 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hanfei1991/microcosm/lib/statusutil"
+
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -62,6 +64,8 @@ type MasterImpl interface {
 
 	// OnWorkerMessage is called when a customized message is received.
 	OnWorkerMessage(worker WorkerHandle, topic p2p.Topic, message interface{}) error
+
+	OnWorkerStatusUpdated(worker WorkerHandle, newStatus *WorkerStatus) error
 
 	// CloseImpl is called when the master is being closed
 	CloseImpl(ctx context.Context) error
@@ -281,10 +285,10 @@ func (m *DefaultBaseMaster) registerMessageHandlers(ctx context.Context) error {
 
 	ok, err = m.messageHandlerManager.RegisterHandler(
 		ctx,
-		WorkerStatusUpdatedTopic(m.id),
-		&WorkerStatusUpdatedMessage{},
+		statusutil.WorkerStatusTopic(m.id),
+		&statusutil.WorkerStatusMessage[*WorkerStatus]{},
 		func(sender p2p.NodeID, value p2p.MessageValue) error {
-			msg := value.(*WorkerStatusUpdatedMessage)
+			msg := value.(*statusutil.WorkerStatusMessage[*WorkerStatus])
 			m.workerManager.OnWorkerStatusUpdated(msg)
 			return nil
 		})
@@ -292,7 +296,7 @@ func (m *DefaultBaseMaster) registerMessageHandlers(ctx context.Context) error {
 		return err
 	}
 	if !ok {
-		log.L().Panic("duplicate handler", zap.String("topic", WorkerStatusUpdatedTopic(m.id)))
+		log.L().Panic("duplicate handler", zap.String("topic", statusutil.WorkerStatusTopic(m.id)))
 	}
 
 	return nil
@@ -325,9 +329,11 @@ func (m *DefaultBaseMaster) doPoll(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	if err := m.workerManager.CheckStatusUpdate(ctx); err != nil {
-		return errors.Trace(err)
+	err := m.workerManager.CheckStatusUpdate(m.Impl.OnWorkerStatusUpdated)
+	if err != nil {
+		return err
 	}
+
 	return nil
 }
 

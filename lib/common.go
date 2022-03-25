@@ -98,6 +98,11 @@ type WorkerStatus struct {
 	ExtBytes []byte `json:"ext-bytes"`
 }
 
+// HasChanged indicates whether `s` has significant changes worth persisting.
+func (s *WorkerStatus) HasChanged(other *WorkerStatus) bool {
+	return s.Code != other.Code || s.ErrorMessage != other.ErrorMessage
+}
+
 // InTerminateState returns whether worker is in a terminate state, including
 // finished, stopped, error.
 func (s *WorkerStatus) InTerminateState() bool {
@@ -113,6 +118,13 @@ func (s *WorkerStatus) Marshal() ([]byte, error) {
 	return json.Marshal(s)
 }
 
+func (s *WorkerStatus) Unmarshal(bytes []byte) error {
+	if err := json.Unmarshal(bytes, s); err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
 func HeartbeatPingTopic(masterID MasterID) p2p.Topic {
 	return fmt.Sprintf("heartbeat-ping-%s", masterID)
 }
@@ -124,15 +136,6 @@ func HeartbeatPongTopic(masterID MasterID, workerID WorkerID) p2p.Topic {
 
 func WorkerStatusChangeRequestTopic(masterID MasterID, workerID WorkerID) p2p.Topic {
 	return fmt.Sprintf("worker-status-change-req-%s-%s", masterID, workerID)
-}
-
-func WorkerStatusUpdatedTopic(masterID MasterID) string {
-	return fmt.Sprintf("worker-status-updated-%s", masterID)
-}
-
-type WorkerStatusUpdatedMessage struct {
-	FromWorkerID WorkerID `json:"from-worker-id"`
-	Epoch        Epoch    `json:"epoch"`
 }
 
 type HeartbeatPingMessage struct {

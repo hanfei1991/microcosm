@@ -7,17 +7,17 @@ import (
 	"testing"
 	"time"
 
-	derror "github.com/hanfei1991/microcosm/pkg/errors"
-	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
-
 	"github.com/pingcap/tiflow/pkg/workerpool"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/dig"
 
+	"github.com/hanfei1991/microcosm/lib/statusutil"
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/deps"
+	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
+	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
@@ -398,14 +398,6 @@ func TestUpdateStatus(t *testing.T) {
 	err = safeAddWorker(manager, workerID1, executorNodeID1)
 	require.NoError(t, err)
 
-	require.Eventually(t, func() bool {
-		info, ok := manager.GetWorkerInfo(workerID1)
-		if !ok {
-			return false
-		}
-		return info.statusInitialized.Load()
-	}, time.Second, time.Millisecond*10)
-
 	status, ok := manager.GetStatus(workerID1)
 	require.True(t, ok)
 	require.Equal(t, WorkerStatusInit, status.Code)
@@ -418,15 +410,31 @@ func TestUpdateStatus(t *testing.T) {
 		})
 	require.NoError(t, err)
 
-	manager.OnWorkerStatusUpdated(&WorkerStatusUpdatedMessage{
-		FromWorkerID: workerID1,
-		Epoch:        1,
+	manager.OnWorkerStatusUpdated(&statusutil.WorkerStatusMessage[*WorkerStatus]{
+		Worker:      workerID1,
+		MasterEpoch: 1,
+		Status: &WorkerStatus{
+			Code:         WorkerStatusError,
+			ErrorMessage: "fake",
+			ExtBytes:     fastMarshalDummyStatus(t, 7),
+		},
 	})
 
 	require.Eventually(t, func() bool {
-		err := manager.CheckStatusUpdate(ctx)
+		var (
+			status *WorkerStatus
+			handle WorkerHandle
+		)
+		err := manager.CheckStatusUpdate(func(hdl WorkerHandle, st *WorkerStatus) error {
+			status = st
+			handle = hdl
+			return nil
+		})
 		require.NoError(t, err)
-		return manager.GetWorkerHandle(workerID1).Status().Code == WorkerStatusError
+		if status != nil {
+			require.Equal(t, workerID1, handle.ID())
+		}
+		return status != nil && status.Code == WorkerStatusError
 	}, time.Second, 10*time.Millisecond)
 
 	handle := manager.GetWorkerHandle(workerID1)
@@ -512,7 +520,12 @@ func TestWorkerTerminate(t *testing.T) {
 	manager.clock = clock.NewMock()
 	manager.clock.(*clock.Mock).Set(time.Now())
 
-	err := safeAddWorker(manager, workerID1, executorNodeID1)
+	mockKV := suite.MetaClient.(*mockkv.MetaMock)
+	workerMetaClient := NewWorkerMetadataClient(masterName, mockKV)
+	err := workerMetaClient.Store(ctx, workerID1, &WorkerStatus{Code: WorkerStatusNormal})
+	require.NoError(t, err)
+
+	err = safeAddWorker(manager, workerID1, executorNodeID1)
 	require.NoError(t, err)
 
 	err = manager.HandleHeartbeat(&HeartbeatPingMessage{
@@ -530,9 +543,16 @@ func TestWorkerTerminate(t *testing.T) {
 
 	// update worker status, set it finished
 	status := manager.statusReceivers[workerID1]
-	status.statusMu.Lock()
-	status.statusCache.Code = WorkerStatusFinished
-	status.statusMu.Unlock()
+	err = status.OnAsynchronousNotification(&WorkerStatus{
+		Code: WorkerStatusFinished,
+	})
+	require.NoError(t, err)
+
+	err = manager.CheckStatusUpdate(func(handle WorkerHandle, status *WorkerStatus) error {
+		require.Equal(t, WorkerStatusFinished, status.Code)
+		return nil
+	})
+	require.NoError(t, err)
 
 	offlined, onlined := manager.Tick(ctx)
 	require.Len(t, offlined, 1)

@@ -12,6 +12,7 @@ import (
 	"go.uber.org/dig"
 	"go.uber.org/zap"
 
+	"github.com/hanfei1991/microcosm/lib/statusutil"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/clock"
@@ -35,8 +36,8 @@ type workerManager interface {
 	GetWorkerHandle(id WorkerID) WorkerHandle
 	GetWorkers() map[WorkerID]WorkerHandle
 	GetStatus(id WorkerID) (*WorkerStatus, bool)
-	CheckStatusUpdate(ctx context.Context) error
-	OnWorkerStatusUpdated(msg *WorkerStatusUpdatedMessage)
+	CheckStatusUpdate(cb func(WorkerHandle, *WorkerStatus) error) error
+	OnWorkerStatusUpdated(msg *statusutil.WorkerStatusMessage[*WorkerStatus])
 }
 
 type workerManagerFsmState = int32
@@ -55,12 +56,12 @@ type workerManagerImpl struct {
 	initStartTime   time.Time
 	workerInfos     map[WorkerID]*WorkerInfo
 	tombstones      map[WorkerID]*WorkerStatus
-	statusReceivers map[WorkerID]*StatusReceiver
+	statusReceivers map[WorkerID]*statusutil.Reader[*WorkerStatus]
 
 	fsmState atomic.Int32
 	errCh    chan error
 
-	// read-only
+	// read-onlyx
 	masterEpoch   Epoch
 	masterID      MasterID
 	timeoutConfig TimeoutConfig
@@ -106,7 +107,7 @@ func newWorkerManager(
 		initialized:     !needWait,
 		workerInfos:     make(map[WorkerID]*WorkerInfo),
 		tombstones:      make(map[WorkerID]*WorkerStatus),
-		statusReceivers: make(map[WorkerID]*StatusReceiver),
+		statusReceivers: make(map[WorkerID]*statusutil.Reader[*WorkerStatus]),
 
 		fsmState: *atomic.NewInt32(initFsmState),
 		errCh:    make(chan error, 1),
@@ -219,26 +220,40 @@ func (m *workerManagerImpl) asyncDeleteTombstone(ctx context.Context, id WorkerI
 	return nil
 }
 
-func (m *workerManagerImpl) OnWorkerStatusUpdated(msg *WorkerStatusUpdatedMessage) {
+func (m *workerManagerImpl) OnWorkerStatusUpdated(msg *statusutil.WorkerStatusMessage[*WorkerStatus]) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	receiver, ok := m.statusReceivers[msg.FromWorkerID]
+	receiver, ok := m.statusReceivers[msg.Worker]
 	if !ok {
 		log.L().Warn("Received worker status notification for non-existing worker",
 			zap.Any("msg", msg))
 		return
 	}
 
-	receiver.OnNotification(msg)
+	if err := receiver.OnAsynchronousNotification(msg.Status); err != nil {
+		log.L().Warn("OnWorkerStatusUpdated encountered error",
+			zap.String("master-id", m.masterID),
+			zap.String("worker-id", msg.Worker),
+			zap.Error(err))
+	}
 }
 
-func (m *workerManagerImpl) CheckStatusUpdate(ctx context.Context) error {
+func (m *workerManagerImpl) CheckStatusUpdate(cb func(WorkerHandle, *WorkerStatus) error) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	for _, receiver := range m.statusReceivers {
-		if err := receiver.Tick(ctx); err != nil {
+	for workerID, receiver := range m.statusReceivers {
+		st, ok := receiver.Receive()
+		if !ok {
+			// No pending status update
+			continue
+		}
+		err := cb(&workerHandleImpl{
+			manager: m,
+			id:      workerID,
+		}, st)
+		if err != nil {
 			return errors.Trace(err)
 		}
 	}
@@ -275,7 +290,7 @@ func (m *workerManagerImpl) Tick(
 		// `justOnlined` indicates that the online event has not been notified,
 		// and `hasPendingHeartbeat` indicates that we have received a heartbeat and
 		// has not sent the Pong yet.ctx context.Context,
-		if workerInfo.justOnlined && workerInfo.hasPendingHeartbeat && workerInfo.statusInitialized.Load() {
+		if workerInfo.justOnlined && workerInfo.hasPendingHeartbeat {
 			workerInfo.justOnlined = false
 			onlinedWorkers = append(onlinedWorkers, workerInfo)
 		}
@@ -283,7 +298,7 @@ func (m *workerManagerImpl) Tick(
 		status := m.statusReceivers[workerID].Status()
 		if workerInfo.hasTimedOut(m.clock, &m.timeoutConfig) || status.InTerminateState() {
 			offlinedWorkers = append(offlinedWorkers, workerInfo)
-			m.tombstones[workerID] = &status
+			m.tombstones[workerID] = status
 			delete(m.workerInfos, workerID)
 		}
 
@@ -359,9 +374,8 @@ func (m *workerManagerImpl) GetStatus(id WorkerID) (*WorkerStatus, bool) {
 		return nil, false
 	}
 
-	// TODO evaluate whether we need an object pool to mitigate allocation burden.
 	ret := receiver.Status()
-	return &ret, true
+	return ret, true
 }
 
 func (m *workerManagerImpl) GetWorkerInfo(id WorkerID) (*WorkerInfo, bool) {
@@ -423,43 +437,21 @@ func (m *workerManagerImpl) addWorker(id WorkerID, executorNodeID p2p.NodeID) er
 	}
 
 	workerMetaClient := NewWorkerMetadataClient(m.masterID, m.metaClient)
-	receiver := NewStatusReceiver(
-		id,
-		workerMetaClient,
-		m.messageHandleManager,
-		m.masterEpoch,
-		m.pool,
-		m.clock,
-	)
-	m.statusReceivers[id] = receiver
 
-	// TODO refine AsyncPool or refactor this function to avoid
-	// possible deadlocking when the pool's pending queue is full.
-	//
-	// TODO figure out what context to use here.
-	err := m.pool.Go(context.TODO(), func() {
-		if err := receiver.Init(context.TODO()); err != nil {
-			// TODO handle the error
-			log.L().Warn("failed to init StatusReceiver",
-				zap.String("master-id", m.masterID),
-				zap.String("worker-id", id),
-				zap.Error(err))
-		}
-		info, ok := m.GetWorkerInfo(id)
-		if !ok {
-			log.L().Warn("worker has been removed",
-				zap.String("master-id", m.masterID),
-				zap.String("worker-id", id))
-		}
-		if old := info.statusInitialized.Swap(true); old {
-			log.L().Panic("worker is initialized twice. Report a bug",
-				zap.String("master-id", m.masterID),
-				zap.String("worker-id", id))
-		}
-	})
+	var receiver *statusutil.Reader[*WorkerStatus]
+	// TODO figure out whether it is acceptable to load from metastore here.
+	initSt, err := workerMetaClient.Load(context.TODO(), id)
 	if err != nil {
-		return errors.Trace(err)
+		if derror.ErrWorkerNoMeta.Equal(err) {
+			initSt = &WorkerStatus{
+				Code: WorkerStatusCreated,
+			}
+		} else {
+			return err
+		}
 	}
+	receiver = statusutil.NewReader(initSt)
+	m.statusReceivers[id] = receiver
 	return nil
 }
 
@@ -545,10 +537,6 @@ type WorkerInfo struct {
 	lastHeartbeatSendTime    clock.MonotonicTime
 	hasPendingHeartbeat      bool
 	justOnlined              bool
-
-	// marks whether the status has been asynchronously
-	// loaded from the metastore.
-	statusInitialized atomic.Bool
 
 	workload model.RescUnit
 }

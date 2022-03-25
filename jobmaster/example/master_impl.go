@@ -94,3 +94,8 @@ func (e *exampleMaster) CloseImpl(ctx context.Context) error {
 	log.L().Info("CloseImpl")
 	return nil
 }
+
+func (e *exampleMaster) OnWorkerStatusUpdated(worker lib.WorkerHandle, newStatus *lib.WorkerStatus) error {
+	log.L().Info("OnWorkerStatusUpdated")
+	return nil
+}

@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanfei1991/microcosm/lib/statusutil"
+
 	"github.com/stretchr/testify/require"
 
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
@@ -72,7 +74,7 @@ func MockBaseWorkerWaitUpdateStatus(
 	t *testing.T,
 	worker *DefaultBaseWorker,
 ) {
-	topic := WorkerStatusUpdatedTopic(worker.masterClient.MasterID())
+	topic := statusutil.WorkerStatusTopic(worker.masterClient.MasterID())
 	masterNode := worker.masterClient.MasterNode()
 	require.Eventually(t, func() bool {
 		_, ok := worker.messageSender.(*p2p.MockMessageSender).TryPop(masterNode, topic)

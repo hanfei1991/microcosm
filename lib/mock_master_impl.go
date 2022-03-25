@@ -125,6 +125,14 @@ func (m *MockMasterImpl) OnMasterRecovered(ctx context.Context) error {
 	return args.Error(0)
 }
 
+func (m *MockMasterImpl) OnWorkerStatusUpdated(worker WorkerHandle, newStatus *WorkerStatus) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	args := m.Called(worker, newStatus)
+	return args.Error(0)
+}
+
 func (m *MockMasterImpl) Tick(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

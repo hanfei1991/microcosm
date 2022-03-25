@@ -25,12 +25,19 @@ type msgBoxIndex struct {
 }
 
 func (m *MockMessageSender) SendToNodeB(
-	_ context.Context,
+	ctx context.Context,
 	targetNodeID NodeID,
 	topic Topic,
 	message interface{},
 ) error {
-	panic("not implemented")
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// TODO Handle the `m.isBlocked == true` case
+
+	q := m.getQueue(targetNodeID, topic)
+	q.PushBack(message)
+	return nil
 }
 
 func (m *MockMessageSender) SendToNode(

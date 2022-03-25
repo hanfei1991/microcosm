@@ -192,3 +192,8 @@ func (s *SubTaskMaster) OnMasterMessage(topic p2p.Topic, message p2p.MessageValu
 	log.L().Info("on master message", zap.Any("message", message))
 	return nil
 }
+
+func (s *SubTaskMaster) OnWorkerStatusUpdated(worker lib.WorkerHandle, newStatus *lib.WorkerStatus) error {
+	log.L().Info("on worker status updated", zap.String("worker-id", worker.ID()), zap.Any("status", newStatus))
+	return nil
+}

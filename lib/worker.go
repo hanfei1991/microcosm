@@ -5,8 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
-	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
+	"github.com/hanfei1991/microcosm/pkg/adapter"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -15,10 +14,13 @@ import (
 	"go.uber.org/zap"
 
 	runtime "github.com/hanfei1991/microcosm/executor/worker"
+	"github.com/hanfei1991/microcosm/lib/statusutil"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
+	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
+	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
 	extKV "github.com/hanfei1991/microcosm/pkg/meta/extension"
 	"github.com/hanfei1991/microcosm/pkg/meta/kvclient"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
@@ -89,7 +91,7 @@ type DefaultBaseWorker struct {
 	masterID     MasterID
 
 	workerMetaClient *WorkerMetadataClient
-	statusSender     *StatusSender
+	statusSender     *statusutil.Writer[*WorkerStatus]
 	messageRouter    *MessageRouter
 
 	id            WorkerID
@@ -205,7 +207,8 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) error {
 
 	w.workerMetaClient = NewWorkerMetadataClient(w.masterID, w.metaKVClient)
 
-	w.statusSender = NewStatusSender(w.id, w.masterClient, w.workerMetaClient, w.messageSender, w.pool)
+	w.statusSender = statusutil.NewWriter[*WorkerStatus](
+		w.metaKVClient, w.messageSender, w.masterClient, adapter.WorkerKeyAdapter, w.id)
 	w.messageRouter = NewMessageRouter(w.id, w.pool, defaultMessageRouterBufferSize,
 		func(topic p2p.Topic, msg p2p.MessageValue) error {
 			return w.Impl.OnMasterMessage(topic, msg)
@@ -224,8 +227,8 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) error {
 }
 
 func (w *DefaultBaseWorker) doPostInit(ctx context.Context) error {
-	if err := w.statusSender.SafeSendStatus(
-		ctx, WorkerStatus{Code: WorkerStatusInit}); err != nil {
+	if err := w.statusSender.UpdateStatus(
+		ctx, &WorkerStatus{Code: WorkerStatusInit}); err != nil {
 		return errors.Trace(err)
 	}
 
@@ -244,10 +247,6 @@ func (w *DefaultBaseWorker) doPoll(ctx context.Context) error {
 			return errors.Trace(err)
 		}
 	default:
-	}
-
-	if err := w.statusSender.Tick(ctx); err != nil {
-		return errors.Trace(err)
 	}
 
 	if err := w.messageRouter.Tick(ctx); err != nil {
@@ -308,7 +307,7 @@ func (w *DefaultBaseWorker) MetaKVClient() metaclient.KVClient {
 }
 
 func (w *DefaultBaseWorker) UpdateStatus(ctx context.Context, status WorkerStatus) error {
-	err := w.statusSender.AsyncSendStatus(ctx, status)
+	err := w.statusSender.UpdateStatus(ctx, &status)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -332,7 +331,7 @@ func (w *DefaultBaseWorker) Exit(ctx context.Context, status WorkerStatus, err e
 		status.Code = WorkerStatusError
 	}
 
-	if err1 := w.statusSender.SafeSendStatus(ctx, status); err1 != nil {
+	if err1 := w.statusSender.UpdateStatus(ctx, &status); err1 != nil {
 		return err1
 	}
 

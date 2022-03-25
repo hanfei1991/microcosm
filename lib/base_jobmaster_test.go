@@ -59,6 +59,14 @@ func (m *testJobMasterImpl) OnMasterRecovered(ctx context.Context) error {
 	return args.Error(0)
 }
 
+func (m *testJobMasterImpl) OnWorkerStatusUpdated(worker WorkerHandle, newStatus *WorkerStatus) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	args := m.Called(worker, newStatus)
+	return args.Error(0)
+}
+
 func (m *testJobMasterImpl) OnWorkerDispatched(worker WorkerHandle, result error) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

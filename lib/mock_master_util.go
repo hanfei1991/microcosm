@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/hanfei1991/microcosm/lib/statusutil"
+
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
@@ -166,8 +168,12 @@ func MockBaseMasterWorkerUpdateStatus(
 
 	err = master.messageHandlerManager.(*p2p.MockMessageHandlerManager).InvokeHandler(
 		t,
-		WorkerStatusUpdatedTopic(masterID),
+		statusutil.WorkerStatusTopic(masterID),
 		executorID,
-		&WorkerStatusUpdatedMessage{FromWorkerID: workerID, Epoch: master.currentEpoch.Load()})
+		&statusutil.WorkerStatusMessage[*WorkerStatus]{
+			Worker:      workerID,
+			MasterEpoch: master.currentEpoch.Load(),
+			Status:      status,
+		})
 	require.NoError(t, err)
 }

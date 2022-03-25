@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/hanfei1991/microcosm/lib/statusutil"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
@@ -183,11 +184,23 @@ func TestMasterCreateWorker(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	master.On("OnWorkerStatusUpdated", mock.Anything, &WorkerStatus{
+		Code:     WorkerStatusNormal,
+		ExtBytes: ext,
+	}).Return(nil)
+
 	err = master.messageHandlerManager.InvokeHandler(
 		t,
-		WorkerStatusUpdatedTopic(masterName),
+		statusutil.WorkerStatusTopic(masterName),
 		masterName,
-		&WorkerStatusUpdatedMessage{FromWorkerID: workerID1, Epoch: master.currentEpoch.Load()})
+		&statusutil.WorkerStatusMessage[*WorkerStatus]{
+			Worker:      workerID1,
+			MasterEpoch: master.currentEpoch.Load(),
+			Status: &WorkerStatus{
+				Code:     WorkerStatusNormal,
+				ExtBytes: ext,
+			},
+		})
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {

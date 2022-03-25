@@ -63,6 +63,7 @@ type JobMasterImpl interface {
 	OnWorkerOnline(worker WorkerHandle) error
 	OnWorkerOffline(worker WorkerHandle, reason error) error
 	OnWorkerMessage(worker WorkerHandle, topic p2p.Topic, message interface{}) error
+	OnWorkerStatusUpdated(worker WorkerHandle, newStatus *WorkerStatus) error
 	Workload() model.RescUnit
 	OnJobManagerFailover(reason MasterFailoverReason) error
 	OnJobManagerMessage(topic p2p.Topic, message interface{}) error
@@ -251,6 +252,10 @@ func (j *jobMasterImplAsWorkerImpl) CloseImpl(ctx context.Context) error {
 
 type jobMasterImplAsMasterImpl struct {
 	inner JobMasterImpl
+}
+
+func (j *jobMasterImplAsMasterImpl) OnWorkerStatusUpdated(worker WorkerHandle, newStatus *WorkerStatus) error {
+	return j.inner.OnWorkerStatusUpdated(worker, newStatus)
 }
 
 func (j *jobMasterImplAsMasterImpl) Tick(ctx context.Context) error {

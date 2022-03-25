@@ -313,6 +313,11 @@ func (jm *JobManagerImplV2) OnWorkerMessage(worker lib.WorkerHandle, topic p2p.T
 	return nil
 }
 
+func (jm *JobManagerImplV2) OnWorkerStatusUpdated(worker lib.WorkerHandle, newStatus *lib.WorkerStatus) error {
+	log.L().Info("on worker status updated", zap.String("worker-id", worker.ID()), zap.Any("status", newStatus))
+	return nil
+}
+
 // CloseImpl implements lib.MasterImpl.CloseImpl
 func (jm *JobManagerImplV2) CloseImpl(ctx context.Context) error {
 	return nil

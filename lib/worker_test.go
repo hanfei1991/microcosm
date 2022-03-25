@@ -7,6 +7,7 @@ import (
 	"time"
 
 	runtime "github.com/hanfei1991/microcosm/executor/worker"
+	"github.com/hanfei1991/microcosm/lib/statusutil"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
@@ -71,19 +72,20 @@ func TestWorkerInitAndClose(t *testing.T) {
 	err = worker.UpdateStatus(ctx, WorkerStatus{Code: WorkerStatusNormal})
 	require.NoError(t, err)
 
-	var statusMsg *WorkerStatusUpdatedMessage
+	var statusMsg *statusutil.WorkerStatusMessage[*WorkerStatus]
 	require.Eventually(t, func() bool {
 		err := worker.Poll(ctx)
 		require.NoError(t, err)
-		rawMsg, ok := worker.messageSender.TryPop(masterNodeName, WorkerStatusUpdatedTopic(masterName))
+		rawMsg, ok := worker.messageSender.TryPop(masterNodeName, statusutil.WorkerStatusTopic(masterName))
 		if ok {
-			statusMsg = rawMsg.(*WorkerStatusUpdatedMessage)
+			statusMsg = rawMsg.(*statusutil.WorkerStatusMessage[*WorkerStatus])
 		}
-		return ok
+		return !ok
 	}, time.Second, time.Millisecond*10)
-	require.Equal(t, &WorkerStatusUpdatedMessage{
-		FromWorkerID: workerID1,
-		Epoch:        1,
+	require.Equal(t, &statusutil.WorkerStatusMessage[*WorkerStatus]{
+		Worker:      workerID1,
+		MasterEpoch: 1,
+		Status:      &WorkerStatus{Code: WorkerStatusNormal},
 	}, statusMsg)
 
 	worker.On("CloseImpl").Return(nil)
@@ -242,41 +244,34 @@ func TestWorkerStatus(t *testing.T) {
 	err := worker.Init(ctx)
 	require.NoError(t, err)
 
-	require.Eventually(t, func() bool {
-		err := worker.UpdateStatus(ctx, WorkerStatus{
-			Code:     WorkerStatusNormal,
-			ExtBytes: fastMarshalDummyStatus(t, 6),
-		})
-		if err == nil {
-			return true
-		}
-		require.Regexp(t, ".*ErrWorkerUpdateStatusTryAgain.*", err.Error())
-		return false
-	}, 1*time.Second, 10*time.Millisecond)
+	rawStatus, ok := worker.messageSender.TryPop(masterNodeName, statusutil.WorkerStatusTopic(masterName))
+	require.True(t, ok)
+	msg := rawStatus.(*statusutil.WorkerStatusMessage[*WorkerStatus])
+	require.Equal(t, &statusutil.WorkerStatusMessage[*WorkerStatus]{
+		Worker:      workerID1,
+		MasterEpoch: 1,
+		Status: &WorkerStatus{
+			Code: WorkerStatusInit,
+		},
+	}, msg)
 
-	var status *WorkerStatusUpdatedMessage
-	require.Eventually(t, func() bool {
-		err := worker.Poll(ctx)
-		require.NoError(t, err)
-		rawStatus, ok := worker.messageSender.TryPop(masterNodeName, WorkerStatusUpdatedTopic(masterName))
-		if ok {
-			status = rawStatus.(*WorkerStatusUpdatedMessage)
-		}
-		return ok
-	}, time.Second, 10*time.Millisecond)
-	require.Equal(t, &WorkerStatusUpdatedMessage{
-		FromWorkerID: workerID1,
-		Epoch:        1,
-	}, status)
-
-	workerMetaClient := NewWorkerMetadataClient(masterName, worker.metaKVClient)
-	actualStatus, err := workerMetaClient.Load(ctx, workerID1)
-	require.NoError(t, err)
-	require.Equal(t, &WorkerStatus{
+	err = worker.UpdateStatus(ctx, WorkerStatus{
 		Code:     WorkerStatusNormal,
 		ExtBytes: fastMarshalDummyStatus(t, 6),
-	},
-		actualStatus)
+	})
+	require.NoError(t, err)
+
+	rawStatus, ok = worker.messageSender.TryPop(masterNodeName, statusutil.WorkerStatusTopic(masterName))
+	require.True(t, ok)
+	msg = rawStatus.(*statusutil.WorkerStatusMessage[*WorkerStatus])
+	require.Equal(t, &statusutil.WorkerStatusMessage[*WorkerStatus]{
+		Worker:      workerID1,
+		MasterEpoch: 1,
+		Status: &WorkerStatus{
+			Code:     WorkerStatusNormal,
+			ExtBytes: fastMarshalDummyStatus(t, 6),
+		},
+	}, msg)
 
 	err = worker.Close(ctx)
 	require.NoError(t, err)
