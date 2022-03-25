@@ -674,12 +674,6 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		return err
 	}
 
-	if err := dp.Provide(func() *clientv3.Client {
-		return s.etcdClient
-	}); err != nil {
-		return err
-	}
-
 	dctx = dctx.WithDeps(dp)
 	s.jobManager, err = NewJobManagerImplV2(dctx, lib.JobManagerUUID)
 	if err != nil {

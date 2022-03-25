@@ -11,7 +11,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/pkg/workerpool"
-	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
 	"go.uber.org/dig"
 	"go.uber.org/zap"
@@ -24,7 +23,6 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/deps"
-	"github.com/hanfei1991/microcosm/pkg/epoch"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	extKV "github.com/hanfei1991/microcosm/pkg/meta/extension"
 	"github.com/hanfei1991/microcosm/pkg/meta/kvclient"
@@ -135,8 +133,6 @@ type DefaultBaseMaster struct {
 
 	// deps is a container for injected dependencies
 	deps *deps.Deps
-
-	epochGen epoch.Generator
 }
 
 type masterParams struct {
@@ -150,7 +146,6 @@ type masterParams struct {
 	UserRawKVClient       extKV.KVClientEx
 	ExecutorClientManager client.ClientsManager
 	ServerMasterClient    client.MasterClient
-	InnerEtcdClient       *clientv3.Client
 }
 
 func NewBaseMaster(
@@ -206,7 +201,6 @@ func NewBaseMaster(
 		// [TODO] use tenantID if support muliti-tenant
 		userMetaKVClient: kvclient.NewPrefixKVClient(params.UserRawKVClient, tenant.DefaultUserTenantID),
 		deps:             ctx.Deps(),
-		epochGen:         epoch.NewEpochGenerator(params.InnerEtcdClient),
 	}
 }
 
@@ -469,7 +463,7 @@ func (m *DefaultBaseMaster) refreshMetadata(ctx context.Context) (isInit bool, e
 		return false, 0, err
 	}
 
-	epoch, err = m.epochGen.GenerateEpoch(ctx)
+	epoch, err = m.metaKVClient.GenEpoch(ctx)
 	if err != nil {
 		return false, 0, err
 	}

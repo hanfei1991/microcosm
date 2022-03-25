@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/hanfei1991/microcosm/pkg/deps"
-	extKV "github.com/hanfei1991/microcosm/pkg/meta/extension"
+	extkv "github.com/hanfei1991/microcosm/pkg/meta/extension"
 	"github.com/hanfei1991/microcosm/pkg/meta/kvclient"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/tenant"
@@ -65,7 +65,7 @@ type Server struct {
 	// framework metastore prefix kvclient
 	metaKVClient metaclient.KVClient
 	// user metastore raw kvclient(reuse for all workers)
-	userRawKVClient extKV.KVClientEx
+	userRawKVClient extkv.KVClientEx
 	p2pMsgRouter    p2pImpl.MessageRouter
 	discoveryKeeper *serverutils.DiscoveryKeepaliver
 	resourceBroker  *externalresource.Broker
@@ -165,7 +165,7 @@ func (s *Server) buildDeps(wid lib.WorkerID) (*deps.Deps, error) {
 		return nil, err
 	}
 
-	err = deps.Provide(func() extKV.KVClientEx {
+	err = deps.Provide(func() extkv.KVClientEx {
 		return s.userRawKVClient
 	})
 	if err != nil {
@@ -205,13 +205,6 @@ func (s *Server) buildDeps(wid lib.WorkerID) (*deps.Deps, error) {
 		return nil, err
 	}
 
-	err = deps.Provide(func() *clientv3.Client {
-		return s.etcdCli
-	})
-	if err != nil {
-		return nil, err
-	}
-
 	return deps, nil
 }
 
@@ -227,7 +220,6 @@ func (s *Server) DispatchTask(ctx context.Context, req *pb.DispatchTaskRequest) 
 		UserRawKVClient:       s.userRawKVClient,
 		ExecutorClientManager: client.NewClientManager(),
 		ServerMasterClient:    s.cli,
-		InnerEtcdClient:       s.etcdCli,
 	}
 
 	dp, err := s.buildDeps(req.GetWorkerId())
