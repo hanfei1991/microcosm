@@ -17,7 +17,6 @@ import (
 
 	"github.com/hanfei1991/microcosm/client"
 	runtime "github.com/hanfei1991/microcosm/executor/worker"
-	"github.com/hanfei1991/microcosm/lib/quota"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/clock"
@@ -28,6 +27,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/meta/kvclient"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
+	"github.com/hanfei1991/microcosm/pkg/quota"
 	"github.com/hanfei1991/microcosm/pkg/tenant"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
 )
@@ -538,8 +538,10 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 		zap.Any("worker-config", config),
 		zap.String("master-id", m.id))
 
-	if !m.createWorkerQuota.TryConsume() {
-		return "", derror.ErrMasterConcurrencyExceeded.GenWithStackByArgs()
+	quotaCtx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+	if err := m.createWorkerQuota.Consume(quotaCtx); err != nil {
+		return "", derror.ErrMasterConcurrencyExceeded.Wrap(err)
 	}
 
 	configBytes, workerID, err := m.prepareWorkerConfig(workerType, config)
