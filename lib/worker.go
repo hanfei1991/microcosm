@@ -70,7 +70,7 @@ type BaseWorker interface {
 	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) (bool, error)
 	OpenStorage(ctx context.Context, resourcePath resourcemeta.ResourceID) (broker.Handle, error)
 	// Exit should be called when worker (in user logic) wants to exit
-	// Worker should update its worker status code to correct value before calling Exit
+	// Worker should set its worker status code to correct value before calling Exit
 	Exit(ctx context.Context, status WorkerStatus, err error) error
 }
 

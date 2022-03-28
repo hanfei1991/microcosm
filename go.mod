@@ -16,9 +16,9 @@ require (
 	github.com/pingcap/check v0.0.0-20211026125417-57bd13f7b5f0
 	github.com/pingcap/errors v0.11.5-0.20211224045212-9687c2b0f87c
 	github.com/pingcap/log v0.0.0-20211215031037-e024ba4eb0ee
-	github.com/pingcap/tidb v1.1.0-beta.0.20220303050146-f5a52909b6af
-	github.com/pingcap/tidb-tools v5.4.1-0.20220302060346-b6d9cbe5dff1+incompatible
-	github.com/pingcap/tiflow v0.0.0-20220308162507-e342c02e789c
+	github.com/pingcap/tidb v1.1.0-beta.0.20220316031552-d981c0e06a13
+	github.com/pingcap/tidb-tools v6.0.0-alpha.0.20220317013353-dfc5146f4746+incompatible
+	github.com/pingcap/tiflow v0.0.0-20220328045627-809ad603547c
 	github.com/prometheus/client_golang v1.12.1
 	github.com/spf13/cobra v1.4.0
 	github.com/spf13/pflag v1.0.5
@@ -31,7 +31,7 @@ require (
 	go.uber.org/dig v1.13.0
 	go.uber.org/goleak v1.1.12
 	go.uber.org/ratelimit v0.2.0
-	go.uber.org/zap v1.20.0
+	go.uber.org/zap v1.21.0
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	golang.org/x/time v0.0.0-20210220033141-f8bda1e9f3ba
 	google.golang.org/grpc v1.43.0
@@ -128,15 +128,15 @@ require (
 	github.com/ngaut/sync2 v0.0.0-20141008032647-7a24ed77b2ef // indirect
 	github.com/opentracing/basictracer-go v1.0.0 // indirect
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
-	github.com/philhofer/fwd v1.0.0 // indirect
+	github.com/philhofer/fwd v1.1.1 // indirect
 	github.com/pingcap/badger v1.5.1-0.20210831093107-2f6cb8008145 // indirect
-	github.com/pingcap/failpoint v0.0.0-20210918120811-547c13e3eb00 // indirect
+	github.com/pingcap/failpoint v0.0.0-20220303073211-00fea37feb66 // indirect
 	github.com/pingcap/fn v0.0.0-20200306044125-d5540d389059 // indirect
 	github.com/pingcap/goleveldb v0.0.0-20191226122134-f82aafb29989 // indirect
-	github.com/pingcap/kvproto v0.0.0-20220303025110-d5eb908517b2 // indirect
+	github.com/pingcap/kvproto v0.0.0-20220314103629-10e688307221 // indirect
 	github.com/pingcap/sysutil v0.0.0-20220114020952-ea68d2dbf5b4 // indirect
-	github.com/pingcap/tidb/parser v0.0.0-20220303050146-f5a52909b6af // indirect
-	github.com/pingcap/tipb v0.0.0-20220110031732-29e23c62eeac // indirect
+	github.com/pingcap/tidb/parser v0.0.0-20220316172753-46c43febcac0 // indirect
+	github.com/pingcap/tipb v0.0.0-20220215045658-d12dec7a7609 // indirect
 	github.com/pkg/browser v0.0.0-20180916011732-0a3d74bf9ce4 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
@@ -160,9 +160,9 @@ require (
 	github.com/stretchr/objx v0.2.0 // indirect
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954 // indirect
 	github.com/tiancaiamao/appdash v0.0.0-20181126055449-889f96f722a2 // indirect
-	github.com/tikv/client-go/v2 v2.0.0-rc.0.20220217140116-589cf79b2ab5 // indirect
-	github.com/tikv/pd/client v0.0.0-20220216080339-1b8f82378ee7 // indirect
-	github.com/tinylib/msgp v1.1.0 // indirect
+	github.com/tikv/client-go/v2 v2.0.1-0.20220311043619-5042c6f2aaa6 // indirect
+	github.com/tikv/pd/client v0.0.0-20220307081149-841fa61e9710 // indirect
+	github.com/tinylib/msgp v1.1.6 // indirect
 	github.com/tklauser/go-sysconf v0.3.9 // indirect
 	github.com/tklauser/numcpus v0.3.0 // indirect
 	github.com/tmc/grpc-websocket-proxy v0.0.0-20201229170055-e5319fda7802 // indirect
@@ -194,12 +194,12 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v0.20.0 // indirect
 	go.opentelemetry.io/otel/trace v0.20.0 // indirect
 	go.opentelemetry.io/proto/otlp v0.7.0 // indirect
-	go.uber.org/multierr v1.7.0 // indirect
+	go.uber.org/multierr v1.8.0 // indirect
 	golang.org/x/crypto v0.0.0-20210921155107-089bfa567519 // indirect
 	golang.org/x/exp v0.0.0-20200513190911-00229845015e // indirect
 	golang.org/x/net v0.0.0-20211020060615-d418f374d309 // indirect
 	golang.org/x/oauth2 v0.0.0-20210805134026-6f1e6394065a // indirect
-	golang.org/x/sys v0.0.0-20220209214540-3681064d5158 // indirect
+	golang.org/x/sys v0.0.0-20220318055525-2edf467146b5 // indirect
 	golang.org/x/text v0.3.7 // indirect
 	golang.org/x/tools v0.1.10 // indirect
 	google.golang.org/api v0.54.0 // indirect
@@ -213,7 +213,3 @@ require (
 	sourcegraph.com/sourcegraph/appdash v0.0.0-20190731080439-ebfcffb1b5c0 // indirect
 	sourcegraph.com/sourcegraph/appdash-data v0.0.0-20151005221446-73f23eafcf67 // indirect
 )
-
-// cloud.google.com/go/storage will upgrade grpc to v1.40.0
-// we need keep the replacement until go.etcd.io supports the higher version of grpc.
-// replace google.golang.org/grpc v1.43.0 => google.golang.org/grpc v1.29.1
