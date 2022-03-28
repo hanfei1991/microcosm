@@ -566,8 +566,6 @@ func testGenerator(t *testing.T, kvcli metaclient.KVClient) {
 	wg.Wait()
 	lastEpoch, err := kvcli.GenEpoch(ctx)
 	require.Nil(t, err)
-	require.GreaterOrEqual(t, lastEpoch, int64(0))
-
 	require.Equal(t, int64(201), lastEpoch-firstEpoch)
 }
 
