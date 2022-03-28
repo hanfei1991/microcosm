@@ -18,7 +18,7 @@ type Writer[T status[T]] struct {
 	messageSender p2p.MessageSender
 	lastStatus    T
 
-	// TODO replace these string types
+	// TODO replace the string type
 	workerID   string
 	masterInfo MasterInfoProvider
 	key        adapter.KeyAdapter

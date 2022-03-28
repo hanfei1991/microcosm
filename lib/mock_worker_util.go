@@ -7,10 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanfei1991/microcosm/lib/statusutil"
-
 	"github.com/stretchr/testify/require"
 
+	"github.com/hanfei1991/microcosm/lib/statusutil"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/deps"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
