@@ -8,6 +8,7 @@ import (
 
 	"github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
+	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
@@ -53,6 +54,29 @@ func TestWriterUpdate(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, resp.Kvs, 1)
 	require.Equal(t, rawBytes, resp.Kvs[0].Value)
+
+	rawMsg, ok := suite.messageSender.TryPop("executor-1", WorkerStatusTopic("master-1"))
+	require.True(t, ok)
+	msg := rawMsg.(*WorkerStatusMessage)
+	require.Equal(t, &WorkerStatusMessage{
+		Worker:      "worker-1",
+		MasterEpoch: 1,
+		Status:      st,
+	}, msg)
+}
+
+func TestWriterSendRetry(t *testing.T) {
+	suite := newWriterTestSuite("master-1", "executor-1", 1, "worker-1")
+	ctx := context.Background()
+
+	st := &model.WorkerStatus{
+		Code:         model.WorkerStatusNormal,
+		ErrorMessage: "test",
+	}
+
+	suite.messageSender.InjectError(derror.ErrExecutorNotFoundForMessage.GenWithStackByArgs())
+	err := suite.writer.UpdateStatus(ctx, st)
+	require.NoError(t, err)
 
 	rawMsg, ok := suite.messageSender.TryPop("executor-1", WorkerStatusTopic("master-1"))
 	require.True(t, ok)

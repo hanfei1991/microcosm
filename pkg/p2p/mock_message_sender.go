@@ -11,11 +11,14 @@ type MockMessageSender struct {
 	mu        sync.Mutex
 	msgBox    map[msgBoxIndex]deque.Deque
 	isBlocked bool
+
+	injectedErrCh chan error
 }
 
 func NewMockMessageSender() *MockMessageSender {
 	return &MockMessageSender{
-		msgBox: make(map[msgBoxIndex]deque.Deque),
+		msgBox:        make(map[msgBoxIndex]deque.Deque),
+		injectedErrCh: make(chan error, 1),
 	}
 }
 
@@ -33,8 +36,13 @@ func (m *MockMessageSender) SendToNodeB(
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// TODO Handle the `m.isBlocked == true` case
+	select {
+	case err := <-m.injectedErrCh:
+		return err
+	default:
+	}
 
+	// TODO Handle the `m.isBlocked == true` case
 	q := m.getQueue(targetNodeID, topic)
 	q.PushBack(message)
 	return nil
@@ -48,6 +56,12 @@ func (m *MockMessageSender) SendToNode(
 ) (bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	select {
+	case err := <-m.injectedErrCh:
+		return false, err
+	default:
+	}
 
 	if m.isBlocked {
 		return false, nil
@@ -91,4 +105,8 @@ func (m *MockMessageSender) SetBlocked(isBlocked bool) {
 	defer m.mu.Unlock()
 
 	m.isBlocked = isBlocked
+}
+
+func (m *MockMessageSender) InjectError(err error) {
+	m.injectedErrCh <- err
 }

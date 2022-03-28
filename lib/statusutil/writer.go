@@ -79,7 +79,7 @@ func (w *Writer) sendStatusMessageWithRetry(
 	retryCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	rl := rate.NewLimiter(rate.Limit(100*time.Second), 1)
+	rl := rate.NewLimiter(rate.Limit(100*time.Millisecond), 1)
 	for {
 		select {
 		case <-retryCtx.Done():
