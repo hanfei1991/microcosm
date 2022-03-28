@@ -17,6 +17,8 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
+// Writer is used to persist WorkerStatus changes and send notifications
+// to the Master.
 type Writer struct {
 	metaclient    metaclient.KVClient
 	messageSender p2p.MessageSender
@@ -25,25 +27,25 @@ type Writer struct {
 	// TODO replace the string type
 	workerID   string
 	masterInfo MasterInfoProvider
-	key        adapter.KeyAdapter
 }
 
+// NewWriter creates a new Writer.
 func NewWriter(
 	metaclient metaclient.KVClient,
 	messageSender p2p.MessageSender,
 	masterInfo MasterInfoProvider,
-	key adapter.KeyAdapter,
 	workerID string,
 ) *Writer {
 	return &Writer{
 		metaclient:    metaclient,
 		messageSender: messageSender,
 		masterInfo:    masterInfo,
-		key:           key,
 		workerID:      workerID,
 	}
 }
 
+// UpdateStatus checks if newStatus.HasChanged() is true, if so, it persists the change and
+// tries to send a notification. Note that sending the notification is asynchronous.
 func (w *Writer) UpdateStatus(ctx context.Context, newStatus *libModel.WorkerStatus) (retErr error) {
 	defer func() {
 		if retErr == nil {
@@ -114,7 +116,7 @@ func (w *Writer) persistStatus(ctx context.Context, newStatus *libModel.WorkerSt
 	}
 
 	return retry.Do(ctx, func() error {
-		if _, err := w.metaclient.Put(ctx, w.key.Encode(w.workerID), string(raw)); err != nil {
+		if _, err := w.metaclient.Put(ctx, adapter.WorkerKeyAdapter.Encode(w.workerID), string(raw)); err != nil {
 			return err
 		}
 		return nil

@@ -15,7 +15,6 @@ import (
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/statusutil"
 	"github.com/hanfei1991/microcosm/model"
-	"github.com/hanfei1991/microcosm/pkg/adapter"
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
@@ -208,7 +207,7 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) error {
 	w.workerMetaClient = NewWorkerMetadataClient(w.masterID, w.metaKVClient)
 
 	w.statusSender = statusutil.NewWriter(
-		w.metaKVClient, w.messageSender, w.masterClient, adapter.WorkerKeyAdapter, w.id)
+		w.metaKVClient, w.messageSender, w.masterClient, w.id)
 	w.messageRouter = NewMessageRouter(w.id, w.pool, defaultMessageRouterBufferSize,
 		func(topic p2p.Topic, msg p2p.MessageValue) error {
 			return w.Impl.OnMasterMessage(topic, msg)
