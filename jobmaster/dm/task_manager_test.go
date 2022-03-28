@@ -145,6 +145,7 @@ func TestOperateTask(t *testing.T) {
 	taskManager.OperateTask(context.Background(), Delete, nil, []string{source1, source2})
 	state, err = jobStore.Get(context.Background())
 	require.EqualError(t, err, "state not found")
+	require.Nil(t, state)
 }
 
 func TestClearTaskStatus(t *testing.T) {

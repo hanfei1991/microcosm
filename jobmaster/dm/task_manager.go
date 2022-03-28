@@ -188,7 +188,7 @@ func (tm *TaskManager) checkAndOperateTasks(ctx context.Context, job *metadata.J
 	}
 }
 
-// remove all tasks, usually happended when delete jobs.
+// remove all tasks, usually happened when delete jobs.
 func (tm *TaskManager) onJobNotExist(ctx context.Context) {
 	log.L().Info("clear all task status")
 	tm.tasks.Range(func(key, value interface{}) bool {
@@ -198,7 +198,7 @@ func (tm *TaskManager) onJobNotExist(ctx context.Context) {
 	tm.Trigger(ctx, ErrorInterval)
 }
 
-// remove deleted task status, usually happend when update-job delete some tasks.
+// remove deleted task status, usually happened when update-job delete some tasks.
 func (tm *TaskManager) removeTaskStatus(job *metadata.Job) {
 	tm.tasks.Range(func(key, value interface{}) bool {
 		taskID := key.(string)
