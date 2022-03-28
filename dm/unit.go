@@ -105,7 +105,7 @@ func (u *unitHolder) tryUpdateStatus(ctx context.Context, base lib.BaseWorker) e
 	case worker.ResumeDispatch:
 		// can try auto resume
 		u.lastResult = nil
-		go u.unit.Process(u.ctx, u.processCh)
+		go u.unit.Resume(u.ctx, u.processCh)
 		return nil
 	default:
 		s := lib.WorkerStatus{
