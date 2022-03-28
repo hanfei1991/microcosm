@@ -19,9 +19,8 @@ const (
 	StageRunning
 	StagePaused
 	StageFinished
-
 	// UnScheduled means the task is not scheduled.
-	// This usually happens when the worker if offline.
+	// This usually happens when the worker is offline.
 	StageUnscheduled
 )
 
