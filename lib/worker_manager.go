@@ -12,6 +12,7 @@ import (
 	"go.uber.org/dig"
 	"go.uber.org/zap"
 
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/statusutil"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
@@ -35,9 +36,9 @@ type workerManager interface {
 	MessageSender() p2p.MessageSender
 	GetWorkerHandle(id WorkerID) WorkerHandle
 	GetWorkers() map[WorkerID]WorkerHandle
-	GetStatus(id WorkerID) (*WorkerStatus, bool)
-	CheckStatusUpdate(cb func(WorkerHandle, *WorkerStatus) error) error
-	OnWorkerStatusUpdated(msg *statusutil.WorkerStatusMessage[*WorkerStatus])
+	GetStatus(id WorkerID) (*libModel.WorkerStatus, bool)
+	CheckStatusUpdate(cb func(WorkerHandle, *libModel.WorkerStatus) error) error
+	OnWorkerStatusUpdated(msg *statusutil.WorkerStatusMessage)
 }
 
 type workerManagerFsmState = int32
@@ -55,8 +56,8 @@ type workerManagerImpl struct {
 	initialized     bool
 	initStartTime   time.Time
 	workerInfos     map[WorkerID]*WorkerInfo
-	tombstones      map[WorkerID]*WorkerStatus
-	statusReceivers map[WorkerID]*statusutil.Reader[*WorkerStatus]
+	tombstones      map[WorkerID]*libModel.WorkerStatus
+	statusReceivers map[WorkerID]*statusutil.Reader
 
 	fsmState atomic.Int32
 	errCh    chan error
@@ -106,8 +107,8 @@ func newWorkerManager(
 	return &workerManagerImpl{
 		initialized:     !needWait,
 		workerInfos:     make(map[WorkerID]*WorkerInfo),
-		tombstones:      make(map[WorkerID]*WorkerStatus),
-		statusReceivers: make(map[WorkerID]*statusutil.Reader[*WorkerStatus]),
+		tombstones:      make(map[WorkerID]*libModel.WorkerStatus),
+		statusReceivers: make(map[WorkerID]*statusutil.Reader),
 
 		fsmState: *atomic.NewInt32(initFsmState),
 		errCh:    make(chan error, 1),
@@ -220,7 +221,7 @@ func (m *workerManagerImpl) asyncDeleteTombstone(ctx context.Context, id WorkerI
 	return nil
 }
 
-func (m *workerManagerImpl) OnWorkerStatusUpdated(msg *statusutil.WorkerStatusMessage[*WorkerStatus]) {
+func (m *workerManagerImpl) OnWorkerStatusUpdated(msg *statusutil.WorkerStatusMessage) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -239,7 +240,7 @@ func (m *workerManagerImpl) OnWorkerStatusUpdated(msg *statusutil.WorkerStatusMe
 	}
 }
 
-func (m *workerManagerImpl) CheckStatusUpdate(cb func(WorkerHandle, *WorkerStatus) error) error {
+func (m *workerManagerImpl) CheckStatusUpdate(cb func(WorkerHandle, *libModel.WorkerStatus) error) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -365,7 +366,7 @@ func (m *workerManagerImpl) HandleHeartbeat(msg *HeartbeatPingMessage, fromNode 
 	return nil
 }
 
-func (m *workerManagerImpl) GetStatus(id WorkerID) (*WorkerStatus, bool) {
+func (m *workerManagerImpl) GetStatus(id WorkerID) (*libModel.WorkerStatus, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -438,13 +439,13 @@ func (m *workerManagerImpl) addWorker(id WorkerID, executorNodeID p2p.NodeID) er
 
 	workerMetaClient := NewWorkerMetadataClient(m.masterID, m.metaClient)
 
-	var receiver *statusutil.Reader[*WorkerStatus]
+	var receiver *statusutil.Reader
 	// TODO figure out whether it is acceptable to load from metastore here.
 	initSt, err := workerMetaClient.Load(context.TODO(), id)
 	if err != nil {
 		if derror.ErrWorkerNoMeta.Equal(err) {
-			initSt = &WorkerStatus{
-				Code: WorkerStatusCreated,
+			initSt = &libModel.WorkerStatus{
+				Code: libModel.WorkerStatusCreated,
 			}
 		} else {
 			return err
@@ -460,8 +461,8 @@ func (m *workerManagerImpl) OnWorkerCreated(ctx context.Context, id WorkerID, ex
 	defer m.mu.Unlock()
 
 	workerMetaClient := NewWorkerMetadataClient(m.masterID, m.metaClient)
-	err := workerMetaClient.Store(ctx, id, &WorkerStatus{
-		Code: WorkerStatusCreated,
+	err := workerMetaClient.Store(ctx, id, &libModel.WorkerStatus{
+		Code: libModel.WorkerStatusCreated,
 	})
 	if err != nil {
 		return errors.Trace(err)
@@ -553,7 +554,7 @@ func (w *WorkerInfo) hasTimedOut(clock clock.Clock, config *TimeoutConfig) bool 
 
 type WorkerHandle interface {
 	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error
-	Status() *WorkerStatus
+	Status() *libModel.WorkerStatus
 	ID() WorkerID
 	IsTombStone() bool
 	ToPB() (*pb.WorkerInfo, error)
@@ -615,7 +616,7 @@ func (w *workerHandleImpl) GetWorkerInfo(id WorkerID) (*WorkerInfo, bool) {
 	return w.manager.GetWorkerInfo(id)
 }
 
-func (w *workerHandleImpl) Status() *WorkerStatus {
+func (w *workerHandleImpl) Status() *libModel.WorkerStatus {
 	// TODO come up with a better solution when the status does not exist
 	status, exists := w.manager.GetStatus(w.id)
 	if !exists {
@@ -638,11 +639,11 @@ func (w *workerHandleImpl) DeleteTombStone(_ context.Context) (bool, error) {
 
 type tombstoneWorkerHandleImpl struct {
 	id      WorkerID
-	status  WorkerStatus
+	status  libModel.WorkerStatus
 	manager workerManager
 }
 
-func NewTombstoneWorkerHandle(id WorkerID, status WorkerStatus, manager workerManager) WorkerHandle {
+func NewTombstoneWorkerHandle(id WorkerID, status libModel.WorkerStatus, manager workerManager) WorkerHandle {
 	return &tombstoneWorkerHandleImpl{
 		id:      id,
 		status:  status,
@@ -654,7 +655,7 @@ func (h *tombstoneWorkerHandleImpl) SendMessage(ctx context.Context, topic p2p.T
 	return derror.ErrWorkerOffline.GenWithStackByArgs(h.id)
 }
 
-func (h *tombstoneWorkerHandleImpl) Status() *WorkerStatus {
+func (h *tombstoneWorkerHandleImpl) Status() *libModel.WorkerStatus {
 	return &h.status
 }
 

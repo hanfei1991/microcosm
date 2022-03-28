@@ -1,6 +1,7 @@
 package statusutil
 
 import (
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/pkg/containers"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 )
@@ -9,30 +10,28 @@ const (
 	maxPendingStatusNum = 1024
 )
 
-//nolint:structcheck
-type Reader[T status[T]] struct {
-	q            containers.Queue[T]
-	lastReceived T
+type Reader struct {
+	q            containers.Queue[*libModel.WorkerStatus]
+	lastReceived *libModel.WorkerStatus
 }
 
-func NewReader[T status[T]](init T) *Reader[T] {
-	return &Reader[T]{
-		q:            containers.NewDeque[T](),
+func NewReader(init *libModel.WorkerStatus) *Reader {
+	return &Reader{
+		q:            containers.NewDeque[*libModel.WorkerStatus](),
 		lastReceived: init,
 	}
 }
 
-func (r *Reader[T]) Receive() (T, bool) {
+func (r *Reader) Receive() (*libModel.WorkerStatus, bool) {
 	st, ok := r.q.Pop()
 	if !ok {
-		var noVal T
-		return noVal, false
+		return nil, false
 	}
 	r.lastReceived = st
 	return st, true
 }
 
-func (r *Reader[T]) OnAsynchronousNotification(newStatus T) error {
+func (r *Reader) OnAsynchronousNotification(newStatus *libModel.WorkerStatus) error {
 	if s := r.q.Size(); s > maxPendingStatusNum {
 		return derror.ErrTooManyStatusUpdates.GenWithStackByArgs(s)
 	}
@@ -40,6 +39,6 @@ func (r *Reader[T]) OnAsynchronousNotification(newStatus T) error {
 	return nil
 }
 
-func (r *Reader[T]) Status() T {
+func (r *Reader) Status() *libModel.WorkerStatus {
 	return r.lastReceived
 }

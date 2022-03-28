@@ -8,6 +8,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/hanfei1991/microcosm/lib"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
@@ -28,7 +29,7 @@ type exampleMaster struct {
 		id          lib.WorkerID
 		handle      lib.WorkerHandle
 		online      bool
-		statusCode  lib.WorkerStatusCode
+		statusCode  libModel.WorkerStatusCode
 		receivedErr error
 	}
 
@@ -95,7 +96,7 @@ func (e *exampleMaster) CloseImpl(ctx context.Context) error {
 	return nil
 }
 
-func (e *exampleMaster) OnWorkerStatusUpdated(worker lib.WorkerHandle, newStatus *lib.WorkerStatus) error {
+func (e *exampleMaster) OnWorkerStatusUpdated(worker lib.WorkerHandle, newStatus *libModel.WorkerStatus) error {
 	log.L().Info("OnWorkerStatusUpdated")
 	return nil
 }

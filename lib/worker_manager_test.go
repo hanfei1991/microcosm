@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/dig"
 
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/statusutil"
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
@@ -381,8 +382,8 @@ func TestUpdateStatus(t *testing.T) {
 
 	workerMetaClient := NewWorkerMetadataClient(masterName, suite.MetaClient)
 	err := workerMetaClient.Store(ctx, workerID1,
-		&WorkerStatus{
-			Code:         WorkerStatusInit,
+		&libModel.WorkerStatus{
+			Code:         libModel.WorkerStatusInit,
 			ErrorMessage: "fake",
 			ExtBytes:     fastMarshalDummyStatus(t, 7),
 		})
@@ -400,21 +401,21 @@ func TestUpdateStatus(t *testing.T) {
 
 	status, ok := manager.GetStatus(workerID1)
 	require.True(t, ok)
-	require.Equal(t, WorkerStatusInit, status.Code)
+	require.Equal(t, libModel.WorkerStatusInit, status.Code)
 
 	err = workerMetaClient.Store(ctx, workerID1,
-		&WorkerStatus{
-			Code:         WorkerStatusError,
+		&libModel.WorkerStatus{
+			Code:         libModel.WorkerStatusError,
 			ErrorMessage: "fake",
 			ExtBytes:     fastMarshalDummyStatus(t, 7),
 		})
 	require.NoError(t, err)
 
-	manager.OnWorkerStatusUpdated(&statusutil.WorkerStatusMessage[*WorkerStatus]{
+	manager.OnWorkerStatusUpdated(&statusutil.WorkerStatusMessage{
 		Worker:      workerID1,
 		MasterEpoch: 1,
-		Status: &WorkerStatus{
-			Code:         WorkerStatusError,
+		Status: &libModel.WorkerStatus{
+			Code:         libModel.WorkerStatusError,
 			ErrorMessage: "fake",
 			ExtBytes:     fastMarshalDummyStatus(t, 7),
 		},
@@ -422,10 +423,10 @@ func TestUpdateStatus(t *testing.T) {
 
 	require.Eventually(t, func() bool {
 		var (
-			status *WorkerStatus
+			status *libModel.WorkerStatus
 			handle WorkerHandle
 		)
-		err := manager.CheckStatusUpdate(func(hdl WorkerHandle, st *WorkerStatus) error {
+		err := manager.CheckStatusUpdate(func(hdl WorkerHandle, st *libModel.WorkerStatus) error {
 			status = st
 			handle = hdl
 			return nil
@@ -434,14 +435,14 @@ func TestUpdateStatus(t *testing.T) {
 		if status != nil {
 			require.Equal(t, workerID1, handle.ID())
 		}
-		return status != nil && status.Code == WorkerStatusError
+		return status != nil && status.Code == libModel.WorkerStatusError
 	}, time.Second, 10*time.Millisecond)
 
 	handle := manager.GetWorkerHandle(workerID1)
 	require.NotNil(t, handle)
 	require.False(t, handle.IsTombStone())
-	require.Equal(t, &WorkerStatus{
-		Code:         WorkerStatusError,
+	require.Equal(t, &libModel.WorkerStatus{
+		Code:         libModel.WorkerStatusError,
 		ErrorMessage: "fake",
 		ExtBytes:     fastMarshalDummyStatus(t, 7),
 	}, handle.Status())
@@ -522,7 +523,7 @@ func TestWorkerTerminate(t *testing.T) {
 
 	mockKV := suite.MetaClient.(*mockkv.MetaMock)
 	workerMetaClient := NewWorkerMetadataClient(masterName, mockKV)
-	err := workerMetaClient.Store(ctx, workerID1, &WorkerStatus{Code: WorkerStatusNormal})
+	err := workerMetaClient.Store(ctx, workerID1, &libModel.WorkerStatus{Code: libModel.WorkerStatusNormal})
 	require.NoError(t, err)
 
 	err = safeAddWorker(manager, workerID1, executorNodeID1)
@@ -543,13 +544,13 @@ func TestWorkerTerminate(t *testing.T) {
 
 	// update worker status, set it finished
 	status := manager.statusReceivers[workerID1]
-	err = status.OnAsynchronousNotification(&WorkerStatus{
-		Code: WorkerStatusFinished,
+	err = status.OnAsynchronousNotification(&libModel.WorkerStatus{
+		Code: libModel.WorkerStatusFinished,
 	})
 	require.NoError(t, err)
 
-	err = manager.CheckStatusUpdate(func(handle WorkerHandle, status *WorkerStatus) error {
-		require.Equal(t, WorkerStatusFinished, status.Code)
+	err = manager.CheckStatusUpdate(func(handle WorkerHandle, status *libModel.WorkerStatus) error {
+		require.Equal(t, libModel.WorkerStatusFinished, status.Code)
 		return nil
 	})
 	require.NoError(t, err)
@@ -640,7 +641,7 @@ func TestWorkerTombstones(t *testing.T) {
 
 	workerMetaClient := NewWorkerMetadataClient(masterName, suite.MetaClient)
 	for i := 0; i < 10; i++ {
-		err := workerMetaClient.Store(ctx, fmt.Sprintf("worker-%d", i), &WorkerStatus{Code: WorkerStatusNormal})
+		err := workerMetaClient.Store(ctx, fmt.Sprintf("worker-%d", i), &libModel.WorkerStatus{Code: libModel.WorkerStatusNormal})
 		require.NoError(t, err)
 	}
 

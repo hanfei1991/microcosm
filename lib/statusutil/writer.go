@@ -2,21 +2,25 @@ package statusutil
 
 import (
 	"context"
+	"time"
 
 	"github.com/modern-go/reflect2"
+	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/pkg/retry"
 	"go.uber.org/zap"
+	"golang.org/x/time/rate"
 
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
-//nolint:structcheck
-type Writer[T status[T]] struct {
+type Writer struct {
 	metaclient    metaclient.KVClient
 	messageSender p2p.MessageSender
-	lastStatus    T
+	lastStatus    *libModel.WorkerStatus
 
 	// TODO replace the string type
 	workerID   string
@@ -24,14 +28,14 @@ type Writer[T status[T]] struct {
 	key        adapter.KeyAdapter
 }
 
-func NewWriter[T status[T]](
+func NewWriter(
 	metaclient metaclient.KVClient,
 	messageSender p2p.MessageSender,
 	masterInfo MasterInfoProvider,
 	key adapter.KeyAdapter,
 	workerID string,
-) *Writer[T] {
-	return &Writer[T]{
+) *Writer {
+	return &Writer{
 		metaclient:    metaclient,
 		messageSender: messageSender,
 		masterInfo:    masterInfo,
@@ -40,7 +44,7 @@ func NewWriter[T status[T]](
 	}
 }
 
-func (w *Writer[T]) UpdateStatus(ctx context.Context, newStatus T) (retErr error) {
+func (w *Writer) UpdateStatus(ctx context.Context, newStatus *libModel.WorkerStatus) (retErr error) {
 	defer func() {
 		if retErr == nil {
 			return
@@ -59,27 +63,66 @@ func (w *Writer[T]) UpdateStatus(ctx context.Context, newStatus T) (retErr error
 		}
 	}
 
-	topic := WorkerStatusTopic(w.masterInfo.MasterID())
-	err := w.messageSender.SendToNodeB(ctx, w.masterInfo.MasterNode(), topic, &WorkerStatusMessage[T]{
-		Worker:      w.workerID,
-		MasterEpoch: w.masterInfo.Epoch(),
-		Status:      newStatus,
-	})
-	if err != nil {
-		return err
-	}
-	return nil
+	// TODO replace the timeout with a variable.
+	return w.sendStatusMessageWithRetry(ctx, 15*time.Second, newStatus)
 }
 
-func (w *Writer[T]) persistStatus(ctx context.Context, newStatus T) error {
+func (w *Writer) sendStatusMessageWithRetry(
+	ctx context.Context, timeout time.Duration, newStatus *libModel.WorkerStatus,
+) error {
+	// NOTE we need this function especially to handle the situation where
+	// the p2p connection to the target executor is not established yet.
+	// We might need one or two retries when our executor has just started up.
+
+	retryCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	rl := rate.NewLimiter(rate.Limit(100*time.Second), 1)
+	for {
+		select {
+		case <-retryCtx.Done():
+			return errors.Trace(retryCtx.Err())
+		default:
+		}
+
+		if err := rl.Wait(retryCtx); err != nil {
+			return errors.Trace(err)
+		}
+
+		topic := WorkerStatusTopic(w.masterInfo.MasterID())
+		// NOTE: We must ready the MasterNode() in each retry in case the master is failed over.
+		err := w.messageSender.SendToNodeB(ctx, w.masterInfo.MasterNode(), topic, &WorkerStatusMessage{
+			Worker:      w.workerID,
+			MasterEpoch: w.masterInfo.Epoch(),
+			Status:      newStatus,
+		})
+		if err != nil {
+			log.L().Warn("failed to send status to master. Retrying...",
+				zap.String("worker-id", w.workerID),
+				zap.String("master-id", w.masterInfo.MasterID()),
+				zap.Any("status", newStatus))
+			continue
+		}
+		return nil
+	}
+}
+
+func (w *Writer) persistStatus(ctx context.Context, newStatus *libModel.WorkerStatus) error {
 	raw, err := newStatus.Marshal()
 	if err != nil {
 		return err
 	}
 
-	// TODO handle retry
-	if _, err := w.metaclient.Put(ctx, w.key.Encode(w.workerID), string(raw)); err != nil {
-		return err
-	}
-	return nil
+	return retry.Do(ctx, func() error {
+		if _, err := w.metaclient.Put(ctx, w.key.Encode(w.workerID), string(raw)); err != nil {
+			return err
+		}
+		return nil
+	}, retry.WithBackoffMaxDelay(1000 /* 1 second */), retry.WithIsRetryableErr(func(err error) bool {
+		if err, ok := err.(metaclient.Error); ok {
+			// TODO: refine the IsRetryable method
+			return err.IsRetryable()
+		}
+		return true
+	}))
 }

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	runtime "github.com/hanfei1991/microcosm/executor/worker"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/statusutil"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	"github.com/hanfei1991/microcosm/pkg/clock"
@@ -46,8 +47,8 @@ func TestWorkerInitAndClose(t *testing.T) {
 	})
 
 	worker.On("InitImpl", mock.Anything).Return(nil)
-	worker.On("Status").Return(WorkerStatus{
-		Code: WorkerStatusNormal,
+	worker.On("Status").Return(libModel.WorkerStatus{
+		Code: libModel.WorkerStatusNormal,
 	}, nil)
 	worker.On("Tick", mock.Anything).Return(nil)
 
@@ -69,23 +70,23 @@ func TestWorkerInitAndClose(t *testing.T) {
 		return hbMsg.FromWorkerID == workerID1 && hbMsg.Epoch == 1
 	}, "unexpected heartbeat %v", hbMsg)
 
-	err = worker.UpdateStatus(ctx, WorkerStatus{Code: WorkerStatusNormal})
+	err = worker.UpdateStatus(ctx, libModel.WorkerStatus{Code: libModel.WorkerStatusNormal})
 	require.NoError(t, err)
 
-	var statusMsg *statusutil.WorkerStatusMessage[*WorkerStatus]
+	var statusMsg *statusutil.WorkerStatusMessage
 	require.Eventually(t, func() bool {
 		err := worker.Poll(ctx)
 		require.NoError(t, err)
 		rawMsg, ok := worker.messageSender.TryPop(masterNodeName, statusutil.WorkerStatusTopic(masterName))
 		if ok {
-			statusMsg = rawMsg.(*statusutil.WorkerStatusMessage[*WorkerStatus])
+			statusMsg = rawMsg.(*statusutil.WorkerStatusMessage)
 		}
 		return !ok
 	}, time.Second, time.Millisecond*10)
-	require.Equal(t, &statusutil.WorkerStatusMessage[*WorkerStatus]{
+	require.Equal(t, &statusutil.WorkerStatusMessage{
 		Worker:      workerID1,
 		MasterEpoch: 1,
-		Status:      &WorkerStatus{Code: WorkerStatusNormal},
+		Status:      &libModel.WorkerStatus{Code: libModel.WorkerStatusNormal},
 	}, statusMsg)
 
 	worker.On("CloseImpl").Return(nil)
@@ -114,8 +115,8 @@ func TestWorkerHeartbeatPingPong(t *testing.T) {
 	})
 
 	worker.On("InitImpl", mock.Anything).Return(nil)
-	worker.On("Status").Return(WorkerStatus{
-		Code: WorkerStatusNormal,
+	worker.On("Status").Return(libModel.WorkerStatus{
+		Code: libModel.WorkerStatusNormal,
 	}, nil)
 
 	err := worker.Init(ctx)
@@ -171,8 +172,8 @@ func TestWorkerMasterFailover(t *testing.T) {
 	})
 
 	worker.On("InitImpl", mock.Anything).Return(nil)
-	worker.On("Status").Return(WorkerStatus{
-		Code: WorkerStatusNormal,
+	worker.On("Status").Return(libModel.WorkerStatus{
+		Code: libModel.WorkerStatusNormal,
 	}, nil)
 	err := worker.Init(ctx)
 	require.NoError(t, err)
@@ -234,8 +235,8 @@ func TestWorkerStatus(t *testing.T) {
 	})
 
 	worker.On("InitImpl", mock.Anything).Return(nil)
-	worker.On("Status").Return(WorkerStatus{
-		Code:     WorkerStatusNormal,
+	worker.On("Status").Return(libModel.WorkerStatus{
+		Code:     libModel.WorkerStatusNormal,
 		ExtBytes: fastMarshalDummyStatus(t, 1),
 	}, nil)
 	worker.On("Tick", mock.Anything).Return(nil)
@@ -246,29 +247,29 @@ func TestWorkerStatus(t *testing.T) {
 
 	rawStatus, ok := worker.messageSender.TryPop(masterNodeName, statusutil.WorkerStatusTopic(masterName))
 	require.True(t, ok)
-	msg := rawStatus.(*statusutil.WorkerStatusMessage[*WorkerStatus])
-	require.Equal(t, &statusutil.WorkerStatusMessage[*WorkerStatus]{
+	msg := rawStatus.(*statusutil.WorkerStatusMessage)
+	require.Equal(t, &statusutil.WorkerStatusMessage{
 		Worker:      workerID1,
 		MasterEpoch: 1,
-		Status: &WorkerStatus{
-			Code: WorkerStatusInit,
+		Status: &libModel.WorkerStatus{
+			Code: libModel.WorkerStatusInit,
 		},
 	}, msg)
 
-	err = worker.UpdateStatus(ctx, WorkerStatus{
-		Code:     WorkerStatusNormal,
+	err = worker.UpdateStatus(ctx, libModel.WorkerStatus{
+		Code:     libModel.WorkerStatusNormal,
 		ExtBytes: fastMarshalDummyStatus(t, 6),
 	})
 	require.NoError(t, err)
 
 	rawStatus, ok = worker.messageSender.TryPop(masterNodeName, statusutil.WorkerStatusTopic(masterName))
 	require.True(t, ok)
-	msg = rawStatus.(*statusutil.WorkerStatusMessage[*WorkerStatus])
-	require.Equal(t, &statusutil.WorkerStatusMessage[*WorkerStatus]{
+	msg = rawStatus.(*statusutil.WorkerStatusMessage)
+	require.Equal(t, &statusutil.WorkerStatusMessage{
 		Worker:      workerID1,
 		MasterEpoch: 1,
-		Status: &WorkerStatus{
-			Code:     WorkerStatusNormal,
+		Status: &libModel.WorkerStatus{
+			Code:     libModel.WorkerStatusNormal,
 			ExtBytes: fastMarshalDummyStatus(t, 6),
 		},
 	}, msg)
@@ -292,8 +293,8 @@ func TestWorkerSuicide(t *testing.T) {
 	})
 
 	worker.On("InitImpl", mock.Anything).Return(nil)
-	worker.On("Status").Return(WorkerStatus{
-		Code: WorkerStatusNormal,
+	worker.On("Status").Return(libModel.WorkerStatus{
+		Code: libModel.WorkerStatusNormal,
 	}, nil)
 
 	err := worker.Init(ctx)

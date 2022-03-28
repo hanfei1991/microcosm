@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/statusutil"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
@@ -178,14 +179,14 @@ func TestMasterCreateWorker(t *testing.T) {
 	dummySt := &dummyStatus{Val: 4}
 	ext, err := dummySt.Marshal()
 	require.NoError(t, err)
-	err = workerMetaClient.Store(ctx, workerID1, &WorkerStatus{
-		Code:     WorkerStatusNormal,
+	err = workerMetaClient.Store(ctx, workerID1, &libModel.WorkerStatus{
+		Code:     libModel.WorkerStatusNormal,
 		ExtBytes: ext,
 	})
 	require.NoError(t, err)
 
-	master.On("OnWorkerStatusUpdated", mock.Anything, &WorkerStatus{
-		Code:     WorkerStatusNormal,
+	master.On("OnWorkerStatusUpdated", mock.Anything, &libModel.WorkerStatus{
+		Code:     libModel.WorkerStatusNormal,
 		ExtBytes: ext,
 	}).Return(nil)
 
@@ -193,11 +194,11 @@ func TestMasterCreateWorker(t *testing.T) {
 		t,
 		statusutil.WorkerStatusTopic(masterName),
 		masterName,
-		&statusutil.WorkerStatusMessage[*WorkerStatus]{
+		&statusutil.WorkerStatusMessage{
 			Worker:      workerID1,
 			MasterEpoch: master.currentEpoch.Load(),
-			Status: &WorkerStatus{
-				Code:     WorkerStatusNormal,
+			Status: &libModel.WorkerStatus{
+				Code:     libModel.WorkerStatusNormal,
 				ExtBytes: ext,
 			},
 		})
@@ -207,12 +208,12 @@ func TestMasterCreateWorker(t *testing.T) {
 		err := master.Poll(ctx)
 		require.NoError(t, err)
 		status := master.GetWorkers()[workerID1].Status()
-		return status.Code == WorkerStatusNormal
+		return status.Code == libModel.WorkerStatusNormal
 	}, 1*time.Second, 10*time.Millisecond)
 
 	status := master.GetWorkers()[workerID1].Status()
-	require.Equal(t, &WorkerStatus{
-		Code:     WorkerStatusNormal,
+	require.Equal(t, &libModel.WorkerStatus{
+		Code:     libModel.WorkerStatusNormal,
 		ExtBytes: ext,
 	}, status)
 }

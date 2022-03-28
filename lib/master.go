@@ -7,6 +7,8 @@ import (
 	"sync"
 	"time"
 
+	libModel "github.com/hanfei1991/microcosm/lib/model"
+
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -64,7 +66,7 @@ type MasterImpl interface {
 	// OnWorkerMessage is called when a customized message is received.
 	OnWorkerMessage(worker WorkerHandle, topic p2p.Topic, message interface{}) error
 
-	OnWorkerStatusUpdated(worker WorkerHandle, newStatus *WorkerStatus) error
+	OnWorkerStatusUpdated(worker WorkerHandle, newStatus *libModel.WorkerStatus) error
 
 	// CloseImpl is called when the master is being closed
 	CloseImpl(ctx context.Context) error
@@ -285,9 +287,9 @@ func (m *DefaultBaseMaster) registerMessageHandlers(ctx context.Context) error {
 	ok, err = m.messageHandlerManager.RegisterHandler(
 		ctx,
 		statusutil.WorkerStatusTopic(m.id),
-		&statusutil.WorkerStatusMessage[*WorkerStatus]{},
+		&statusutil.WorkerStatusMessage{},
 		func(sender p2p.NodeID, value p2p.MessageValue) error {
-			msg := value.(*statusutil.WorkerStatusMessage[*WorkerStatus])
+			msg := value.(*statusutil.WorkerStatusMessage)
 			m.workerManager.OnWorkerStatusUpdated(msg)
 			return nil
 		})
@@ -429,9 +431,9 @@ func (m *DefaultBaseMaster) runWorkerCheck(ctx context.Context) error {
 			tombstoneHandle := NewTombstoneWorkerHandle(workerInfo.ID, *status, nil)
 			var offlineError error
 			switch status.Code {
-			case WorkerStatusFinished:
+			case libModel.WorkerStatusFinished:
 				offlineError = derror.ErrWorkerFinish.FastGenByArgs()
-			case WorkerStatusStopped:
+			case libModel.WorkerStatusStopped:
 				offlineError = derror.ErrWorkerStop.FastGenByArgs()
 			default:
 				offlineError = derror.ErrWorkerOffline.FastGenByArgs(workerInfo.ID)
@@ -564,7 +566,7 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 		// When CreateWorker failed, we need to pass the worker id to
 		// OnWorkerDispatched, so we use a dummy WorkerHandle.
 		dispatchFailedDummyHandler := NewTombstoneWorkerHandle(
-			workerID, WorkerStatus{Code: WorkerStatusError}, nil)
+			workerID, libModel.WorkerStatus{Code: libModel.WorkerStatusError}, nil)
 		requestCtx, cancel := context.WithTimeout(context.Background(), createWorkerTimeout)
 		defer cancel()
 		// This following API should be refined.

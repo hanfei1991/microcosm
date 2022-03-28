@@ -5,8 +5,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hanfei1991/microcosm/pkg/adapter"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/pkg/workerpool"
@@ -14,8 +12,10 @@ import (
 	"go.uber.org/zap"
 
 	runtime "github.com/hanfei1991/microcosm/executor/worker"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/statusutil"
 	"github.com/hanfei1991/microcosm/model"
+	"github.com/hanfei1991/microcosm/pkg/adapter"
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
@@ -68,12 +68,12 @@ type BaseWorker interface {
 	Close(ctx context.Context) error
 	ID() runtime.RunnableID
 	MetaKVClient() metaclient.KVClient
-	UpdateStatus(ctx context.Context, status WorkerStatus) error
+	UpdateStatus(ctx context.Context, status libModel.WorkerStatus) error
 	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) (bool, error)
 	OpenStorage(ctx context.Context, resourcePath resourcemeta.ResourceID) (broker.Handle, error)
 	// Exit should be called when worker (in user logic) wants to exit
 	// Worker should update its worker status code to correct value before calling Exit
-	Exit(ctx context.Context, status WorkerStatus, err error) error
+	Exit(ctx context.Context, status libModel.WorkerStatus, err error) error
 }
 
 type DefaultBaseWorker struct {
@@ -91,7 +91,7 @@ type DefaultBaseWorker struct {
 	masterID     MasterID
 
 	workerMetaClient *WorkerMetadataClient
-	statusSender     *statusutil.Writer[*WorkerStatus]
+	statusSender     *statusutil.Writer
 	messageRouter    *MessageRouter
 
 	id            WorkerID
@@ -207,7 +207,7 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) error {
 
 	w.workerMetaClient = NewWorkerMetadataClient(w.masterID, w.metaKVClient)
 
-	w.statusSender = statusutil.NewWriter[*WorkerStatus](
+	w.statusSender = statusutil.NewWriter(
 		w.metaKVClient, w.messageSender, w.masterClient, adapter.WorkerKeyAdapter, w.id)
 	w.messageRouter = NewMessageRouter(w.id, w.pool, defaultMessageRouterBufferSize,
 		func(topic p2p.Topic, msg p2p.MessageValue) error {
@@ -228,7 +228,7 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) error {
 
 func (w *DefaultBaseWorker) doPostInit(ctx context.Context) error {
 	if err := w.statusSender.UpdateStatus(
-		ctx, &WorkerStatus{Code: WorkerStatusInit}); err != nil {
+		ctx, &libModel.WorkerStatus{Code: libModel.WorkerStatusInit}); err != nil {
 		return errors.Trace(err)
 	}
 
@@ -306,7 +306,7 @@ func (w *DefaultBaseWorker) MetaKVClient() metaclient.KVClient {
 	return w.userMetaKVClient
 }
 
-func (w *DefaultBaseWorker) UpdateStatus(ctx context.Context, status WorkerStatus) error {
+func (w *DefaultBaseWorker) UpdateStatus(ctx context.Context, status libModel.WorkerStatus) error {
 	err := w.statusSender.UpdateStatus(ctx, &status)
 	if err != nil {
 		return errors.Trace(err)
@@ -326,9 +326,9 @@ func (w *DefaultBaseWorker) OpenStorage(ctx context.Context, resourcePath resour
 	return w.resourceBroker.OpenStorage(ctx, w.id, w.masterID, resourcePath)
 }
 
-func (w *DefaultBaseWorker) Exit(ctx context.Context, status WorkerStatus, err error) error {
+func (w *DefaultBaseWorker) Exit(ctx context.Context, status libModel.WorkerStatus, err error) error {
 	if err != nil {
-		status.Code = WorkerStatusError
+		status.Code = libModel.WorkerStatusError
 	}
 
 	if err1 := w.statusSender.UpdateStatus(ctx, &status); err1 != nil {

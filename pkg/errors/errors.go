@@ -94,6 +94,7 @@ var (
 	ErrRuntimeDuplicateTaskID     = errors.Normalize("trying to add a task with the same ID as an existing one", errors.RFCCodeText("DFLOW:ErrRuntimeDuplicateTaskID %s"))
 	ErrRuntimeClosed              = errors.Normalize("runtime has been closed", errors.RFCCodeText("DFLOW:ErrRuntimeClosed"))
 	ErrExecutorEtcdConnFail       = errors.Normalize("executor conn inner etcd fail", errors.RFCCodeText("DFLOW:ErrExecutorEtcdConnFail"))
+	ErrExecutorNotFoundForMessage = errors.Normalize("cannot find the executor for p2p messaging", errors.RFCCodeText("DFLOW:ErrExecutorNotFoundForMessage"))
 
 	// planner related errors
 	ErrPlannerDAGDepthExceeded = errors.Normalize("dag depth exceeded: %d", errors.RFCCodeText("DFLOW:ErrPlannerDAGDepthExceeded"))
