@@ -68,8 +68,9 @@ type MasterImpl interface {
 }
 
 const (
-	createWorkerTimeout        = 10 * time.Second
-	maxCreateWorkerConcurrency = 100
+	createWorkerWaitQuotaTimeout = 5 * time.Second
+	createWorkerTimeout          = 10 * time.Second
+	maxCreateWorkerConcurrency   = 100
 )
 
 type BaseMaster interface {
@@ -538,7 +539,7 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 		zap.Any("worker-config", config),
 		zap.String("master-id", m.id))
 
-	quotaCtx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	quotaCtx, cancel := context.WithTimeout(context.Background(), createWorkerWaitQuotaTimeout)
 	defer cancel()
 	if err := m.createWorkerQuota.Consume(quotaCtx); err != nil {
 		return "", derror.ErrMasterConcurrencyExceeded.Wrap(err)
