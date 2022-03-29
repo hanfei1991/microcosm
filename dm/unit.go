@@ -11,6 +11,8 @@ import (
 	"github.com/pingcap/tiflow/dm/dm/unit"
 	"github.com/pingcap/tiflow/dm/dm/worker"
 	"github.com/pingcap/tiflow/dm/pkg/backoff"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/zap"
 )
 
 type unitHolder struct {
@@ -20,7 +22,7 @@ type unitHolder struct {
 	autoResume *worker.AutoResumeInfo
 
 	unit        unit.Unit
-	processCh   chan pb.ProcessResult
+	resultCh    chan pb.ProcessResult
 	lastResult  *pb.ProcessResult // TODO: check if framework can persist result
 	processOnce sync.Once
 }
@@ -44,7 +46,7 @@ func newUnitHolder(u unit.Unit) *unitHolder {
 		cancel:     cancel,
 		autoResume: autoResume,
 		unit:       u,
-		processCh:  make(chan pb.ProcessResult, 1),
+		resultCh:   make(chan pb.ProcessResult, 1),
 	}
 }
 
@@ -54,7 +56,7 @@ func (u *unitHolder) init(ctx context.Context) error {
 
 func (u *unitHolder) lazyProcess() {
 	u.processOnce.Do(func() {
-		go u.unit.Process(u.ctx, u.processCh)
+		go u.unit.Process(u.ctx, u.resultCh)
 	})
 }
 
@@ -63,7 +65,7 @@ func (u *unitHolder) getResult() (bool, *pb.ProcessResult) {
 		return true, u.lastResult
 	}
 	select {
-	case r := <-u.processCh:
+	case r := <-u.resultCh:
 		u.lastResult = &r
 		return true, &r
 	default:
@@ -74,6 +76,12 @@ func (u *unitHolder) getResult() (bool, *pb.ProcessResult) {
 func (u *unitHolder) tryUpdateStatus(ctx context.Context, base lib.BaseWorker) error {
 	hasResult, result := u.getResult()
 	if !hasResult {
+		// also need to clean old result
+		s := lib.WorkerStatus{
+			Code: lib.WorkerStatusNormal,
+		}
+		// nolint:errcheck
+		_ = base.UpdateStatus(ctx, s)
 		return nil
 	}
 
@@ -85,11 +93,14 @@ func (u *unitHolder) tryUpdateStatus(ctx context.Context, base lib.BaseWorker) e
 		return base.Exit(ctx, s, nil)
 	}
 
+	u.unit.Pause()
 	subtaskStage := &pb.SubTaskStatus{
 		Stage:  pb.Stage_Paused,
 		Result: result,
 	}
 	strategy := u.autoResume.CheckResumeSubtask(subtaskStage, config.DefaultBackoffRollback)
+	log.L().Info("got auto resume strategy",
+		zap.Stringer("strategy", strategy))
 
 	switch strategy {
 	case worker.ResumeSkip:
@@ -105,7 +116,7 @@ func (u *unitHolder) tryUpdateStatus(ctx context.Context, base lib.BaseWorker) e
 	case worker.ResumeDispatch:
 		// can try auto resume
 		u.lastResult = nil
-		go u.unit.Resume(u.ctx, u.processCh)
+		go u.unit.Resume(u.ctx, u.resultCh)
 		return nil
 	default:
 		s := lib.WorkerStatus{
