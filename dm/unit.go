@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/hanfei1991/microcosm/lib"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/dm/unit"
@@ -77,8 +78,8 @@ func (u *unitHolder) tryUpdateStatus(ctx context.Context, base lib.BaseWorker) e
 	hasResult, result := u.getResult()
 	if !hasResult {
 		// also need to clean old result
-		s := lib.WorkerStatus{
-			Code: lib.WorkerStatusNormal,
+		s := libModel.WorkerStatus{
+			Code: libModel.WorkerStatusNormal,
 		}
 		// nolint:errcheck
 		_ = base.UpdateStatus(ctx, s)
@@ -87,8 +88,8 @@ func (u *unitHolder) tryUpdateStatus(ctx context.Context, base lib.BaseWorker) e
 
 	// if task is finished
 	if len(result.Errors) == 0 {
-		s := lib.WorkerStatus{
-			Code: lib.WorkerStatusFinished,
+		s := libModel.WorkerStatus{
+			Code: libModel.WorkerStatusFinished,
 		}
 		return base.Exit(ctx, s, nil)
 	}
@@ -105,8 +106,8 @@ func (u *unitHolder) tryUpdateStatus(ctx context.Context, base lib.BaseWorker) e
 	switch strategy {
 	case worker.ResumeSkip:
 		// wait on next auto resume
-		s := lib.WorkerStatus{
-			Code:         lib.WorkerStatusError,
+		s := libModel.WorkerStatus{
+			Code:         libModel.WorkerStatusError,
 			ErrorMessage: unit.JoinProcessErrors(result.Errors),
 		}
 		// TODO: UpdateStatus too frequently?
@@ -119,8 +120,8 @@ func (u *unitHolder) tryUpdateStatus(ctx context.Context, base lib.BaseWorker) e
 		go u.unit.Resume(u.ctx, u.resultCh)
 		return nil
 	default:
-		s := lib.WorkerStatus{
-			Code:         lib.WorkerStatusError,
+		s := libModel.WorkerStatus{
+			Code:         libModel.WorkerStatusError,
 			ErrorMessage: unit.JoinProcessErrors(result.Errors),
 		}
 		return base.Exit(ctx, s, nil)
