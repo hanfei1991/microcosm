@@ -104,6 +104,8 @@ func (tm *TaskManager) TaskStatus() map[string]runtime.TaskStatus {
 	return result
 }
 
+// Schedule removes tasks that are not in the job config.
+// Schedule checks and operates task if needed.
 func (tm *TaskManager) Schedule(ctx context.Context) error {
 	state, err := tm.jobStore.Get(ctx)
 	if err != nil {
