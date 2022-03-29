@@ -17,10 +17,10 @@ type (
 
 	MasterStatusCode int32
 
-	Epoch        = int64
+	Epoch        = model.Epoch
 	WorkerConfig = interface{}
-	MasterID     = string
-	WorkerID     = string
+	MasterID     = model.MasterID
+	WorkerID     = model.WorkerID
 )
 
 // Job master statuses
