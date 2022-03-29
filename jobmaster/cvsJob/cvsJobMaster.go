@@ -13,6 +13,8 @@ import (
 	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
 
+	"go.uber.org/atomic"
+
 	cvsTask "github.com/hanfei1991/microcosm/executor/cvsTask"
 	"github.com/hanfei1991/microcosm/executor/worker"
 	"github.com/hanfei1991/microcosm/lib"
@@ -24,10 +26,7 @@ import (
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	derrors "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
-	"go.uber.org/atomic"
 )
-
-var _ lib.JobMasterImpl = &JobMaster{}
 
 type Config struct {
 	SrcHost string `toml:"srcHost" json:"srcHost"`
