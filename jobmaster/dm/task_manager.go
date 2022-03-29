@@ -8,17 +8,10 @@ import (
 	"github.com/hanfei1991/microcosm/jobmaster/dm/config"
 	"github.com/hanfei1991/microcosm/jobmaster/dm/metadata"
 	"github.com/hanfei1991/microcosm/jobmaster/dm/runtime"
+	"github.com/hanfei1991/microcosm/jobmaster/dm/scheduler"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
-)
-
-var (
-	// CheckInterval is the interval to check task status.
-	CheckInterval = time.Second * 30
-	// ErrorInterval is the interval to check task status when error occurs.
-	// TODO: add backoff strategy
-	ErrorInterval = time.Second * 10
 )
 
 // TODO: use OperateType in lib or move OperateType to lib.
@@ -34,38 +27,47 @@ const (
 	Delete
 )
 
-type Agent interface {
+var (
+	TaskNormalInterval = time.Second * 30
+	TaskErrorInterval  = time.Second * 10
+)
+
+type TaskAgent interface {
 	OperateTask(ctx context.Context, taskID string, stage metadata.TaskStage) error
 }
 
 // TaskManager checks and operates task.
 type TaskManager struct {
-	jobStore    *metadata.JobStore
-	workerAgent Agent
-	triggerCh   chan struct{}
+	*scheduler.DefaultScheduler
+
+	jobStore  *metadata.JobStore
+	taskAgent TaskAgent
 	// tasks record the runtime task status
 	// taskID -> TaskStatus
 	tasks sync.Map
 }
 
-func NewTaskManager(initTaskStatus []runtime.TaskStatus, jobStore *metadata.JobStore, agent Agent) *TaskManager {
+func NewTaskManager(initTaskStatus []runtime.TaskStatus, jobStore *metadata.JobStore, agent TaskAgent) *TaskManager {
 	taskManager := &TaskManager{
-		jobStore:    jobStore,
-		triggerCh:   make(chan struct{}, 1),
-		workerAgent: agent,
+		DefaultScheduler: scheduler.NewDefaultScheduler(TaskNormalInterval, TaskErrorInterval),
+		jobStore:         jobStore,
+		taskAgent:        agent,
 	}
+	taskManager.DefaultScheduler.Scheduler = taskManager
+
 	for _, taskStatus := range initTaskStatus {
 		taskManager.UpdateTaskStatus(taskStatus)
 	}
 	return taskManager
 }
 
-// OperateTask is called by user request.
+// OperateTask updates the task status in metadata and triggers the task manager to check and operate task.
+// called by user request.
 func (tm *TaskManager) OperateTask(ctx context.Context, op OperateType, jobCfg *config.JobCfg, tasks []string) (err error) {
 	log.L().Info("operate task", zap.Int("op", int(op)), zap.Strings("tasks", tasks))
 	defer func() {
 		if err == nil {
-			tm.Trigger(ctx, 0)
+			tm.Trigger(0)
 		}
 	}()
 
@@ -102,62 +104,24 @@ func (tm *TaskManager) TaskStatus() map[string]runtime.TaskStatus {
 	return result
 }
 
-// Trigger triggers the task manager to check and operate task.
-// TODO: Implement a more accurate and efficient way to trigger task manager if needed.
-func (tm *TaskManager) Trigger(ctx context.Context, delay time.Duration) {
-	triggerFunc := func() {
-		select {
-		case <-ctx.Done():
-			return
-		case tm.triggerCh <- struct{}{}:
-			log.L().Info("trigger task manager")
-		default:
-			log.L().Info("task manager is already triggered")
-		}
+func (tm *TaskManager) Schedule(ctx context.Context) error {
+	state, err := tm.jobStore.Get(ctx)
+	if err != nil {
+		log.L().Error("get job state failed", zap.Error(err))
+		tm.onJobNotExist(ctx)
+		return err
 	}
+	job := state.(*metadata.Job)
 
-	if delay > 0 {
-		go func() {
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(delay):
-				triggerFunc()
-			}
-		}()
-	} else {
-		triggerFunc()
-	}
+	tm.removeTaskStatus(job)
+	return tm.checkAndOperateTasks(ctx, job)
 }
 
-// Run checks and operates task.
-func (tm *TaskManager) Run(ctx context.Context) {
-	for {
-		select {
-		case <-ctx.Done():
-			log.L().Info("exit task manager run")
-			return
-		case <-tm.triggerCh:
-			log.L().Info("check task status by trigger")
-		case <-time.After(CheckInterval):
-			log.L().Info("check task status by interval")
-		}
-
-		state, err := tm.jobStore.Get(ctx)
-		if err != nil {
-			log.L().Error("get job state failed", zap.Error(err))
-			tm.onJobNotExist(ctx)
-			continue
-		}
-		job := state.(*metadata.Job)
-
-		tm.checkAndOperateTasks(ctx, job)
-		tm.removeTaskStatus(job)
-	}
-}
-
-func (tm *TaskManager) checkAndOperateTasks(ctx context.Context, job *metadata.Job) {
-	var runningTask runtime.TaskStatus
+func (tm *TaskManager) checkAndOperateTasks(ctx context.Context, job *metadata.Job) error {
+	var (
+		runningTask runtime.TaskStatus
+		recordError error
+	)
 
 	// check and operate task
 	for taskID, persistentTask := range job.Tasks {
@@ -168,8 +132,8 @@ func (tm *TaskManager) checkAndOperateTasks(ctx context.Context, job *metadata.J
 
 		// task unbounded or worker offline
 		if !ok || runningTask.GetStage() == metadata.StageUnscheduled {
-			log.L().Error("get task status failed", zap.String("task_id", taskID))
-			tm.Trigger(ctx, ErrorInterval)
+			recordError = errors.New("get task running status failed")
+			log.L().Error("failed to schedule task", zap.String("task_id", taskID), zap.Error(recordError))
 			continue
 		}
 
@@ -180,12 +144,13 @@ func (tm *TaskManager) checkAndOperateTasks(ctx context.Context, job *metadata.J
 
 		log.L().Info("unexpected task status", zap.String("task_id", taskID), zap.Int("expected_stage", int(persistentTask.Stage)), zap.Int("stage", int(runningTask.GetStage())))
 		// OperateTask should be a asynchronous request
-		if err := tm.workerAgent.OperateTask(ctx, taskID, persistentTask.Stage); err != nil {
-			log.L().Error("operate task failed", zap.Error(err))
-			tm.Trigger(ctx, ErrorInterval)
+		if err := tm.taskAgent.OperateTask(ctx, taskID, persistentTask.Stage); err != nil {
+			recordError = err
+			log.L().Error("operate task failed", zap.Error(recordError))
 			continue
 		}
 	}
+	return recordError
 }
 
 // remove all tasks, usually happened when delete jobs.
@@ -195,7 +160,6 @@ func (tm *TaskManager) onJobNotExist(ctx context.Context) {
 		tm.tasks.Delete(key)
 		return true
 	})
-	tm.Trigger(ctx, ErrorInterval)
 }
 
 // remove deleted task status, usually happened when update-job delete some tasks.

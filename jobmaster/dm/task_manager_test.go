@@ -6,18 +6,25 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/errors"
+	"github.com/stretchr/testify/require"
+
 	"github.com/hanfei1991/microcosm/jobmaster/dm/config"
 	"github.com/hanfei1991/microcosm/jobmaster/dm/metadata"
 	"github.com/hanfei1991/microcosm/jobmaster/dm/runtime"
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
-	"github.com/pingcap/errors"
-	"github.com/stretchr/testify/require"
 )
 
 const (
 	jobTemplatePath = "./config/job_template.yaml"
 )
+
+func TestMain(m *testing.M) {
+	TaskNormalInterval = time.Hour
+	TaskErrorInterval = 100 * time.Millisecond
+	m.Run()
+}
 
 func TestUpdateTaskStatus(t *testing.T) {
 	t.Parallel()
@@ -146,6 +153,8 @@ func TestOperateTask(t *testing.T) {
 	state, err = jobStore.Get(context.Background())
 	require.EqualError(t, err, "state not found")
 	require.Nil(t, state)
+
+	require.EqualError(t, taskManager.OperateTask(context.Background(), -1, nil, nil), "unknown operate type")
 }
 
 func TestClearTaskStatus(t *testing.T) {
@@ -201,6 +210,42 @@ func TestTaskAsExpected(t *testing.T) {
 		&runtime.DumpStatus{DefaultTaskStatus: runtime.DefaultTaskStatus{Stage: metadata.StageFinished}}))
 }
 
+func TestCheckAndOperateTasks(t *testing.T) {
+	t.Parallel()
+	jobCfg := &config.JobCfg{}
+	require.NoError(t, jobCfg.DecodeFile(jobTemplatePath))
+	job := metadata.NewJob(jobCfg)
+	mockAgent := &MockAgent{}
+	taskManager := NewTaskManager(nil, nil, mockAgent)
+
+	require.EqualError(t, taskManager.checkAndOperateTasks(context.Background(), job), "get task running status failed")
+
+	dumpStatus1 := &runtime.DumpStatus{
+		DefaultTaskStatus: runtime.DefaultTaskStatus{
+			Unit:  lib.WorkerDMDump,
+			Task:  jobCfg.Upstreams[0].SourceID,
+			Stage: metadata.StageRunning,
+		},
+	}
+	dumpStatus2 := &runtime.DumpStatus{
+		DefaultTaskStatus: runtime.DefaultTaskStatus{
+			Unit:  lib.WorkerDMDump,
+			Task:  jobCfg.Upstreams[1].SourceID,
+			Stage: metadata.StageRunning,
+		},
+	}
+	taskManager.UpdateTaskStatus(dumpStatus1)
+	taskManager.UpdateTaskStatus(dumpStatus2)
+	require.NoError(t, taskManager.checkAndOperateTasks(context.Background(), job))
+
+	mockAgent.SetStages(map[string]metadata.TaskStage{jobCfg.Upstreams[0].SourceID: metadata.StageRunning, jobCfg.Upstreams[1].SourceID: metadata.StagePaused})
+	dumpStatus2.Stage = metadata.StagePaused
+	taskManager.UpdateTaskStatus(dumpStatus2)
+	e := errors.New("operate task failed")
+	mockAgent.SetResult([]error{e})
+	require.EqualError(t, taskManager.checkAndOperateTasks(context.Background(), job), e.Error())
+}
+
 func TestTaskManager(t *testing.T) {
 	t.Parallel()
 	jobCfg := &config.JobCfg{}
@@ -208,6 +253,7 @@ func TestTaskManager(t *testing.T) {
 	job := metadata.NewJob(jobCfg)
 	jobStore := metadata.NewJobStore("task_manager_test", mock.NewMetaMock())
 	require.NoError(t, jobStore.Put(context.Background(), job))
+
 	mockAgent := &MockAgent{}
 	taskManager := NewTaskManager(nil, jobStore, mockAgent)
 	source1 := jobCfg.Upstreams[0].SourceID
@@ -215,8 +261,6 @@ func TestTaskManager(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	CheckInterval = time.Hour
-	ErrorInterval = time.Millisecond
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -227,7 +271,7 @@ func TestTaskManager(t *testing.T) {
 	}()
 
 	// mock trigger when start
-	taskManager.Trigger(ctx, 0)
+	taskManager.Trigger(0)
 
 	syncStatus1 := &runtime.DumpStatus{
 		DefaultTaskStatus: runtime.DefaultTaskStatus{
@@ -256,7 +300,7 @@ func TestTaskManager(t *testing.T) {
 	taskManager.UpdateTaskStatus(syncStatus1)
 
 	// mock check by interval
-	taskManager.Trigger(ctx, time.Second)
+	taskManager.Trigger(time.Second)
 	// resumed eventually
 	require.Eventually(t, func() bool {
 		mockAgent.Lock()
@@ -281,7 +325,7 @@ func TestTaskManager(t *testing.T) {
 	// task2 offline
 	taskManager.UpdateTaskStatus(runtime.NewOfflineStatus(source2))
 	// mock check by interval
-	taskManager.Trigger(ctx, time.Millisecond)
+	taskManager.Trigger(time.Millisecond)
 	// no request, no panic in mockAgent
 	time.Sleep(1 * time.Second)
 
@@ -299,6 +343,11 @@ func TestTaskManager(t *testing.T) {
 
 	// mock delete job
 	taskManager.OperateTask(ctx, Delete, nil, nil)
+	require.Eventually(t, func() bool {
+		mockAgent.Lock()
+		defer mockAgent.Unlock()
+		return len(mockAgent.results) == 0 && len(taskManager.TaskStatus()) == 0
+	}, 5*time.Second, 100*time.Millisecond)
 
 	cancel()
 	wg.Wait()
