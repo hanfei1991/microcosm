@@ -52,18 +52,12 @@ func MockBaseMaster(id MasterID, masterImpl MasterImpl) *DefaultBaseMaster {
 	return ret.(*DefaultBaseMaster)
 }
 
-func MockBaseMasterCreateWorker(
+func MockServerMasterScheduleTask(
 	t *testing.T,
 	master *DefaultBaseMaster,
-	workerType WorkerType,
-	config WorkerConfig,
 	cost model.RescUnit,
-	masterID MasterID,
-	workerID WorkerID,
 	executorID model.ExecutorID,
 ) {
-	master.uuidGen = uuid.NewMock()
-
 	expectedSchedulerReq := &pb.TaskSchedulerRequest{Tasks: []*pb.ScheduleTask{{
 		Task: &pb.TaskRequest{
 			Id: 0,
@@ -81,7 +75,22 @@ func MockBaseMasterCreateWorker(
 					ExecutorId: string(executorID),
 				},
 			},
-		}, nil)
+		}, nil).Once()
+}
+
+func MockBaseMasterCreateWorker(
+	t *testing.T,
+	master *DefaultBaseMaster,
+	workerType WorkerType,
+	config WorkerConfig,
+	cost model.RescUnit,
+	masterID MasterID,
+	workerID WorkerID,
+	executorID model.ExecutorID,
+) {
+	master.uuidGen = uuid.NewMock()
+
+	MockServerMasterScheduleTask(t, master, cost, executorID)
 
 	mockExecutorClient := &client.MockExecutorClient{}
 	err := master.executorClientManager.(*client.Manager).AddExecutorClient(executorID, mockExecutorClient)
