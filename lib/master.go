@@ -7,8 +7,6 @@ import (
 	"sync"
 	"time"
 
-	libModel "github.com/hanfei1991/microcosm/lib/model"
-
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -19,7 +17,7 @@ import (
 
 	"github.com/hanfei1991/microcosm/client"
 	runtime "github.com/hanfei1991/microcosm/executor/worker"
-	"github.com/hanfei1991/microcosm/lib/quota"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/statusutil"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
