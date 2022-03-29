@@ -305,6 +305,13 @@ func (w *DefaultBaseWorker) MetaKVClient() metaclient.KVClient {
 	return w.userMetaKVClient
 }
 
+// UpdateStatus updates the worker's status and tries to notify the master.
+// The status is persisted if Code or ErrorMessage has changed. Refer to (*WorkerStatus).HasSignificantChange.
+//
+// If UpdateStatus returns without an error, then the status must have been persisted,
+// but there is no guarantee that the master has received a notification.
+// Note that if the master cannot handle the notifications fast enough, notifications
+// can be lost.
 func (w *DefaultBaseWorker) UpdateStatus(ctx context.Context, status libModel.WorkerStatus) error {
 	err := w.statusSender.UpdateStatus(ctx, &status)
 	if err != nil {

@@ -44,7 +44,7 @@ func NewWriter(
 	}
 }
 
-// UpdateStatus checks if newStatus.HasChanged() is true, if so, it persists the change and
+// UpdateStatus checks if newStatus.HasSignificantChange() is true, if so, it persists the change and
 // tries to send a notification. Note that sending the notification is asynchronous.
 func (w *Writer) UpdateStatus(ctx context.Context, newStatus *libModel.WorkerStatus) (retErr error) {
 	defer func() {
@@ -58,12 +58,14 @@ func (w *Writer) UpdateStatus(ctx context.Context, newStatus *libModel.WorkerSta
 			zap.Int64("master-epoch", w.masterInfo.Epoch()))
 	}()
 
-	if reflect2.IsNil(w.lastStatus) || newStatus.HasChanged(w.lastStatus) {
+	if reflect2.IsNil(w.lastStatus) || newStatus.HasSignificantChange(w.lastStatus) {
 		// Status has changed, so we need to persist the status.
 		if err := w.persistStatus(ctx, newStatus); err != nil {
 			return err
 		}
 	}
+
+	w.lastStatus = newStatus
 
 	// TODO replace the timeout with a variable.
 	return w.sendStatusMessageWithRetry(ctx, 15*time.Second, newStatus)

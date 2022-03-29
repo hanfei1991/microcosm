@@ -63,6 +63,26 @@ func TestWriterUpdate(t *testing.T) {
 		MasterEpoch: 1,
 		Status:      st,
 	}, msg)
+
+	// Deletes the persisted status for testing purpose.
+	// TODO make a better mock KV that can inspect calls.
+	_, err = suite.kv.Delete(ctx, adapter.WorkerKeyAdapter.Encode("worker-1"))
+	require.NoError(t, err)
+
+	// Repeated update. Should have a notification too, but no persistence.
+	err = suite.writer.UpdateStatus(ctx, st)
+	require.NoError(t, err)
+	_, ok = suite.messageSender.TryPop("executor-1", WorkerStatusTopic("master-1"))
+	require.True(t, ok)
+	msg = rawMsg.(*WorkerStatusMessage)
+	require.Equal(t, &WorkerStatusMessage{
+		Worker:      "worker-1",
+		MasterEpoch: 1,
+		Status:      st,
+	}, msg)
+	resp, err = suite.kv.Get(ctx, adapter.WorkerKeyAdapter.Encode("worker-1"))
+	require.NoError(t, err)
+	require.Len(t, resp.Kvs, 0)
 }
 
 func TestWriterSendRetry(t *testing.T) {

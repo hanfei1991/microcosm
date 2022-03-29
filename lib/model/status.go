@@ -31,8 +31,8 @@ type WorkerStatus struct {
 	ExtBytes []byte `json:"ext-bytes"`
 }
 
-// HasChanged indicates whether `s` has significant changes worth persisting.
-func (s *WorkerStatus) HasChanged(other *WorkerStatus) bool {
+// HasSignificantChange indicates whether `s` has significant changes worth persisting.
+func (s *WorkerStatus) HasSignificantChange(other *WorkerStatus) bool {
 	return s.Code != other.Code || s.ErrorMessage != other.ErrorMessage
 }
 
