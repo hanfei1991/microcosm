@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hanfei1991/microcosm/lib/metadata"
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 
 	"github.com/BurntSushi/toml"
@@ -463,7 +464,7 @@ func (m *DefaultBaseMaster) OnError(err error) {
 // master meta is persisted before it is created, in this function we update some
 // fileds to the current value, including epoch, nodeID and advertiseAddr.
 func (m *DefaultBaseMaster) refreshMetadata(ctx context.Context) (isInit bool, epoch Epoch, err error) {
-	metaClient := NewMasterMetadataClient(m.id, m.metaKVClient)
+	metaClient := metadata.NewMasterMetadataClient(m.id, m.metaKVClient)
 
 	masterMeta, err := metaClient.Load(ctx)
 	if err != nil {
@@ -494,7 +495,7 @@ func (m *DefaultBaseMaster) refreshMetadata(ctx context.Context) (isInit bool, e
 func (m *DefaultBaseMaster) markStatusCodeInMetadata(
 	ctx context.Context, code MasterStatusCode,
 ) error {
-	metaClient := NewMasterMetadataClient(m.id, m.metaKVClient)
+	metaClient := metadata.NewMasterMetadataClient(m.id, m.metaKVClient)
 	masterMeta, err := metaClient.Load(ctx)
 	if err != nil {
 		return errors.Trace(err)

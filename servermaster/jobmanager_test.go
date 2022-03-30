@@ -5,13 +5,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+
 	"github.com/hanfei1991/microcosm/lib"
+	"github.com/hanfei1991/microcosm/lib/metadata"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
-	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
 )
 
 func TestJobManagerSubmitJob(t *testing.T) {
@@ -117,7 +119,7 @@ func TestJobManagerQueryJob(t *testing.T) {
 
 	mockMaster := lib.NewMockMasterImpl("", "job-manager-query-job-test")
 	for _, tc := range testCases {
-		cli := lib.NewMasterMetadataClient(tc.meta.ID, mockMaster.MetaKVClient())
+		cli := metadata.NewMasterMetadataClient(tc.meta.ID, mockMaster.MetaKVClient())
 		err := cli.Store(ctx, tc.meta)
 		require.Nil(t, err)
 	}
@@ -126,7 +128,7 @@ func TestJobManagerQueryJob(t *testing.T) {
 		BaseMaster:       mockMaster.DefaultBaseMaster,
 		JobFsm:           NewJobFsm(),
 		uuidGen:          uuid.NewGenerator(),
-		masterMetaClient: lib.NewMasterMetadataClient(lib.JobManagerUUID, mockMaster.MetaKVClient()),
+		masterMetaClient: metadata.NewMasterMetadataClient(metadata.JobManagerUUID, mockMaster.MetaKVClient()),
 	}
 
 	for _, tc := range testCases {
@@ -196,7 +198,7 @@ func TestJobManagerRecover(t *testing.T) {
 		},
 	}
 	for _, data := range meta {
-		cli := lib.NewMasterMetadataClient(data.ID, metaKVClient)
+		cli := metadata.NewMasterMetadataClient(data.ID, metaKVClient)
 		err := cli.Store(ctx, data)
 		require.Nil(t, err)
 	}
@@ -206,7 +208,7 @@ func TestJobManagerRecover(t *testing.T) {
 		BaseMaster:       mockMaster.DefaultBaseMaster,
 		JobFsm:           NewJobFsm(),
 		uuidGen:          uuid.NewGenerator(),
-		masterMetaClient: lib.NewMasterMetadataClient(lib.JobManagerUUID, metaKVClient),
+		masterMetaClient: metadata.NewMasterMetadataClient(metadata.JobManagerUUID, metaKVClient),
 	}
 	err := mgr.OnMasterRecovered(ctx)
 	require.Nil(t, err)

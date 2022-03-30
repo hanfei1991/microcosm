@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/hanfei1991/microcosm/lib/metadata"
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/statusutil"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
@@ -175,7 +176,7 @@ func TestMasterCreateWorker(t *testing.T) {
 	require.Len(t, workerList, 1)
 	require.Contains(t, workerList, workerID)
 
-	workerMetaClient := NewWorkerMetadataClient(masterName, master.metaKVClient)
+	workerMetaClient := metadata.NewWorkerMetadataClient(masterName, master.metaKVClient)
 	dummySt := &dummyStatus{Val: 4}
 	ext, err := dummySt.Marshal()
 	require.NoError(t, err)

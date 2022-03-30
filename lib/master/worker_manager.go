@@ -3,14 +3,18 @@ package master
 import (
 	"context"
 	"sync"
+	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 
 	"github.com/hanfei1991/microcosm/lib/config"
+	"github.com/hanfei1991/microcosm/lib/metadata"
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pkg/clock"
+	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
@@ -18,6 +22,8 @@ type WorkerManager struct {
 	mu            sync.Mutex
 	workerEntries map[libModel.WorkerID]*workerEntry
 	state         workerManagerState
+
+	workerMetaClient *metadata.WorkerMetadataClient
 
 	masterID libModel.MasterID
 	epoch    libModel.Epoch
@@ -37,8 +43,41 @@ const (
 	workerManagerWaitingHeartbeat
 )
 
-func NewWorkerManager() *WorkerManager {
-	return &WorkerManager{}
+func NewWorkerManager(meta metaclient.KVClient, masterID libModel.MasterID) *WorkerManager {
+	return &WorkerManager{
+		workerMetaClient: metadata.NewWorkerMetadataClient(masterID, meta),
+	}
+}
+
+// InitAfterRecover should be called after the master has failed over.
+// This method will block until a timeout period for heartbeats has passed.
+func (m *WorkerManager) InitAfterRecover(ctx context.Context) error {
+	timeoutInterval := m.timeouts.WorkerTimeoutDuration + m.timeouts.WorkerTimeoutGracefulDuration
+	timer := time.NewTimer(timeoutInterval)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return errors.Trace(ctx.Err())
+	case <-timer.C:
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	allPersistedWorkers, err := m.workerMetaClient.LoadAllWorkers(ctx)
+	if err != nil {
+		return err
+	}
+
+	for workerID := range allPersistedWorkers {
+		if _, exists := m.workerEntries[workerID]; !exists {
+			// Handle tombstone
+		}
+	}
+
+	m.state = workerManagerReady
+	return nil
 }
 
 func (m *WorkerManager) HandleHeartbeat(msg *libModel.HeartbeatPingMessage, fromNode p2p.NodeID) error {
@@ -88,6 +127,9 @@ func (m *WorkerManager) HandleHeartbeat(msg *libModel.HeartbeatPingMessage, from
 	}
 
 	entry.ExpireAt = m.clock.Now().Add(timeoutInterval)
-
 	return nil
+}
+
+func (m *WorkerManager) handleTombstone(workerID libModel.WorkerID, status *libModel.WorkerStatus) {
+
 }

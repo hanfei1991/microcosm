@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/hanfei1991/microcosm/lib/metadata"
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -42,7 +43,7 @@ type JobManagerImplV2 struct {
 	lib.BaseMaster
 	*JobFsm
 
-	masterMetaClient *lib.MasterMetadataClient
+	masterMetaClient *metadata.MasterMetadataClient
 	uuidGen          uuid.Generator
 }
 
@@ -73,7 +74,7 @@ func (jm *JobManagerImplV2) QueryJob(ctx context.Context, req *pb.QueryJobReques
 	if resp != nil {
 		return resp
 	}
-	mcli := lib.NewMasterMetadataClient(req.JobId, jm.MetaKVClient())
+	mcli := metadata.NewMasterMetadataClient(req.JobId, jm.MetaKVClient())
 	if masterMeta, err := mcli.Load(ctx); err != nil {
 		log.L().Warn("failed to load master kv meta from meta store", zap.Any("id", req.JobId), zap.Error(err))
 	} else {
@@ -140,7 +141,7 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 	}
 
 	// Store job master meta data before creating it
-	err = lib.StoreMasterMeta(ctx, jm.BaseMaster.MetaKVClient(), meta)
+	err = metadata.StoreMasterMeta(ctx, jm.BaseMaster.MetaKVClient(), meta)
 	if err != nil {
 		resp.Err = derrors.ToPBError(err)
 		return resp
@@ -166,14 +167,14 @@ func NewJobManagerImplV2(
 	dctx *dcontext.Context,
 	id lib.MasterID,
 ) (*JobManagerImplV2, error) {
-	masterMetaClient, err := dctx.Deps().Construct(func(metaKV metaclient.KVClient) (*lib.MasterMetadataClient, error) {
-		return lib.NewMasterMetadataClient(id, metaKV), nil
+	masterMetaClient, err := dctx.Deps().Construct(func(metaKV metaclient.KVClient) (*metadata.MasterMetadataClient, error) {
+		return metadata.NewMasterMetadataClient(id, metaKV), nil
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	cli := masterMetaClient.(*lib.MasterMetadataClient)
+	cli := masterMetaClient.(*metadata.MasterMetadataClient)
 	impl := &JobManagerImplV2{
 		JobFsm:           NewJobFsm(),
 		uuidGen:          uuid.NewGenerator(),
@@ -190,7 +191,7 @@ func NewJobManagerImplV2(
 	// Initialized to true in order to trigger OnMasterRecovered of job manager.
 	meta := impl.MasterMeta()
 	meta.StatusCode = lib.MasterStatusInit
-	err = lib.StoreMasterMeta(dctx, impl.BaseMaster.MetaKVClient(), meta)
+	err = metadata.StoreMasterMeta(dctx, impl.BaseMaster.MetaKVClient(), meta)
 	if err != nil {
 		return nil, err
 	}

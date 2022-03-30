@@ -28,6 +28,7 @@ import (
 
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/lib"
+	"github.com/hanfei1991/microcosm/lib/metadata"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
@@ -628,7 +629,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	}
 
 	masterMeta := &lib.MasterMetaKVData{
-		ID: lib.JobManagerUUID,
+		ID: metadata.JobManagerUUID,
 		Tp: lib.JobManager,
 	}
 	masterMetaBytes, err := masterMeta.Marshal()
@@ -675,7 +676,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	}
 
 	dctx = dctx.WithDeps(dp)
-	s.jobManager, err = NewJobManagerImplV2(dctx, lib.JobManagerUUID)
+	s.jobManager, err = NewJobManagerImplV2(dctx, metadata.JobManagerUUID)
 	if err != nil {
 		return
 	}

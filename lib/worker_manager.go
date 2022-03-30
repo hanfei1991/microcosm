@@ -12,6 +12,7 @@ import (
 	"go.uber.org/dig"
 	"go.uber.org/zap"
 
+	"github.com/hanfei1991/microcosm/lib/metadata"
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/statusutil"
 	"github.com/hanfei1991/microcosm/model"
@@ -157,7 +158,7 @@ func (m *workerManagerImpl) asyncLoadAllWorkers(ctx context.Context) error {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
 
-		workerMetaClient := NewWorkerMetadataClient(m.masterID, m.metaClient)
+		workerMetaClient := metadata.NewWorkerMetadataClient(m.masterID, m.metaClient)
 		workerStatuses, err := workerMetaClient.LoadAllWorkers(ctx)
 		if err != nil {
 			select {
@@ -198,7 +199,7 @@ func (m *workerManagerImpl) asyncDeleteTombstone(ctx context.Context, id WorkerI
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
 
-		workerMetaClient := NewWorkerMetadataClient(m.masterID, m.metaClient)
+		workerMetaClient := metadata.NewWorkerMetadataClient(m.masterID, m.metaClient)
 		ok, err := workerMetaClient.Remove(ctx, id)
 		if err != nil {
 			select {
@@ -437,7 +438,7 @@ func (m *workerManagerImpl) addWorker(id WorkerID, executorNodeID p2p.NodeID) er
 		justOnlined: true,
 	}
 
-	workerMetaClient := NewWorkerMetadataClient(m.masterID, m.metaClient)
+	workerMetaClient := metadata.NewWorkerMetadataClient(m.masterID, m.metaClient)
 
 	var receiver *statusutil.Reader
 	// TODO figure out whether it is acceptable to load from metastore here.
@@ -460,7 +461,7 @@ func (m *workerManagerImpl) OnWorkerCreated(ctx context.Context, id WorkerID, ex
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	workerMetaClient := NewWorkerMetadataClient(m.masterID, m.metaClient)
+	workerMetaClient := metadata.NewWorkerMetadataClient(m.masterID, m.metaClient)
 	err := workerMetaClient.Store(ctx, id, &libModel.WorkerStatus{
 		Code: libModel.WorkerStatusCreated,
 	})

@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/hanfei1991/microcosm/client"
+	"github.com/hanfei1991/microcosm/lib/metadata"
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/statusutil"
 	"github.com/hanfei1991/microcosm/model"
@@ -162,7 +163,7 @@ func MockBaseMasterWorkerUpdateStatus(
 	executorID p2p.NodeID,
 	status *libModel.WorkerStatus,
 ) {
-	workerMetaClient := NewWorkerMetadataClient(masterID, master.metaKVClient)
+	workerMetaClient := metadata.NewWorkerMetadataClient(masterID, master.metaKVClient)
 	err := workerMetaClient.Store(ctx, workerID, status)
 	require.NoError(t, err)
 
