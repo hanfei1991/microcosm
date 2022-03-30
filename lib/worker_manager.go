@@ -490,6 +490,9 @@ func (m *workerManagerImpl) MessageSender() p2p.MessageSender {
 }
 
 func (m *workerManagerImpl) GetWorkerHandle(id WorkerID) WorkerHandle {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	if _, exists := m.workerInfos[id]; exists {
 		return &workerHandleImpl{
 			manager: m,
