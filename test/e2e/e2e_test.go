@@ -79,6 +79,16 @@ func TestSubmitTest(t *testing.T) {
 	require.Nil(t, err)
 	require.Empty(t, resp.ErrMsg)
 
+	flowControl := make(chan struct{}, 50)
+	// avoid job swarming
+	go func () {
+		for i :=1; i<= config.JobNum; i++{
+			if i % 50 == 0 {
+				time.Sleep(100 * time.Millisecond)
+			}
+			flowControl <- struct{}{}
+		}
+	}()
 	var wg sync.WaitGroup
 	wg.Add(config.JobNum)
 	for i := 1; i <= config.JobNum; i++ {
@@ -89,14 +99,14 @@ func TestSubmitTest(t *testing.T) {
 				SrcHost: config.DemoHost,
 				DstHost: config.DemoHost,
 			}
-			testSubmitTest(t, cfg, config)
+			testSubmitTest(t, cfg, config, flowControl)
 		}(i)
 	}
 	wg.Wait()
 }
 
 // run this test after docker-compose has been up
-func testSubmitTest(t *testing.T, cfg *cvs.Config, config *Config) {
+func testSubmitTest(t *testing.T, cfg *cvs.Config, config *Config, flowControl chan struct{}) {
 	ctx := context.Background()
 	fmt.Printf("connect demo\n")
 	democlient, err := NewDemoClient(ctx, config.DemoAddr)
@@ -113,10 +123,12 @@ func testSubmitTest(t *testing.T, cfg *cvs.Config, config *Config) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	fmt.Printf("test is ready\n")
 
 	configBytes, err := json.Marshal(cfg)
 	require.Nil(t, err)
+
+	<-flowControl
+	fmt.Printf("test is ready\n")
 
 	resp, err := masterclient.SubmitJob(ctx, &pb.SubmitJobRequest{
 		Tp:     pb.JobType_CVSDemo,
