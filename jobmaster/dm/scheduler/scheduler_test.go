@@ -73,9 +73,6 @@ func NewDummyScheduler() *DummyScheduler {
 	return dummyScheduler
 }
 
-func (ds *DummyScheduler) Operate(ctx context.Context) {
-}
-
 func (ds *DummyScheduler) SetResult(results []error) {
 	ds.Lock()
 	defer ds.Unlock()
