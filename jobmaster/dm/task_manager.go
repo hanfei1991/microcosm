@@ -107,6 +107,7 @@ func (tm *TaskManager) TaskStatus() map[string]runtime.TaskStatus {
 // TickImpl removes tasks that are not in the job config.
 // TickImpl checks and operates task if needed.
 func (tm *TaskManager) TickImpl(ctx context.Context) error {
+	log.L().Info("start to check and operate tasks")
 	state, err := tm.jobStore.Get(ctx)
 	if err != nil {
 		log.L().Error("get job state failed", zap.Error(err))

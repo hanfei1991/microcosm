@@ -23,6 +23,8 @@ const (
 func TestMain(m *testing.M) {
 	TaskNormalInterval = time.Hour
 	TaskErrorInterval = 100 * time.Millisecond
+	WorkerNormalInterval = time.Hour
+	WorkerErrorInterval = 100 * time.Millisecond
 	m.Run()
 }
 
@@ -215,7 +217,7 @@ func TestCheckAndOperateTasks(t *testing.T) {
 	jobCfg := &config.JobCfg{}
 	require.NoError(t, jobCfg.DecodeFile(jobTemplatePath))
 	job := metadata.NewJob(jobCfg)
-	mockAgent := &MockAgent{}
+	mockAgent := &MockTaskAgent{}
 	taskManager := NewTaskManager(nil, nil, mockAgent)
 
 	require.EqualError(t, taskManager.checkAndOperateTasks(context.Background(), job), "get task running status failed")
@@ -254,7 +256,7 @@ func TestTaskManager(t *testing.T) {
 	jobStore := metadata.NewJobStore("task_manager_test", mock.NewMetaMock())
 	require.NoError(t, jobStore.Put(context.Background(), job))
 
-	mockAgent := &MockAgent{}
+	mockAgent := &MockTaskAgent{}
 	taskManager := NewTaskManager(nil, jobStore, mockAgent)
 	source1 := jobCfg.Upstreams[0].SourceID
 	source2 := jobCfg.Upstreams[1].SourceID
@@ -358,25 +360,25 @@ func TestTaskManager(t *testing.T) {
 	wg.Wait()
 }
 
-type MockAgent struct {
+type MockTaskAgent struct {
 	sync.Mutex
 	results []error
 	stages  map[string]metadata.TaskStage
 }
 
-func (mockAgent *MockAgent) SetResult(results []error) {
+func (mockAgent *MockTaskAgent) SetResult(results []error) {
 	mockAgent.Lock()
 	defer mockAgent.Unlock()
 	mockAgent.results = append(mockAgent.results, results...)
 }
 
-func (mockAgent *MockAgent) SetStages(stages map[string]metadata.TaskStage) {
+func (mockAgent *MockTaskAgent) SetStages(stages map[string]metadata.TaskStage) {
 	mockAgent.Lock()
 	defer mockAgent.Unlock()
 	mockAgent.stages = stages
 }
 
-func (mockAgent *MockAgent) OperateTask(ctx context.Context, taskID string, stage metadata.TaskStage) error {
+func (mockAgent *MockTaskAgent) OperateTask(ctx context.Context, taskID string, stage metadata.TaskStage) error {
 	mockAgent.Lock()
 	defer mockAgent.Unlock()
 	if len(mockAgent.results) == 0 {
