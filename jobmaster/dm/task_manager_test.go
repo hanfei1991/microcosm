@@ -267,11 +267,16 @@ func TestTaskManager(t *testing.T) {
 	// run task manager
 	go func() {
 		defer wg.Done()
-		taskManager.Run(ctx)
+		t := time.NewTicker(50 * time.Millisecond)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				taskManager.Tick(ctx)
+			}
+		}
 	}()
-
-	// mock trigger when start
-	taskManager.Trigger(0)
 
 	syncStatus1 := &runtime.DumpStatus{
 		DefaultTaskStatus: runtime.DefaultTaskStatus{
@@ -300,7 +305,7 @@ func TestTaskManager(t *testing.T) {
 	taskManager.UpdateTaskStatus(syncStatus1)
 
 	// mock check by interval
-	taskManager.Trigger(time.Second)
+	taskManager.SetNextCheckTime(time.Now().Add(time.Second))
 	// resumed eventually
 	require.Eventually(t, func() bool {
 		mockAgent.Lock()
@@ -325,7 +330,7 @@ func TestTaskManager(t *testing.T) {
 	// task2 offline
 	taskManager.UpdateTaskStatus(runtime.NewOfflineStatus(source2))
 	// mock check by interval
-	taskManager.Trigger(time.Millisecond)
+	taskManager.SetNextCheckTime(time.Now().Add(time.Millisecond))
 	// no request, no panic in mockAgent
 	time.Sleep(1 * time.Second)
 

@@ -8,7 +8,7 @@ import (
 	"github.com/hanfei1991/microcosm/jobmaster/dm/config"
 	"github.com/hanfei1991/microcosm/jobmaster/dm/metadata"
 	"github.com/hanfei1991/microcosm/jobmaster/dm/runtime"
-	"github.com/hanfei1991/microcosm/jobmaster/dm/scheduler"
+	"github.com/hanfei1991/microcosm/jobmaster/dm/ticker"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
@@ -38,7 +38,7 @@ type TaskAgent interface {
 
 // TaskManager checks and operates task.
 type TaskManager struct {
-	*scheduler.DefaultScheduler
+	*ticker.DefaultTicker
 
 	jobStore  *metadata.JobStore
 	taskAgent TaskAgent
@@ -49,11 +49,11 @@ type TaskManager struct {
 
 func NewTaskManager(initTaskStatus []runtime.TaskStatus, jobStore *metadata.JobStore, agent TaskAgent) *TaskManager {
 	taskManager := &TaskManager{
-		DefaultScheduler: scheduler.NewDefaultScheduler(TaskNormalInterval, TaskErrorInterval),
-		jobStore:         jobStore,
-		taskAgent:        agent,
+		DefaultTicker: ticker.NewDefaultTicker(TaskNormalInterval, TaskErrorInterval),
+		jobStore:      jobStore,
+		taskAgent:     agent,
 	}
-	taskManager.DefaultScheduler.Scheduler = taskManager
+	taskManager.DefaultTicker.Ticker = taskManager
 
 	for _, taskStatus := range initTaskStatus {
 		taskManager.UpdateTaskStatus(taskStatus)
@@ -67,7 +67,7 @@ func (tm *TaskManager) OperateTask(ctx context.Context, op OperateType, jobCfg *
 	log.L().Info("operate task", zap.Int("op", int(op)), zap.Strings("tasks", tasks))
 	defer func() {
 		if err == nil {
-			tm.Trigger(0)
+			tm.SetNextCheckTime(time.Now())
 		}
 	}()
 
@@ -104,9 +104,9 @@ func (tm *TaskManager) TaskStatus() map[string]runtime.TaskStatus {
 	return result
 }
 
-// Schedule removes tasks that are not in the job config.
-// Schedule checks and operates task if needed.
-func (tm *TaskManager) Schedule(ctx context.Context) error {
+// TickImpl removes tasks that are not in the job config.
+// TickImpl checks and operates task if needed.
+func (tm *TaskManager) TickImpl(ctx context.Context) error {
 	state, err := tm.jobStore.Get(ctx)
 	if err != nil {
 		log.L().Error("get job state failed", zap.Error(err))
