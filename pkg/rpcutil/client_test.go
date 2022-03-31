@@ -32,10 +32,8 @@ func (c *mockRPCClient) MockFailRPC(ctx context.Context, req *Request, opts ...g
 
 var testClient = &mockRPCClient{}
 
-func mockDail(context.Context, string) (*clientHolder[*mockRPCClient], error) {
-	return &clientHolder[*mockRPCClient]{
-		client: testClient,
-	}, nil
+func mockDail(context.Context, string) (*mockRPCClient, CloseableConnIface, error) {
+	return testClient, nil, nil
 }
 
 func TestFailoverRpcClients(t *testing.T) {
@@ -45,6 +43,7 @@ func TestFailoverRpcClients(t *testing.T) {
 	_, err = DoFailoverRPC(ctx, clients, req, (*mockRPCClient).MockRPC)
 	require.NoError(t, err)
 	require.Equal(t, 1, testClient.cnt)
+	require.Len(t, clients.Endpoints(), 2)
 
 	// reset
 	testClient.cnt = 0
@@ -57,4 +56,5 @@ func TestFailoverRpcClients(t *testing.T) {
 	_, err = DoFailoverRPC(ctx, clients, req, (*mockRPCClient).MockFailRPC)
 	require.Error(t, err)
 	require.Equal(t, 3, testClient.cnt)
+	require.Len(t, clients.Endpoints(), 3)
 }
