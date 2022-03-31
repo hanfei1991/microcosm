@@ -15,7 +15,7 @@ type CloseableConnIface interface {
 	Close() error
 }
 
-// FailoverRPCClientType should be limited to rpc testClient types, but golang can't
+// FailoverRPCClientType should be limited to rpc Client types, but golang can't
 // let us do it. So we left an alias to any.
 type FailoverRPCClientType any
 
@@ -31,10 +31,9 @@ type clientHolder[T FailoverRPCClientType] struct {
 // FailoverRPCClients represent RPC on this type of testClient can use any testClient
 // to connect to the server.
 type FailoverRPCClients[T FailoverRPCClientType] struct {
-	urls        map[string]struct{}
 	leader      string
 	clientsLock sync.RWMutex
-	clients     map[string]*clientHolder[T]
+	clients     map[string]*clientHolder[T] // addr -> clientHolder
 	dialer      DialFunc[T]
 }
 
@@ -44,7 +43,6 @@ func NewFailoverRPCClients[T FailoverRPCClientType](
 	dialer DialFunc[T],
 ) (*FailoverRPCClients[T], error) {
 	ret := &FailoverRPCClients[T]{
-		urls:    make(map[string]struct{}),
 		clients: make(map[string]*clientHolder[T]),
 		dialer:  dialer,
 	}
@@ -53,7 +51,7 @@ func NewFailoverRPCClients[T FailoverRPCClientType](
 		return nil, err
 	}
 	// leader will be updated on heartbeat
-	for k := range ret.urls {
+	for k := range ret.clients {
 		ret.leader = k
 		break
 	}
@@ -93,7 +91,6 @@ func (c *FailoverRPCClients[T]) UpdateClients(ctx context.Context, urls []string
 				log.L().Warn("dial to server master failed", zap.String("addr", addr), zap.Error(err))
 				continue
 			}
-			c.urls[addr] = struct{}{}
 			c.clients[addr] = &clientHolder[T]{
 				conn:   conn,
 				client: cli,
@@ -106,13 +103,14 @@ func (c *FailoverRPCClients[T]) UpdateClients(ctx context.Context, urls []string
 			log.L().Warn("close server master testClient failed", zap.String("addr", k), zap.Error(err))
 		}
 		delete(c.clients, k)
-		delete(c.urls, k)
 	}
 }
 
 func (c *FailoverRPCClients[T]) Endpoints() []string {
-	ret := make([]string, 0, len(c.urls))
-	for k := range c.urls {
+	c.clientsLock.RLock()
+	defer c.clientsLock.RUnlock()
+	ret := make([]string, 0, len(c.clients))
+	for k := range c.clients {
 		ret = append(ret, k)
 	}
 	return ret
