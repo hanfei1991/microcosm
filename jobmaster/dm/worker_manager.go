@@ -126,8 +126,7 @@ func (wm *WorkerManager) onJobNotExist(ctx context.Context) error {
 	return recordError
 }
 
-// destroy unneeded workers
-// usually happened when update-job delete some tasks or a worker is finished.
+// destroy unneeded workers, usually happened when update-job delete some tasks.
 func (wm *WorkerManager) destroyUnneededWorkers(ctx context.Context, job *metadata.Job) error {
 	var recordError error
 	wm.workers.Range(func(key, value interface{}) bool {
