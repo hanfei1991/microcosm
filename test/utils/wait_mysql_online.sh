@@ -43,7 +43,7 @@ if [ -z ${password} ]; then
 else
     check_cmd="mysql -u${user} -h${host} -P${port} -p${password} --default-character-set utf8mb4 -e 'select version()'"
 fi
-while ! $check_cmd ; do
+while ! eval $check_cmd ; do
     i=$((i + 1))
     if [ "$i" -gt 30 ]; then
         echo 'Failed to start database'
