@@ -33,9 +33,12 @@ type WorkerManager struct {
 	*ticker.DefaultTicker
 
 	jobStore        *metadata.JobStore
-	workers         sync.Map
 	workerAgent     WorkerAgent
 	checkpointAgent CheckpointAgent
+
+	// workers record the runtime worker status
+	// taskID -> WorkerStatus
+	workers sync.Map
 }
 
 // WorkerManager checks and schedules workers.
@@ -109,12 +112,12 @@ func (wm *WorkerManager) removeOfflineWorkers() {
 	})
 }
 
-// destory all workers, usually happened when delete jobs.
-func (tm *WorkerManager) onJobNotExist(ctx context.Context) error {
+// destroy all workers, usually happened when delete jobs.
+func (wm *WorkerManager) onJobNotExist(ctx context.Context) error {
 	var recordError error
-	tm.workers.Range(func(key, value interface{}) bool {
-		log.L().Info("destory worker", zap.String("task_id", key.(string)), zap.String("worker_id", value.(runtime.WorkerStatus).ID))
-		if err := tm.destoryWorker(ctx, key.(string), value.(runtime.WorkerStatus).ID); err != nil {
+	wm.workers.Range(func(key, value interface{}) bool {
+		log.L().Info("destroy worker", zap.String("task_id", key.(string)), zap.String("worker_id", value.(runtime.WorkerStatus).ID))
+		if err := wm.destroyWorker(ctx, key.(string), value.(runtime.WorkerStatus).ID); err != nil {
 			recordError = err
 		}
 		return true
@@ -128,8 +131,8 @@ func (wm *WorkerManager) destroyUnneededWorkers(ctx context.Context, job *metada
 	wm.workers.Range(func(key, value interface{}) bool {
 		taskID := key.(string)
 		if _, ok := job.Tasks[taskID]; !ok {
-			log.L().Info("destory unneeded worker", zap.String("task_id", taskID), zap.String("worker_id", value.(runtime.WorkerStatus).ID))
-			if err := wm.destoryWorker(ctx, taskID, value.(runtime.WorkerStatus).ID); err != nil {
+			log.L().Info("destroy unneeded worker", zap.String("task_id", taskID), zap.String("worker_id", value.(runtime.WorkerStatus).ID))
+			if err := wm.destroyWorker(ctx, taskID, value.(runtime.WorkerStatus).ID); err != nil {
 				recordError = err
 			}
 		}
@@ -220,9 +223,8 @@ func (wm *WorkerManager) getNextUnit(task *metadata.Task, worker runtime.WorkerS
 
 	if worker.Unit == lib.WorkerDMDump || task.Cfg.TaskMode == dmconfig.ModeFull {
 		return lib.WorkerDMLoad
-	} else {
-		return lib.WorkerDMSync
 	}
+	return lib.WorkerDMSync
 }
 
 func (wm *WorkerManager) createWorker(ctx context.Context, taskID string, unit lib.WorkerType, taskCfg *metadata.Task) error {
@@ -243,18 +245,17 @@ func (wm *WorkerManager) createWorker(ctx context.Context, taskID string, unit l
 	return nil
 }
 
-func (wm *WorkerManager) destoryWorker(ctx context.Context, taskID string, workerID lib.WorkerID) error {
+func (wm *WorkerManager) destroyWorker(ctx context.Context, taskID string, workerID lib.WorkerID) error {
 	if err := wm.workerAgent.DestroyWorker(ctx, taskID, workerID); err != nil {
-		log.L().Error("failed to destory worker", zap.String("task_id", taskID), zap.String("worker_id", workerID), zap.Error(err))
+		log.L().Error("failed to destroy worker", zap.String("task_id", taskID), zap.String("worker_id", workerID), zap.Error(err))
 		return err
-	} else {
-		// There are two mechanisms for removing worker status.
-		// 1. remove worker status when no error.
-		// 	  It is possible that the worker will be destroyed twice, so the destroy needs to be idempotent.
-		// 2. remove worker status even if there is error.
-		//    When destory fails, we destroy it again until the next time we receive worker online status, so the destroy interval will be longer.
-		// We choose the first mechanism now.
-		wm.workers.Delete(taskID)
 	}
+	// There are two mechanisms for removing worker status.
+	// 1. remove worker status when no error.
+	// 	  It is possible that the worker will be destroyed twice, so the destroy needs to be idempotent.
+	// 2. remove worker status even if there is error.
+	//    When destroy fails, we destroy it again until the next time we receive worker online status, so the destroy interval will be longer.
+	// We choose the first mechanism now.
+	wm.workers.Delete(taskID)
 	return nil
 }
