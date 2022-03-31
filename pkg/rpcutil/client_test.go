@@ -9,12 +9,12 @@ import (
 	"google.golang.org/grpc"
 )
 
-type Request struct{}
-type Response struct{}
-
-var (
-	req *Request = nil
+type (
+	Request  struct{}
+	Response struct{}
 )
+
+var req *Request = nil
 
 type mockRPCClient struct {
 	cnt int
@@ -40,7 +40,7 @@ func mockDail(context.Context, string) (*clientHolder[*mockRPCClient], error) {
 
 func TestFailoverRpcClients(t *testing.T) {
 	ctx := context.Background()
-	clients, err := NewFailoverRpcClients(ctx, []string{"url1", "url2"}, mockDail)
+	clients, err := NewFailoverRPCClients(ctx, []string{"url1", "url2"}, mockDail)
 	require.NoError(t, err)
 	_, err = DoFailoverRPC(ctx, clients, req, (*mockRPCClient).MockRPC)
 	require.NoError(t, err)

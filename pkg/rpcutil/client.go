@@ -15,21 +15,21 @@ type closeableConnIface interface {
 	Close() error
 }
 
-// failoverRpcClientType should be limited to rpc testClient types, but golang can't
+// failoverRPCClientType should be limited to rpc testClient types, but golang can't
 // let us do it. So we left an alias to any.
-type failoverRpcClientType any
+type failoverRPCClientType any
 
 // clientHolder groups a RPC client and it's closing function.
-type clientHolder[T failoverRpcClientType] struct {
+type clientHolder[T failoverRPCClientType] struct {
 	conn   closeableConnIface
 	client T
 }
 
-type dialFunc[T failoverRpcClientType] func(ctx context.Context, addr string) (*clientHolder[T], error)
+type dialFunc[T failoverRPCClientType] func(ctx context.Context, addr string) (*clientHolder[T], error)
 
-// FailoverRpcClients represent RPC on this type of testClient can use any testClient
+// FailoverRPCClients represent RPC on this type of testClient can use any testClient
 // to connect to the server.
-type FailoverRpcClients[T failoverRpcClientType] struct {
+type FailoverRPCClients[T failoverRPCClientType] struct {
 	urls        []string
 	leader      string
 	clientsLock sync.RWMutex
@@ -37,12 +37,12 @@ type FailoverRpcClients[T failoverRpcClientType] struct {
 	dialer      dialFunc[T]
 }
 
-func NewFailoverRpcClients[T failoverRpcClientType](
+func NewFailoverRPCClients[T failoverRPCClientType](
 	ctx context.Context,
 	urls []string,
 	dialer dialFunc[T],
-) (*FailoverRpcClients[T], error) {
-	ret := &FailoverRpcClients[T]{
+) (*FailoverRPCClients[T], error) {
+	ret := &FailoverRPCClients[T]{
 		urls:    urls,
 		clients: make(map[string]*clientHolder[T]),
 		dialer:  dialer,
@@ -56,7 +56,7 @@ func NewFailoverRpcClients[T failoverRpcClientType](
 	return ret, nil
 }
 
-func (c *FailoverRpcClients[T]) init(ctx context.Context, urls []string) error {
+func (c *FailoverRPCClients[T]) init(ctx context.Context, urls []string) error {
 	c.UpdateClients(ctx, urls, "")
 	if len(c.clients) == 0 {
 		return errors.ErrGrpcBuildConn.GenWithStack("failed to dial to master, urls: %v", urls)
@@ -64,9 +64,9 @@ func (c *FailoverRpcClients[T]) init(ctx context.Context, urls []string) error {
 	return nil
 }
 
-// UpdateClients receives a list of server master addresses, dials to server
-// master that is not maintained in current MasterClient.
-func (c *FailoverRpcClients[T]) UpdateClients(ctx context.Context, urls []string, leaderURL string) {
+// UpdateClients receives a list of rpc server addresses, dials to server that is
+// not maintained in current FailoverRPCClients and close redundant clients.
+func (c *FailoverRPCClients[T]) UpdateClients(ctx context.Context, urls []string, leaderURL string) {
 	c.clientsLock.Lock()
 	defer c.clientsLock.Unlock()
 
@@ -102,26 +102,21 @@ func (c *FailoverRpcClients[T]) UpdateClients(ctx context.Context, urls []string
 }
 
 // DoFailoverRPC calls RPC on given clients one by one until one succeeds.
-// It should be a method of FailoverRpcClients, but golang can't let us do it, so
+// It should be a method of FailoverRPCClients, but golang can't let us do it, so
 // we use a public function.
 func DoFailoverRPC[
-	C failoverRpcClientType,
+	C failoverRPCClientType,
 	Req any,
 	Resp any,
 	F func(C, context.Context, Req, ...grpc.CallOption) (Resp, error),
 ](
 	ctx context.Context,
-	clients *FailoverRpcClients[C],
+	clients *FailoverRPCClients[C],
 	req Req,
 	rpc F,
-) (Resp, error) {
+) (resp Resp, err error) {
 	clients.clientsLock.RLock()
 	defer clients.clientsLock.RUnlock()
-
-	var (
-		resp Resp
-		err	 error
-	)
 
 	for _, cli := range clients.clients {
 		resp, err = rpc(cli.client, ctx, req)
