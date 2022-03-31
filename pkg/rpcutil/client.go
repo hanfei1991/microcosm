@@ -31,7 +31,7 @@ type clientHolder[T FailoverRPCClientType] struct {
 // FailoverRPCClients represent RPC on this type of testClient can use any testClient
 // to connect to the server.
 type FailoverRPCClients[T FailoverRPCClientType] struct {
-	urls        []string
+	urls        map[string]struct{}
 	leader      string
 	clientsLock sync.RWMutex
 	clients     map[string]*clientHolder[T]
@@ -44,7 +44,7 @@ func NewFailoverRPCClients[T FailoverRPCClientType](
 	dialer DialFunc[T],
 ) (*FailoverRPCClients[T], error) {
 	ret := &FailoverRPCClients[T]{
-		urls:    urls,
+		urls:    make(map[string]struct{}),
 		clients: make(map[string]*clientHolder[T]),
 		dialer:  dialer,
 	}
@@ -53,7 +53,10 @@ func NewFailoverRPCClients[T FailoverRPCClientType](
 		return nil, err
 	}
 	// leader will be updated on heartbeat
-	ret.leader = ret.urls[0]
+	for k := range ret.urls {
+		ret.leader = k
+		break
+	}
 	return ret, nil
 }
 
@@ -78,12 +81,10 @@ func (c *FailoverRPCClients[T]) UpdateClients(ctx context.Context, urls []string
 		notFound[addr] = struct{}{}
 	}
 
-	c.urls = c.urls[:0]
 	for _, addr := range urls {
 		// TODO: refine address with and without scheme
 		addr = strings.Replace(addr, "http://", "", 1)
 		delete(notFound, addr)
-		c.urls = append(c.urls, addr)
 
 		if _, ok := c.clients[addr]; !ok {
 			log.L().Info("add new server master testClient", zap.String("addr", addr))
@@ -92,6 +93,7 @@ func (c *FailoverRPCClients[T]) UpdateClients(ctx context.Context, urls []string
 				log.L().Warn("dial to server master failed", zap.String("addr", addr), zap.Error(err))
 				continue
 			}
+			c.urls[addr] = struct{}{}
 			c.clients[addr] = &clientHolder[T]{
 				conn:   conn,
 				client: cli,
@@ -104,11 +106,16 @@ func (c *FailoverRPCClients[T]) UpdateClients(ctx context.Context, urls []string
 			log.L().Warn("close server master testClient failed", zap.String("addr", k), zap.Error(err))
 		}
 		delete(c.clients, k)
+		delete(c.urls, k)
 	}
 }
 
 func (c *FailoverRPCClients[T]) Endpoints() []string {
-	return c.urls
+	ret := make([]string, 0, len(c.urls))
+	for k := range c.urls {
+		ret = append(ret, k)
+	}
+	return ret
 }
 
 func (c *FailoverRPCClients[T]) Close() (err error) {
