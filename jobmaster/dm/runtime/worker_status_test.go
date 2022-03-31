@@ -3,8 +3,9 @@ package runtime
 import (
 	"testing"
 
-	"github.com/hanfei1991/microcosm/lib"
 	"github.com/stretchr/testify/require"
+
+	"github.com/hanfei1991/microcosm/lib"
 )
 
 func TestWorkerStatus(t *testing.T) {

@@ -3,9 +3,10 @@ package runtime
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/hanfei1991/microcosm/jobmaster/dm/metadata"
 	"github.com/hanfei1991/microcosm/lib"
-	"github.com/stretchr/testify/require"
 )
 
 func TestTaskStatus(t *testing.T) {

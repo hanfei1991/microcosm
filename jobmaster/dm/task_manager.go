@@ -5,13 +5,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/zap"
+
 	"github.com/hanfei1991/microcosm/jobmaster/dm/config"
 	"github.com/hanfei1991/microcosm/jobmaster/dm/metadata"
 	"github.com/hanfei1991/microcosm/jobmaster/dm/runtime"
 	"github.com/hanfei1991/microcosm/jobmaster/dm/ticker"
-	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	"go.uber.org/zap"
 )
 
 // TODO: use OperateType in lib or move OperateType to lib.

@@ -3,11 +3,8 @@ package dm
 import (
 	"context"
 	"sync"
-	"time"
-
-	//	"sync"
 	"testing"
-	//	"time"
+	"time"
 
 	"github.com/pingcap/errors"
 	dmconfig "github.com/pingcap/tiflow/dm/dm/config"

@@ -235,19 +235,18 @@ func (wm *WorkerManager) createWorker(ctx context.Context, taskID string, unit l
 	if err != nil {
 		log.L().Error("failed to create workers", zap.String("task_id", taskID), zap.Int64("unit", int64(unit)), zap.Error(err))
 	}
-	if len(workerID) == 0 {
-		return err
+	if len(workerID) != 0 {
+		// There are two mechanisms for create workers status.
+		// 1. create worker status when no error.
+		// 	  It is possible that the worker will be created twice, so the create needs to be idempotent.
+		// 2. create worker status even if there is error.
+		//    When create fails, we create it again until the next time we receive WorkerDispatchFailed/WorkerOffline event, so the create interval will be longer.
+		// 	  We need to handle the intermediate state.
+		// We choose the second mechanism now.
+		// Disscuss: Is there a case where a worker is createed but never receives a dispatch/online/offline event?
+		// Dissucss: If master crash before dispatch/online, will the worker be created twice?
+		wm.UpdateWorkerStatus(runtime.NewWorkerStatus(taskID, unit, workerID, runtime.WorkerCreating))
 	}
-	// There are two mechanisms for create workers status.
-	// 1. create worker status when no error.
-	// 	  It is possible that the worker will be created twice, so the create needs to be idempotent.
-	// 2. create worker status even if there is error.
-	//    When create fails, we create it again until the next time we receive WorkerDispatchFailed/WorkerOffline event, so the create interval will be longer.
-	// 	  We need to handle the intermediate state.
-	// We choose the second mechanism now.
-	// Disscuss: Is there a case where a worker is createed but never receives a dispatch/online/offline event?
-	// Dissucss: If master crash before dispatch/online, will the worker be created twice?
-	wm.UpdateWorkerStatus(runtime.NewWorkerStatus(taskID, unit, workerID, runtime.WorkerCreating))
 	return err
 }
 
