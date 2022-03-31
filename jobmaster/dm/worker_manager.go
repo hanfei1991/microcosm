@@ -9,6 +9,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 
+	"github.com/hanfei1991/microcosm/jobmaster/dm/config"
 	"github.com/hanfei1991/microcosm/jobmaster/dm/metadata"
 	"github.com/hanfei1991/microcosm/jobmaster/dm/runtime"
 	"github.com/hanfei1991/microcosm/jobmaster/dm/ticker"
@@ -21,7 +22,7 @@ var (
 )
 
 type WorkerAgent interface {
-	CreateWorker(ctx context.Context, taskID string, workerType lib.WorkerType, taskCfg *metadata.Task) (lib.WorkerID, error)
+	CreateWorker(ctx context.Context, taskID string, workerType lib.WorkerType, taskCfg *config.TaskCfg) (lib.WorkerID, error)
 	DestroyWorker(ctx context.Context, taskID string, workerID lib.WorkerID) error
 }
 
@@ -125,7 +126,8 @@ func (wm *WorkerManager) onJobNotExist(ctx context.Context) error {
 	return recordError
 }
 
-// destroy unneeded workers, usually happened when update-job delete some tasks.
+// destroy unneeded workers
+// usually happened when update-job delete some tasks or a worker is finished.
 func (wm *WorkerManager) destroyUnneededWorkers(ctx context.Context, job *metadata.Job) error {
 	var recordError error
 	wm.workers.Range(func(key, value interface{}) bool {
@@ -144,6 +146,8 @@ func (wm *WorkerManager) destroyUnneededWorkers(ctx context.Context, job *metada
 // checkAndScheduleWorkers check whether a task need a new worker.
 // If there is no related worker, create a new worker.
 // If task is finished, check whether need a new worker.
+// This function does not handle taskCfg updated(update-job).
+// TODO: support update taskCfg, or we may need to send update request manually.
 func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metadata.Job) error {
 	var (
 		runningWorker runtime.WorkerStatus
@@ -157,7 +161,7 @@ func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metad
 		worker, ok := wm.workers.Load(taskID)
 		if ok {
 			runningWorker = worker.(runtime.WorkerStatus)
-			nextUnit = wm.getNextUnit(persistentTask, runningWorker)
+			nextUnit = getNextUnit(persistentTask, runningWorker)
 		} else if nextUnit, err = wm.getCurrentUnit(ctx, persistentTask); err != nil {
 			log.L().Error("get current unit failed", zap.String("task", taskID), zap.Error(err))
 			recordError = err
@@ -169,12 +173,14 @@ func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metad
 			continue
 		} else if !ok {
 			log.L().Info("task has no worker", zap.String("task_id", taskID), zap.Int64("unit", int64(nextUnit)))
-		} else {
+		} else if !runningWorker.IsExpected() {
 			log.L().Info("unexpected worker status", zap.String("task_id", taskID), zap.Int("worker_stage", int(runningWorker.Stage)), zap.Int64("unit", int64(runningWorker.Unit)), zap.Int64("next_unit", int64(nextUnit)))
+		} else {
+			log.L().Info("switch to next unit", zap.String("task_id", taskID), zap.Int64("next_unit", int64(runningWorker.Unit)))
 		}
 
 		// createWorker should be a asynchronous operation
-		if err := wm.createWorker(ctx, taskID, nextUnit, persistentTask); err != nil {
+		if err := wm.createWorker(ctx, taskID, nextUnit, persistentTask.Cfg); err != nil {
 			recordError = err
 			continue
 		}
@@ -198,9 +204,7 @@ func (wm *WorkerManager) getCurrentUnit(ctx context.Context, task *metadata.Task
 			lib.WorkerDMLoad,
 		}
 	case dmconfig.ModeIncrement:
-		workerSeq = []lib.WorkerType{
-			lib.WorkerDMSync,
-		}
+		return lib.WorkerDMSync, nil
 	}
 
 	for i := len(workerSeq) - 1; i >= 0; i-- {
@@ -216,7 +220,7 @@ func (wm *WorkerManager) getCurrentUnit(ctx context.Context, task *metadata.Task
 	return workerSeq[0], nil
 }
 
-func (wm *WorkerManager) getNextUnit(task *metadata.Task, worker runtime.WorkerStatus) lib.WorkerType {
+func getNextUnit(task *metadata.Task, worker runtime.WorkerStatus) lib.WorkerType {
 	if worker.Stage != runtime.WorkerFinished {
 		return worker.Unit
 	}
@@ -227,10 +231,13 @@ func (wm *WorkerManager) getNextUnit(task *metadata.Task, worker runtime.WorkerS
 	return lib.WorkerDMSync
 }
 
-func (wm *WorkerManager) createWorker(ctx context.Context, taskID string, unit lib.WorkerType, taskCfg *metadata.Task) error {
+func (wm *WorkerManager) createWorker(ctx context.Context, taskID string, unit lib.WorkerType, taskCfg *config.TaskCfg) error {
 	workerID, err := wm.workerAgent.CreateWorker(ctx, taskID, unit, taskCfg)
 	if err != nil {
 		log.L().Error("failed to create workers", zap.String("task_id", taskID), zap.Int64("unit", int64(unit)), zap.Error(err))
+	}
+	if len(workerID) == 0 {
+		return err
 	}
 	// There are two mechanisms for create workers status.
 	// 1. create worker status when no error.
@@ -241,8 +248,8 @@ func (wm *WorkerManager) createWorker(ctx context.Context, taskID string, unit l
 	// We choose the second mechanism now.
 	// Disscuss: Is there a case where a worker is createed but never receives a dispatch/online/offline event?
 	// Dissucss: If master crash before dispatch/online, will the worker be created twice?
-	wm.workers.Store(taskID, runtime.NewWorkerStatus(taskID, unit, workerID, runtime.WorkerCreating))
-	return nil
+	wm.UpdateWorkerStatus(runtime.NewWorkerStatus(taskID, unit, workerID, runtime.WorkerCreating))
+	return err
 }
 
 func (wm *WorkerManager) destroyWorker(ctx context.Context, taskID string, workerID lib.WorkerID) error {
