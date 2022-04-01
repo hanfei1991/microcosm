@@ -34,7 +34,7 @@ func NewDefaultTicker(normalInterval, errorInterval time.Duration) *DefaultTicke
 func (s *DefaultTicker) SetNextCheckTime(t time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if (t.After(s.lastCheckTime) && t.Before(s.nextCheckTime)) || s.lastCheckTime.Equal(s.nextCheckTime) {
+	if s.lastCheckTime.Equal(s.nextCheckTime) || (t.After(s.lastCheckTime) && t.Before(s.nextCheckTime)) {
 		s.nextCheckTime = t
 	}
 }
