@@ -115,7 +115,6 @@ func TestOperateTask(t *testing.T) {
 	t.Parallel()
 	jobCfg := &config.JobCfg{}
 	require.NoError(t, jobCfg.DecodeFile(jobTemplatePath))
-	job := metadata.NewJob(jobCfg)
 	jobStore := metadata.NewJobStore("task_manager_test", mock.NewMetaMock())
 	taskManager := NewTaskManager(nil, jobStore, nil)
 
@@ -129,7 +128,7 @@ func TestOperateTask(t *testing.T) {
 	require.NoError(t, taskManager.OperateTask(context.Background(), Create, jobCfg, nil))
 	state, err = jobStore.Get(context.Background())
 	require.NoError(t, err)
-	job = state.(*metadata.Job)
+	job := state.(*metadata.Job)
 	require.Equal(t, job.Tasks[source1].Stage, metadata.StageRunning)
 	require.Equal(t, job.Tasks[source2].Stage, metadata.StageRunning)
 

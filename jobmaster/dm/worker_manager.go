@@ -236,15 +236,15 @@ func (wm *WorkerManager) createWorker(ctx context.Context, taskID string, unit l
 		log.L().Error("failed to create workers", zap.String("task_id", taskID), zap.Int64("unit", int64(unit)), zap.Error(err))
 	}
 	if len(workerID) != 0 {
-		// There are two mechanisms for create workers status.
-		// 1. create worker status when no error.
-		// 	  It is possible that the worker will be created twice, so the create needs to be idempotent.
-		// 2. create worker status even if there is error.
-		//    When create fails, we create it again until the next time we receive WorkerDispatchFailed/WorkerOffline event, so the create interval will be longer.
-		// 	  We need to handle the intermediate state.
-		// We choose the second mechanism now.
-		// Disscuss: Is there a case where a worker is createed but never receives a dispatch/online/offline event?
-		// Dissucss: If master crash before dispatch/online, will the worker be created twice?
+		//	There are two mechanisms for create workers status.
+		//	1.	create worker status when no error.
+		//		It is possible that the worker will be created twice, so the create needs to be idempotent.
+		//	2.	create worker status even if there is error.
+		//		When create fails, we create it again until the next time we receive WorkerDispatchFailed/WorkerOffline event, so the create interval will be longer.
+		//	We need to handle the intermediate state.
+		//	We choose the second mechanism now.
+		//	Disscuss: Is there a case where a worker is created but never receives a dispatch/online/offline event?
+		//	Dissucss: If master crash before dispatch/online, will the worker be created twice?
 		wm.UpdateWorkerStatus(runtime.NewWorkerStatus(taskID, unit, workerID, runtime.WorkerCreating))
 	}
 	return err
@@ -255,12 +255,12 @@ func (wm *WorkerManager) destroyWorker(ctx context.Context, taskID string, worke
 		log.L().Error("failed to destroy worker", zap.String("task_id", taskID), zap.String("worker_id", workerID), zap.Error(err))
 		return err
 	}
-	// There are two mechanisms for removing worker status.
-	// 1. remove worker status when no error.
-	// 	  It is possible that the worker will be destroyed twice, so the destroy needs to be idempotent.
-	// 2. remove worker status even if there is error.
-	//    When destroy fails, we destroy it again until the next time we receive worker online status, so the destroy interval will be longer.
-	// We choose the first mechanism now.
+	//	There are two mechanisms for removing worker status.
+	//	1.	remove worker status when no error.
+	//		It is possible that the worker will be destroyed twice, so the destroy needs to be idempotent.
+	//	2.	remove worker status even if there is error.
+	//		When destroy fails, we destroy it again until the next time we receive worker online status, so the destroy interval will be longer.
+	//	We choose the first mechanism now.
 	wm.workers.Delete(taskID)
 	return nil
 }
