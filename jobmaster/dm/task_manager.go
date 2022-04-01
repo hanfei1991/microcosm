@@ -22,7 +22,8 @@ type OperateType int
 // NOTICE: consider to only use Update cmd to add/remove task.
 // e.g. start-task/stop-task -s source in origin DM will be replaced by update-job now.
 const (
-	Pause OperateType = iota
+	Create OperateType = iota
+	Pause
 	Resume
 	Update
 	Delete
@@ -74,10 +75,10 @@ func (tm *TaskManager) OperateTask(ctx context.Context, op OperateType, jobCfg *
 
 	var stage metadata.TaskStage
 	switch op {
+	case Create, Update:
+		return tm.jobStore.Put(ctx, metadata.NewJob(jobCfg))
 	case Delete:
 		return tm.jobStore.Delete(ctx)
-	case Update:
-		return tm.jobStore.Put(ctx, metadata.NewJob(jobCfg))
 	case Resume:
 		stage = metadata.StageRunning
 	case Pause:

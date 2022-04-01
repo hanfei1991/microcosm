@@ -117,33 +117,37 @@ func TestOperateTask(t *testing.T) {
 	require.NoError(t, jobCfg.DecodeFile(jobTemplatePath))
 	job := metadata.NewJob(jobCfg)
 	jobStore := metadata.NewJobStore("task_manager_test", mock.NewMetaMock())
-	require.NoError(t, jobStore.Put(context.Background(), job))
 	taskManager := NewTaskManager(nil, jobStore, nil)
 
 	source1 := jobCfg.Upstreams[0].SourceID
 	source2 := jobCfg.Upstreams[1].SourceID
 
 	state, err := jobStore.Get(context.Background())
+	require.EqualError(t, err, "state not found")
+	require.Nil(t, state)
+
+	require.NoError(t, taskManager.OperateTask(context.Background(), Create, jobCfg, nil))
+	state, err = jobStore.Get(context.Background())
 	require.NoError(t, err)
 	job = state.(*metadata.Job)
 	require.Equal(t, job.Tasks[source1].Stage, metadata.StageRunning)
 	require.Equal(t, job.Tasks[source2].Stage, metadata.StageRunning)
 
-	taskManager.OperateTask(context.Background(), Pause, nil, []string{source1, source2})
+	require.NoError(t, taskManager.OperateTask(context.Background(), Pause, nil, []string{source1, source2}))
 	state, err = jobStore.Get(context.Background())
 	require.NoError(t, err)
 	job = state.(*metadata.Job)
 	require.Equal(t, job.Tasks[source1].Stage, metadata.StagePaused)
 	require.Equal(t, job.Tasks[source2].Stage, metadata.StagePaused)
 
-	taskManager.OperateTask(context.Background(), Resume, nil, []string{source1})
+	require.NoError(t, taskManager.OperateTask(context.Background(), Resume, nil, []string{source1}))
 	state, err = jobStore.Get(context.Background())
 	require.NoError(t, err)
 	job = state.(*metadata.Job)
 	require.Equal(t, job.Tasks[source1].Stage, metadata.StageRunning)
 	require.Equal(t, job.Tasks[source2].Stage, metadata.StagePaused)
 
-	taskManager.OperateTask(context.Background(), Update, jobCfg, nil)
+	require.NoError(t, taskManager.OperateTask(context.Background(), Update, jobCfg, nil))
 	state, err = jobStore.Get(context.Background())
 	require.NoError(t, err)
 	job = state.(*metadata.Job)
@@ -151,7 +155,7 @@ func TestOperateTask(t *testing.T) {
 	// TODO: should it be paused?
 	require.Equal(t, job.Tasks[source2].Stage, metadata.StageRunning)
 
-	taskManager.OperateTask(context.Background(), Delete, nil, []string{source1, source2})
+	require.NoError(t, taskManager.OperateTask(context.Background(), Delete, nil, []string{source1, source2}))
 	state, err = jobStore.Get(context.Background())
 	require.EqualError(t, err, "state not found")
 	require.Nil(t, state)
