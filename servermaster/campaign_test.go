@@ -195,10 +195,10 @@ func TestLeaderLoopWatchLeader(t *testing.T) {
 			err := s.reset(ctx)
 			require.Nil(t, err)
 
-			// check leaderClient is not set
-			s.leaderClient.RLock()
-			leaderCli := s.leaderClient.cli
-			s.leaderClient.RUnlock()
+			// check leaderCli is not set
+			s.leaderCli.RLock()
+			leaderCli := s.leaderCli.Inner
+			s.leaderCli.RUnlock()
 			require.Nil(t, leaderCli)
 
 			err = s.leaderLoop(ctx)
@@ -213,16 +213,16 @@ func TestLeaderLoopWatchLeader(t *testing.T) {
 		}
 		s := servers[i]
 		require.Eventually(t, func() bool {
-			member, exists := s.checkLeader()
+			member, exists := s.preRPCHooker.CheckLeader()
 			if !exists {
 				return false
 			}
 			if member.Name != servers[leaderIndex].name() {
 				return false
 			}
-			s.leaderClient.RLock()
-			leaderCli := s.leaderClient.cli
-			s.leaderClient.RUnlock()
+			s.leaderCli.RLock()
+			leaderCli := s.leaderCli.Inner
+			s.leaderCli.RUnlock()
 			return leaderCli != nil
 		}, time.Second*2, time.Millisecond*20)
 
