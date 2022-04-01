@@ -192,7 +192,6 @@ func (h PreRPCHooker[T]) isLeaderAndNeedForward(ctx context.Context) (isLeader, 
 	return
 }
 
-// why caller need it?
 func (h PreRPCHooker[T]) CheckLeader() (leader *Member, exist bool) {
 	lp := h.leader.Load()
 	if lp == nil {

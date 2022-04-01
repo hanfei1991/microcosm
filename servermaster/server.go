@@ -353,11 +353,14 @@ func (s *Server) Stop() {
 	if s.etcdClient != nil {
 		s.etcdClient.Close()
 	}
-	s.leaderCli.Lock()
-	if s.leaderCli.Inner != nil {
-		s.leaderCli.Inner.Close()
+	// in some tests this fields is not initialized
+	if s.leaderCli != nil {
+		s.leaderCli.Lock()
+		if s.leaderCli.Inner != nil {
+			s.leaderCli.Inner.Close()
+		}
+		s.leaderCli.Unlock()
 	}
-	s.leaderCli.Unlock()
 	if s.etcd != nil {
 		s.etcd.Close()
 	}

@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"github.com/hanfei1991/microcosm/model"
+	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
+	"github.com/hanfei1991/microcosm/pkg/rpcutil"
 	"github.com/hanfei1991/microcosm/servermaster/cluster"
 	"github.com/hanfei1991/microcosm/test"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -53,6 +55,14 @@ func TestLeaderLoopSuccess(t *testing.T) {
 		leaderServiceFn: mockLeaderService,
 		info:            &model.NodeInfo{ID: model.DeployNodeID(name)},
 	}
+	preRPCHooker := rpcutil.NewPreRPCHooker[pb.MasterClient](
+		s.id,
+		&s.leader,
+		s.leaderCli,
+		&s.initialized,
+		s.rpcLogRL,
+	)
+	s.preRPCHooker = preRPCHooker
 	err := s.reset(ctx)
 	require.Nil(t, err)
 
@@ -100,6 +110,14 @@ func TestLeaderLoopMeetStaleData(t *testing.T) {
 		leaderServiceFn: mockLeaderService,
 		info:            &model.NodeInfo{ID: model.DeployNodeID(name)},
 	}
+	preRPCHooker := rpcutil.NewPreRPCHooker[pb.MasterClient](
+		s.id,
+		&s.leader,
+		s.leaderCli,
+		&s.initialized,
+		s.rpcLogRL,
+	)
+	s.preRPCHooker = preRPCHooker
 
 	// simulate stale campaign data
 	sess, err := concurrency.NewSession(client, concurrency.WithTTL(10))
@@ -160,7 +178,16 @@ func TestLeaderLoopWatchLeader(t *testing.T) {
 			etcd:       etcds[i],
 			etcdClient: client,
 			info:       &model.NodeInfo{ID: model.DeployNodeID(names[i])},
+			leaderCli:  &rpcutil.LeaderClientWithLock[pb.MasterClient]{},
 		}
+		preRPCHooker := rpcutil.NewPreRPCHooker[pb.MasterClient](
+			s.id,
+			&s.leader,
+			s.leaderCli,
+			&s.initialized,
+			s.rpcLogRL,
+		)
+		s.preRPCHooker = preRPCHooker
 		s.leaderServiceFn = mockLeaderServiceFn
 		servers = append(servers, s)
 	}
