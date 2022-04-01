@@ -28,7 +28,7 @@ type clientHolder[T FailoverRPCClientType] struct {
 	client T
 }
 
-// FailoverRPCClients represent RPC on this type of testClient can use any testClient
+// FailoverRPCClients represent RPC on this type of client can use any client
 // to connect to the server.
 type FailoverRPCClients[T FailoverRPCClientType] struct {
 	leader      string
@@ -85,7 +85,7 @@ func (c *FailoverRPCClients[T]) UpdateClients(ctx context.Context, urls []string
 		delete(notFound, addr)
 
 		if _, ok := c.clients[addr]; !ok {
-			log.L().Info("add new server master testClient", zap.String("addr", addr))
+			log.L().Info("add new server master client", zap.String("addr", addr))
 			cli, conn, err := c.dialer(ctx, addr)
 			if err != nil {
 				log.L().Warn("dial to server master failed", zap.String("addr", addr), zap.Error(err))
@@ -100,7 +100,7 @@ func (c *FailoverRPCClients[T]) UpdateClients(ctx context.Context, urls []string
 
 	for k := range notFound {
 		if err := c.clients[k].conn.Close(); err != nil {
-			log.L().Warn("close server master testClient failed", zap.String("addr", k), zap.Error(err))
+			log.L().Warn("close server master client failed", zap.String("addr", k), zap.Error(err))
 		}
 		delete(c.clients, k)
 	}
