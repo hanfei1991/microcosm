@@ -60,8 +60,8 @@ func NewWorkerManager(initWorkerStatus []runtime.WorkerStatus, jobStore *metadat
 
 // UpdateWorkerStatus is called when receive worker status.
 func (wm *WorkerManager) UpdateWorkerStatus(workerStatus runtime.WorkerStatus) {
-	log.L().Debug("update worker status", zap.String("task_id", workerStatus.Task), zap.String("worker_id", workerStatus.ID))
-	wm.workers.Store(workerStatus.Task, workerStatus)
+	log.L().Debug("update worker status", zap.String("task_id", workerStatus.TaskID), zap.String("worker_id", workerStatus.ID))
+	wm.workers.Store(workerStatus.TaskID, workerStatus)
 }
 
 // WorkerStatus return the worker status.
@@ -106,7 +106,7 @@ func (wm *WorkerManager) removeOfflineWorkers() {
 	wm.workers.Range(func(key, value interface{}) bool {
 		worker := value.(runtime.WorkerStatus)
 		if worker.IsOffline() {
-			log.L().Info("remove offline worker status", zap.String("task_id", worker.Task))
+			log.L().Info("remove offline worker status", zap.String("task_id", worker.TaskID))
 			wm.workers.Delete(key)
 		}
 		return true
@@ -167,12 +167,12 @@ func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metad
 			continue
 		}
 
-		if ok && runningWorker.IsExpected() && nextUnit == runningWorker.Unit {
+		if ok && runningWorker.RunAsExpected() && nextUnit == runningWorker.Unit {
 			log.L().Debug("worker status as expected", zap.String("task_id", taskID), zap.Int("worker_stage", int(runningWorker.Stage)), zap.Int64("unit", int64(runningWorker.Unit)))
 			continue
 		} else if !ok {
 			log.L().Info("task has no worker", zap.String("task_id", taskID), zap.Int64("unit", int64(nextUnit)))
-		} else if !runningWorker.IsExpected() {
+		} else if !runningWorker.RunAsExpected() {
 			log.L().Info("unexpected worker status", zap.String("task_id", taskID), zap.Int("worker_stage", int(runningWorker.Stage)), zap.Int64("unit", int64(runningWorker.Unit)), zap.Int64("next_unit", int64(nextUnit)))
 		} else {
 			log.L().Info("switch to next unit", zap.String("task_id", taskID), zap.Int64("next_unit", int64(runningWorker.Unit)))

@@ -3,7 +3,6 @@ package dm
 import (
 	"context"
 	"sync"
-	"testing"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -17,16 +16,15 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
 )
 
-func TestUpdateWorkerStatus(t *testing.T) {
-	t.Parallel()
+func (t *testDMJobmasterSuite) TestUpdateWorkerStatus() {
 	jobCfg := &config.JobCfg{}
-	require.NoError(t, jobCfg.DecodeFile(jobTemplatePath))
+	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	job := metadata.NewJob(jobCfg)
 	jobStore := metadata.NewJobStore("worker_manager_test", mock.NewMetaMock())
-	require.NoError(t, jobStore.Put(context.Background(), job))
+	require.NoError(t.T(), jobStore.Put(context.Background(), job))
 	workerManager := NewWorkerManager(nil, jobStore, nil, nil)
 
-	require.Len(t, workerManager.WorkerStatus(), 0)
+	require.Len(t.T(), workerManager.WorkerStatus(), 0)
 
 	source1 := jobCfg.Upstreams[0].SourceID
 	source2 := jobCfg.Upstreams[1].SourceID
@@ -37,11 +35,11 @@ func TestUpdateWorkerStatus(t *testing.T) {
 	workerManager.UpdateWorkerStatus(workerStatus1)
 	workerManager.UpdateWorkerStatus(workerStatus2)
 	workerStatusMap := workerManager.WorkerStatus()
-	require.Len(t, workerStatusMap, 2)
-	require.Contains(t, workerStatusMap, source1)
-	require.Contains(t, workerStatusMap, source2)
-	require.Equal(t, workerStatusMap[source1], workerStatus1)
-	require.Equal(t, workerStatusMap[source2], workerStatus2)
+	require.Len(t.T(), workerStatusMap, 2)
+	require.Contains(t.T(), workerStatusMap, source1)
+	require.Contains(t.T(), workerStatusMap, source2)
+	require.Equal(t.T(), workerStatusMap[source1], workerStatus1)
+	require.Equal(t.T(), workerStatusMap[source2], workerStatus2)
 
 	// Online
 	workerStatus1.Stage = runtime.WorkerOnline
@@ -49,31 +47,31 @@ func TestUpdateWorkerStatus(t *testing.T) {
 	workerManager.UpdateWorkerStatus(workerStatus1)
 	workerManager.UpdateWorkerStatus(workerStatus2)
 	workerStatusMap = workerManager.WorkerStatus()
-	require.Len(t, workerStatusMap, 2)
-	require.Contains(t, workerStatusMap, source1)
-	require.Contains(t, workerStatusMap, source2)
-	require.Equal(t, workerStatusMap[source1], workerStatus1)
-	require.Equal(t, workerStatusMap[source2], workerStatus2)
+	require.Len(t.T(), workerStatusMap, 2)
+	require.Contains(t.T(), workerStatusMap, source1)
+	require.Contains(t.T(), workerStatusMap, source2)
+	require.Equal(t.T(), workerStatusMap[source1], workerStatus1)
+	require.Equal(t.T(), workerStatusMap[source2], workerStatus2)
 
 	// Offline
 	workerStatus1.Stage = runtime.WorkerOffline
 	workerManager.UpdateWorkerStatus(workerStatus1)
 	workerStatusMap = workerManager.WorkerStatus()
-	require.Len(t, workerStatusMap, 2)
-	require.Contains(t, workerStatusMap, source1)
-	require.Contains(t, workerStatusMap, source2)
-	require.Equal(t, workerStatusMap[source1], workerStatus1)
-	require.Equal(t, workerStatusMap[source2], workerStatus2)
+	require.Len(t.T(), workerStatusMap, 2)
+	require.Contains(t.T(), workerStatusMap, source1)
+	require.Contains(t.T(), workerStatusMap, source2)
+	require.Equal(t.T(), workerStatusMap[source1], workerStatus1)
+	require.Equal(t.T(), workerStatusMap[source2], workerStatus2)
 
 	// Finished
 	workerStatus1.Stage = runtime.WorkerFinished
 	workerManager.UpdateWorkerStatus(workerStatus1)
 	workerStatusMap = workerManager.WorkerStatus()
-	require.Len(t, workerStatusMap, 2)
-	require.Contains(t, workerStatusMap, source1)
-	require.Contains(t, workerStatusMap, source2)
-	require.Equal(t, workerStatusMap[source1], workerStatus1)
-	require.Equal(t, workerStatusMap[source2], workerStatus2)
+	require.Len(t.T(), workerStatusMap, 2)
+	require.Contains(t.T(), workerStatusMap, source1)
+	require.Contains(t.T(), workerStatusMap, source2)
+	require.Equal(t.T(), workerStatusMap[source1], workerStatus1)
+	require.Equal(t.T(), workerStatusMap[source2], workerStatus2)
 
 	// mock jobmaster recover
 	workerStatus1.Stage = runtime.WorkerOnline
@@ -81,14 +79,14 @@ func TestUpdateWorkerStatus(t *testing.T) {
 	workerStatusList := []runtime.WorkerStatus{workerStatus1, workerStatus2}
 	workerManager = NewWorkerManager(workerStatusList, jobStore, nil, nil)
 	workerStatusMap = workerManager.WorkerStatus()
-	require.Len(t, workerStatusMap, 2)
-	require.Contains(t, workerStatusMap, source1)
-	require.Contains(t, workerStatusMap, source2)
-	require.Equal(t, workerStatusMap[source1], workerStatus1)
-	require.Equal(t, workerStatusMap[source2], workerStatus2)
+	require.Len(t.T(), workerStatusMap, 2)
+	require.Contains(t.T(), workerStatusMap, source1)
+	require.Contains(t.T(), workerStatusMap, source2)
+	require.Equal(t.T(), workerStatusMap[source1], workerStatus1)
+	require.Equal(t.T(), workerStatusMap[source2], workerStatus2)
 }
 
-func TestClearWorkerStatus(t *testing.T) {
+func (t *testDMJobmasterSuite) TestClearWorkerStatus() {
 	mockAgent := &MockWorkerAgent{}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -98,37 +96,37 @@ func TestClearWorkerStatus(t *testing.T) {
 	workerStatus2 := runtime.NewWorkerStatus(source2, lib.WorkerDMDump, "worker-id-2", runtime.WorkerCreating)
 
 	workerManager := NewWorkerManager([]runtime.WorkerStatus{workerStatus1, workerStatus2}, nil, mockAgent, nil)
-	require.Len(t, workerManager.WorkerStatus(), 2)
+	require.Len(t.T(), workerManager.WorkerStatus(), 2)
 
 	workerManager.removeOfflineWorkers()
-	require.Len(t, workerManager.WorkerStatus(), 2)
+	require.Len(t.T(), workerManager.WorkerStatus(), 2)
 
 	workerStatus1.Stage = runtime.WorkerOffline
 	workerManager.UpdateWorkerStatus(workerStatus1)
 	workerManager.removeOfflineWorkers()
-	require.Len(t, workerManager.WorkerStatus(), 1)
+	require.Len(t.T(), workerManager.WorkerStatus(), 1)
 
 	job := metadata.NewJob(&config.JobCfg{})
 	job.Tasks[source2] = metadata.NewTask(&config.TaskCfg{})
 	err := workerManager.destroyUnneededWorkers(ctx, job)
-	require.NoError(t, err)
-	require.Len(t, workerManager.WorkerStatus(), 1)
+	require.NoError(t.T(), err)
+	require.Len(t.T(), workerManager.WorkerStatus(), 1)
 
 	delete(job.Tasks, source2)
 	destroyError := errors.New("destroy error")
 	mockAgent.SetDestroyResult([]error{destroyError})
 	err = workerManager.destroyUnneededWorkers(ctx, job)
-	require.EqualError(t, err, destroyError.Error())
-	require.Len(t, workerManager.WorkerStatus(), 1)
+	require.EqualError(t.T(), err, destroyError.Error())
+	require.Len(t.T(), workerManager.WorkerStatus(), 1)
 
 	mockAgent.SetDestroyResult([]error{nil})
 	err = workerManager.destroyUnneededWorkers(ctx, job)
-	require.NoError(t, err)
-	require.Len(t, workerManager.WorkerStatus(), 0)
+	require.NoError(t.T(), err)
+	require.Len(t.T(), workerManager.WorkerStatus(), 0)
 
 	err = workerManager.onJobNotExist(context.Background())
-	require.NoError(t, err)
-	require.Len(t, workerManager.WorkerStatus(), 0)
+	require.NoError(t.T(), err)
+	require.Len(t.T(), workerManager.WorkerStatus(), 0)
 
 	workerStatus1.Stage = runtime.WorkerFinished
 	workerManager.UpdateWorkerStatus(workerStatus1)
@@ -136,13 +134,13 @@ func TestClearWorkerStatus(t *testing.T) {
 	mockAgent.SetDestroyResult([]error{destroyError, nil})
 	workerManager.UpdateWorkerStatus(workerStatus1)
 	workerManager.UpdateWorkerStatus(workerStatus2)
-	require.Len(t, workerManager.WorkerStatus(), 2)
+	require.Len(t.T(), workerManager.WorkerStatus(), 2)
 	err = workerManager.onJobNotExist(context.Background())
-	require.EqualError(t, err, destroyError.Error())
-	require.Len(t, workerManager.WorkerStatus(), 1)
+	require.EqualError(t.T(), err, destroyError.Error())
+	require.Len(t.T(), workerManager.WorkerStatus(), 1)
 }
 
-func TestCreateWorker(t *testing.T) {
+func (t *testDMJobmasterSuite) TestCreateWorker() {
 	mockAgent := &MockWorkerAgent{}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -152,31 +150,31 @@ func TestCreateWorker(t *testing.T) {
 	worker1 := "worker1"
 	createError := errors.New("create error")
 	mockAgent.SetCreateResult([]CreateResult{{"", createError}})
-	require.EqualError(t, workerManager.createWorker(ctx, task1, lib.WorkerDMDump, &config.TaskCfg{}), createError.Error())
-	require.Len(t, workerManager.WorkerStatus(), 0)
+	require.EqualError(t.T(), workerManager.createWorker(ctx, task1, lib.WorkerDMDump, &config.TaskCfg{}), createError.Error())
+	require.Len(t.T(), workerManager.WorkerStatus(), 0)
 
 	workerStatus1 := runtime.NewWorkerStatus(task1, lib.WorkerDMDump, worker1, runtime.WorkerCreating)
 	mockAgent.SetCreateResult([]CreateResult{{worker1, createError}})
-	require.EqualError(t, workerManager.createWorker(ctx, task1, lib.WorkerDMDump, &config.TaskCfg{}), createError.Error())
+	require.EqualError(t.T(), workerManager.createWorker(ctx, task1, lib.WorkerDMDump, &config.TaskCfg{}), createError.Error())
 	workerStatusMap := workerManager.WorkerStatus()
-	require.Len(t, workerStatusMap, 1)
-	require.Contains(t, workerStatusMap, task1)
-	require.Equal(t, workerStatusMap[task1], workerStatus1)
+	require.Len(t.T(), workerStatusMap, 1)
+	require.Contains(t.T(), workerStatusMap, task1)
+	require.Equal(t.T(), workerStatusMap[task1], workerStatus1)
 
 	task2 := "task-2"
 	worker2 := "worker2"
 	workerStatus2 := runtime.NewWorkerStatus(task2, lib.WorkerDMLoad, worker2, runtime.WorkerCreating)
 	mockAgent.SetCreateResult([]CreateResult{{worker2, nil}})
-	require.NoError(t, workerManager.createWorker(ctx, task2, lib.WorkerDMLoad, &config.TaskCfg{}))
+	require.NoError(t.T(), workerManager.createWorker(ctx, task2, lib.WorkerDMLoad, &config.TaskCfg{}))
 	workerStatusMap = workerManager.WorkerStatus()
-	require.Len(t, workerStatusMap, 2)
-	require.Contains(t, workerStatusMap, task1)
-	require.Contains(t, workerStatusMap, task2)
-	require.Equal(t, workerStatusMap[task1], workerStatus1)
-	require.Equal(t, workerStatusMap[task2], workerStatus2)
+	require.Len(t.T(), workerStatusMap, 2)
+	require.Contains(t.T(), workerStatusMap, task1)
+	require.Contains(t.T(), workerStatusMap, task2)
+	require.Equal(t.T(), workerStatusMap[task1], workerStatus1)
+	require.Equal(t.T(), workerStatusMap[task2], workerStatus2)
 }
 
-func TestGetUnit(t *testing.T) {
+func (t *testDMJobmasterSuite) TestGetUnit() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	mockAgent := &MockCheckpointAgent{}
@@ -185,70 +183,69 @@ func TestGetUnit(t *testing.T) {
 	workerManager := NewWorkerManager(nil, nil, nil, mockAgent)
 
 	workerStatus := runtime.NewWorkerStatus("source", lib.WorkerDMDump, "worker-id-1", runtime.WorkerOnline)
-	require.Equal(t, getNextUnit(task, workerStatus), lib.WorkerDMDump)
+	require.Equal(t.T(), getNextUnit(task, workerStatus), lib.WorkerDMDump)
 	workerStatus.Stage = runtime.WorkerFinished
-	require.Equal(t, getNextUnit(task, workerStatus), lib.WorkerDMLoad)
+	require.Equal(t.T(), getNextUnit(task, workerStatus), lib.WorkerDMLoad)
 	workerStatus.Stage = runtime.WorkerOnline
 	workerStatus.Unit = lib.WorkerDMLoad
-	require.Equal(t, getNextUnit(task, workerStatus), lib.WorkerDMLoad)
+	require.Equal(t.T(), getNextUnit(task, workerStatus), lib.WorkerDMLoad)
 	workerStatus.Stage = runtime.WorkerFinished
-	require.Equal(t, getNextUnit(task, workerStatus), lib.WorkerDMLoad)
+	require.Equal(t.T(), getNextUnit(task, workerStatus), lib.WorkerDMLoad)
 
 	task.Cfg.TaskMode = dmconfig.ModeAll
 	workerStatus.Unit = lib.WorkerDMDump
-	require.Equal(t, getNextUnit(task, workerStatus), lib.WorkerDMLoad)
+	require.Equal(t.T(), getNextUnit(task, workerStatus), lib.WorkerDMLoad)
 	workerStatus.Unit = lib.WorkerDMLoad
-	require.Equal(t, getNextUnit(task, workerStatus), lib.WorkerDMSync)
+	require.Equal(t.T(), getNextUnit(task, workerStatus), lib.WorkerDMSync)
 	workerStatus.Unit = lib.WorkerDMSync
 	workerStatus.Stage = runtime.WorkerOnline
-	require.Equal(t, getNextUnit(task, workerStatus), lib.WorkerDMSync)
+	require.Equal(t.T(), getNextUnit(task, workerStatus), lib.WorkerDMSync)
 
 	task.Cfg.TaskMode = dmconfig.ModeIncrement
-	require.Equal(t, getNextUnit(task, workerStatus), lib.WorkerDMSync)
+	require.Equal(t.T(), getNextUnit(task, workerStatus), lib.WorkerDMSync)
 
 	task.Cfg.TaskMode = dmconfig.ModeFull
 	mockAgent.SetResult([]CheckpointResult{{false, errors.New("checkpoint error")}})
 	unit, err := workerManager.getCurrentUnit(ctx, task)
-	require.Error(t, err)
-	require.Equal(t, unit, lib.WorkerType(0))
+	require.Error(t.T(), err)
+	require.Equal(t.T(), unit, lib.WorkerType(0))
 	mockAgent.SetResult([]CheckpointResult{{true, nil}, {true, nil}})
 	unit, err = workerManager.getCurrentUnit(ctx, task)
-	require.NoError(t, err)
-	require.Equal(t, unit, lib.WorkerDMDump)
+	require.NoError(t.T(), err)
+	require.Equal(t.T(), unit, lib.WorkerDMDump)
 	mockAgent.SetResult([]CheckpointResult{{false, nil}})
 	unit, err = workerManager.getCurrentUnit(ctx, task)
-	require.NoError(t, err)
-	require.Equal(t, unit, lib.WorkerDMLoad)
+	require.NoError(t.T(), err)
+	require.Equal(t.T(), unit, lib.WorkerDMLoad)
 
 	task.Cfg.TaskMode = dmconfig.ModeAll
 	mockAgent.SetResult([]CheckpointResult{{true, nil}, {true, nil}, {true, nil}})
 	unit, err = workerManager.getCurrentUnit(ctx, task)
-	require.NoError(t, err)
-	require.Equal(t, unit, lib.WorkerDMDump)
+	require.NoError(t.T(), err)
+	require.Equal(t.T(), unit, lib.WorkerDMDump)
 	mockAgent.SetResult([]CheckpointResult{{true, nil}, {false, nil}})
 	unit, err = workerManager.getCurrentUnit(ctx, task)
-	require.NoError(t, err)
-	require.Equal(t, unit, lib.WorkerDMLoad)
+	require.NoError(t.T(), err)
+	require.Equal(t.T(), unit, lib.WorkerDMLoad)
 	mockAgent.SetResult([]CheckpointResult{{false, nil}})
 	unit, err = workerManager.getCurrentUnit(ctx, task)
-	require.NoError(t, err)
-	require.Equal(t, unit, lib.WorkerDMSync)
+	require.NoError(t.T(), err)
+	require.Equal(t.T(), unit, lib.WorkerDMSync)
 
 	task.Cfg.TaskMode = dmconfig.ModeIncrement
 	mockAgent.SetResult([]CheckpointResult{{true, nil}})
 	unit, err = workerManager.getCurrentUnit(ctx, task)
-	require.NoError(t, err)
-	require.Equal(t, unit, lib.WorkerDMSync)
+	require.NoError(t.T(), err)
+	require.Equal(t.T(), unit, lib.WorkerDMSync)
 	mockAgent.SetResult([]CheckpointResult{{false, nil}})
 	unit, err = workerManager.getCurrentUnit(ctx, task)
-	require.NoError(t, err)
-	require.Equal(t, unit, lib.WorkerDMSync)
+	require.NoError(t.T(), err)
+	require.Equal(t.T(), unit, lib.WorkerDMSync)
 }
 
-func TestCheckAndScheduleWorkers(t *testing.T) {
-	t.Parallel()
+func (t *testDMJobmasterSuite) TestCheckAndScheduleWorkers() {
 	jobCfg := &config.JobCfg{}
-	require.NoError(t, jobCfg.DecodeFile(jobTemplatePath))
+	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	jobCfg.TaskMode = dmconfig.ModeFull
 	job := metadata.NewJob(jobCfg)
 	checkpointAgent := &MockCheckpointAgent{}
@@ -264,18 +261,18 @@ func TestCheckAndScheduleWorkers(t *testing.T) {
 	createError := errors.New("create error")
 	checkpointAgent.SetResult([]CheckpointResult{{true, nil}, {true, nil}, {true, nil}, {false, checkpointError}})
 	workerAgent.SetCreateResult([]CreateResult{{worker1, nil}})
-	require.EqualError(t, workerManager.checkAndScheduleWorkers(context.Background(), job), checkpointError.Error())
+	require.EqualError(t.T(), workerManager.checkAndScheduleWorkers(context.Background(), job), checkpointError.Error())
 	wokerStatusMap := workerManager.WorkerStatus()
-	require.Len(t, wokerStatusMap, 1)
+	require.Len(t.T(), wokerStatusMap, 1)
 
 	// check again
 	checkpointAgent.SetResult([]CheckpointResult{{true, nil}, {true, nil}, {true, nil}})
 	workerAgent.SetCreateResult([]CreateResult{{worker2, createError}})
-	require.EqualError(t, workerManager.checkAndScheduleWorkers(context.Background(), job), createError.Error())
+	require.EqualError(t.T(), workerManager.checkAndScheduleWorkers(context.Background(), job), createError.Error())
 	wokerStatusMap = workerManager.WorkerStatus()
-	require.Len(t, wokerStatusMap, 2)
-	require.Contains(t, wokerStatusMap, source1)
-	require.Contains(t, wokerStatusMap, source2)
+	require.Len(t.T(), wokerStatusMap, 2)
+	require.Contains(t.T(), wokerStatusMap, source1)
+	require.Contains(t.T(), wokerStatusMap, source2)
 	workerStatus1 := wokerStatusMap[source1]
 	workerStatus2 := wokerStatusMap[source2]
 
@@ -284,13 +281,13 @@ func TestCheckAndScheduleWorkers(t *testing.T) {
 	workerStatus2.Stage = runtime.WorkerOnline
 	workerManager.UpdateWorkerStatus(workerStatus1)
 	workerManager.UpdateWorkerStatus(workerStatus2)
-	require.NoError(t, workerManager.checkAndScheduleWorkers(context.Background(), job))
+	require.NoError(t.T(), workerManager.checkAndScheduleWorkers(context.Background(), job))
 	wokerStatusMap = workerManager.WorkerStatus()
-	require.Len(t, wokerStatusMap, 2)
-	require.Contains(t, wokerStatusMap, source1)
-	require.Contains(t, wokerStatusMap, source2)
-	require.Equal(t, wokerStatusMap[source1], workerStatus1)
-	require.Equal(t, wokerStatusMap[source2], workerStatus2)
+	require.Len(t.T(), wokerStatusMap, 2)
+	require.Contains(t.T(), wokerStatusMap, source1)
+	require.Contains(t.T(), wokerStatusMap, source2)
+	require.Equal(t.T(), wokerStatusMap[source1], workerStatus1)
+	require.Equal(t.T(), wokerStatusMap[source2], workerStatus2)
 
 	// switch unit
 	worker3 := "worker3"
@@ -299,13 +296,13 @@ func TestCheckAndScheduleWorkers(t *testing.T) {
 	workerManager.UpdateWorkerStatus(workerStatus1)
 	workerStatus1.Stage = runtime.WorkerFinished
 	workerAgent.SetCreateResult([]CreateResult{{worker3, nil}})
-	require.NoError(t, workerManager.checkAndScheduleWorkers(context.Background(), job))
+	require.NoError(t.T(), workerManager.checkAndScheduleWorkers(context.Background(), job))
 	wokerStatusMap = workerManager.WorkerStatus()
-	require.Len(t, wokerStatusMap, 2)
-	require.Contains(t, wokerStatusMap, source1)
-	require.Contains(t, wokerStatusMap, source2)
-	require.Equal(t, wokerStatusMap[source1], workerStatus3)
-	require.Equal(t, wokerStatusMap[source2], workerStatus2)
+	require.Len(t.T(), wokerStatusMap, 2)
+	require.Contains(t.T(), wokerStatusMap, source1)
+	require.Contains(t.T(), wokerStatusMap, source2)
+	require.Equal(t.T(), wokerStatusMap[source1], workerStatus3)
+	require.Equal(t.T(), wokerStatusMap[source2], workerStatus2)
 
 	// unexpected
 	worker4 := "worker3"
@@ -313,33 +310,32 @@ func TestCheckAndScheduleWorkers(t *testing.T) {
 	workerStatus4 := runtime.NewWorkerStatus(source1, lib.WorkerDMLoad, worker4, runtime.WorkerCreating)
 	workerManager.UpdateWorkerStatus(workerStatus3)
 	workerAgent.SetCreateResult([]CreateResult{{worker4, nil}})
-	require.NoError(t, workerManager.checkAndScheduleWorkers(context.Background(), job))
+	require.NoError(t.T(), workerManager.checkAndScheduleWorkers(context.Background(), job))
 	wokerStatusMap = workerManager.WorkerStatus()
-	require.Len(t, wokerStatusMap, 2)
-	require.Contains(t, wokerStatusMap, source1)
-	require.Contains(t, wokerStatusMap, source2)
-	require.Equal(t, wokerStatusMap[source1], workerStatus4)
-	require.Equal(t, wokerStatusMap[source2], workerStatus2)
+	require.Len(t.T(), wokerStatusMap, 2)
+	require.Contains(t.T(), wokerStatusMap, source1)
+	require.Contains(t.T(), wokerStatusMap, source2)
+	require.Equal(t.T(), wokerStatusMap[source1], workerStatus4)
+	require.Equal(t.T(), wokerStatusMap[source2], workerStatus2)
 
 	// finished
 	workerStatus4.Stage = runtime.WorkerFinished
 	workerManager.UpdateWorkerStatus(workerStatus4)
-	require.NoError(t, workerManager.checkAndScheduleWorkers(context.Background(), job))
+	require.NoError(t.T(), workerManager.checkAndScheduleWorkers(context.Background(), job))
 	wokerStatusMap = workerManager.WorkerStatus()
-	require.Len(t, wokerStatusMap, 2)
-	require.Contains(t, wokerStatusMap, source1)
-	require.Contains(t, wokerStatusMap, source2)
-	require.Equal(t, wokerStatusMap[source1], workerStatus4)
-	require.Equal(t, wokerStatusMap[source2], workerStatus2)
+	require.Len(t.T(), wokerStatusMap, 2)
+	require.Contains(t.T(), wokerStatusMap, source1)
+	require.Contains(t.T(), wokerStatusMap, source2)
+	require.Equal(t.T(), wokerStatusMap[source1], workerStatus4)
+	require.Equal(t.T(), wokerStatusMap[source2], workerStatus2)
 }
 
-func TestWorkerManager(t *testing.T) {
-	t.Parallel()
+func (t *testDMJobmasterSuite) TestWorkerManager() {
 	jobCfg := &config.JobCfg{}
-	require.NoError(t, jobCfg.DecodeFile(jobTemplatePath))
+	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	job := metadata.NewJob(jobCfg)
 	jobStore := metadata.NewJobStore("worker_manager_test", mock.NewMetaMock())
-	require.NoError(t, jobStore.Put(context.Background(), job))
+	require.NoError(t.T(), jobStore.Put(context.Background(), job))
 
 	checkpointAgent := &MockCheckpointAgent{}
 	workerAgent := &MockWorkerAgent{}
@@ -374,7 +370,7 @@ func TestWorkerManager(t *testing.T) {
 	}()
 
 	// first check
-	require.Eventually(t, func() bool {
+	require.Eventually(t.T(), func() bool {
 		checkpointAgent.Lock()
 		defer checkpointAgent.Unlock()
 		workerAgent.Lock()
@@ -384,8 +380,8 @@ func TestWorkerManager(t *testing.T) {
 
 	workerStatus1 := workerManager.WorkerStatus()[source1]
 	workerStatus2 := workerManager.WorkerStatus()[source2]
-	require.Equal(t, runtime.WorkerCreating, workerStatus1.Stage)
-	require.Equal(t, runtime.WorkerCreating, workerStatus2.Stage)
+	require.Equal(t.T(), runtime.WorkerCreating, workerStatus1.Stage)
+	require.Equal(t.T(), runtime.WorkerCreating, workerStatus2.Stage)
 
 	// worker online
 	workerStatus1.Stage = runtime.WorkerOnline
@@ -400,7 +396,7 @@ func TestWorkerManager(t *testing.T) {
 	time.Sleep(1)
 
 	// worker2 offline
-	source := workerStatus2.Task
+	source := workerStatus2.TaskID
 	worker3 := "worker3"
 	workerStatus2.Stage = runtime.WorkerOffline
 	workerStatus3 := runtime.NewWorkerStatus(source, lib.WorkerDMDump, worker3, runtime.WorkerCreating)
@@ -411,7 +407,7 @@ func TestWorkerManager(t *testing.T) {
 	workerAgent.SetCreateResult([]CreateResult{{worker3, nil}})
 
 	// scheduled eventually
-	require.Eventually(t, func() bool {
+	require.Eventually(t.T(), func() bool {
 		return workerManager.WorkerStatus()[source] == workerStatus3
 	}, 5*time.Second, 100*time.Millisecond)
 	workerStatus3.Stage = runtime.WorkerOnline
@@ -425,7 +421,7 @@ func TestWorkerManager(t *testing.T) {
 	// check by update-job
 	workerManager.SetNextCheckTime(time.Now())
 	// removed eventually
-	require.Eventually(t, func() bool {
+	require.Eventually(t.T(), func() bool {
 		return len(workerManager.WorkerStatus()) == 1
 	}, 5*time.Second, 100*time.Millisecond)
 
@@ -440,7 +436,7 @@ func TestWorkerManager(t *testing.T) {
 	// check by finished
 	workerManager.SetNextCheckTime(time.Now())
 	// scheduled eventually
-	require.Eventually(t, func() bool {
+	require.Eventually(t.T(), func() bool {
 		return workerManager.WorkerStatus()[source1] == workerStatus4
 	}, 5*time.Second, 100*time.Millisecond)
 
@@ -450,7 +446,7 @@ func TestWorkerManager(t *testing.T) {
 	// check by delete
 	workerManager.SetNextCheckTime(time.Now())
 	// deleted eventually
-	require.Eventually(t, func() bool {
+	require.Eventually(t.T(), func() bool {
 		workerAgent.Lock()
 		defer workerAgent.Unlock()
 		return len(workerAgent.destroyResults) == 0 && len(workerManager.WorkerStatus()) == 0
