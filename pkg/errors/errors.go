@@ -95,6 +95,7 @@ var (
 	ErrRuntimeClosed              = errors.Normalize("runtime has been closed", errors.RFCCodeText("DFLOW:ErrRuntimeClosed"))
 	ErrExecutorEtcdConnFail       = errors.Normalize("executor conn inner etcd fail", errors.RFCCodeText("DFLOW:ErrExecutorEtcdConnFail"))
 	ErrExecutorNotFoundForMessage = errors.Normalize("cannot find the executor for p2p messaging", errors.RFCCodeText("DFLOW:ErrExecutorNotFoundForMessage"))
+	ErrMasterTooManyPendingEvents = errors.Normalize("master has too many pending events", errors.RFCCodeText("DFLOW:ErrMasterTooManyPendingEvents"))
 
 	// planner related errors
 	ErrPlannerDAGDepthExceeded = errors.Normalize("dag depth exceeded: %d", errors.RFCCodeText("DFLOW:ErrPlannerDAGDepthExceeded"))

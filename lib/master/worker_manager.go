@@ -12,8 +12,10 @@ import (
 	"github.com/hanfei1991/microcosm/lib/config"
 	"github.com/hanfei1991/microcosm/lib/metadata"
 	libModel "github.com/hanfei1991/microcosm/lib/model"
+	"github.com/hanfei1991/microcosm/lib/statusutil"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pkg/clock"
+	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
@@ -24,16 +26,24 @@ type WorkerManager struct {
 	state         workerManagerState
 
 	workerMetaClient *metadata.WorkerMetadataClient
+	messageSender    p2p.MessageSender
 
 	masterID libModel.MasterID
 	epoch    libModel.Epoch
 
-	onWorkerOnlined  func(ctx context.Context, handle WorkerHandle)
-	onWorkerOfflined func(ctx context.Context, handle WorkerHandle)
+	onWorkerOnlined       func(ctx context.Context, handle WorkerHandle)
+	onWorkerOfflined      func(ctx context.Context, handle WorkerHandle)
+	onWorkerStatusUpdated func(ctx context.Context, handle WorkerHandle)
+
+	eventQueue chan *masterEvent
+	closeCh    chan struct{}
+	errCh      chan error
 
 	clock clock.Clock
 
 	timeouts config.TimeoutConfig
+
+	wg sync.WaitGroup
 }
 
 type workerManagerState int32
@@ -44,9 +54,28 @@ const (
 )
 
 func NewWorkerManager(meta metaclient.KVClient, masterID libModel.MasterID) *WorkerManager {
-	return &WorkerManager{
+	ret := &WorkerManager{
 		workerMetaClient: metadata.NewWorkerMetadataClient(masterID, meta),
+		eventQueue:       make(chan *masterEvent, 1024),
 	}
+	ret.wg.Add(1)
+	go func() {
+		defer ret.wg.Done()
+		if err := ret.runBackgroundChecker(); err != nil {
+			select {
+			case ret.errCh <- err:
+				log.L().Warn("runBackgroundChecker encountered error",
+					zap.String("master-id", masterID),
+					zap.Error(err))
+			default:
+				log.L().Warn("runBackgroundChecker error dropped",
+					zap.String("master-id", masterID),
+					zap.Error(err))
+			}
+		}
+	}()
+
+	return ret
 }
 
 // InitAfterRecover should be called after the master has failed over.
@@ -60,6 +89,8 @@ func (m *WorkerManager) InitAfterRecover(ctx context.Context) error {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
 	case <-timer.C:
+		// Wait for the worker timeout to expire, so
+		// that we maintain all the workers that are alive.
 	}
 
 	m.mu.Lock()
@@ -70,9 +101,14 @@ func (m *WorkerManager) InitAfterRecover(ctx context.Context) error {
 		return err
 	}
 
-	for workerID := range allPersistedWorkers {
-		if _, exists := m.workerEntries[workerID]; !exists {
-			// Handle tombstone
+	for workerID, status := range allPersistedWorkers {
+		if entry, exists := m.workerEntries[workerID]; !exists {
+			// For those workers we have lost contact with, we insert
+			// a tombstone.
+			m.workerEntries[workerID] = newTombstoneWorkerEntry(workerID, status)
+		} else {
+			// Put the current persisted status in the workerEntry.
+			entry.InitStatus(status)
 		}
 	}
 
@@ -84,28 +120,10 @@ func (m *WorkerManager) HandleHeartbeat(msg *libModel.HeartbeatPingMessage, from
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if msg.Epoch > m.epoch {
-		// If there is a worker reporting to a master with a larger epoch, then
-		// we shouldn't be running.
-		// TODO We need to do some chaos testing to determining whether and how to
-		// handle this situation.
-		log.L().Panic("We are a stale master still running",
-			zap.String("master-id", m.masterID),
-			zap.Int64("own-epoch", m.epoch),
-			zap.Any("message", msg),
-			zap.String("from-node", fromNode))
-	}
-
-	if msg.Epoch < m.epoch {
-		log.L().Info("Message from smaller epoch dropped",
-			zap.String("master-id", m.masterID),
-			zap.Int64("own-epoch", m.epoch),
-			zap.Any("message", msg),
-			zap.String("from-node", fromNode))
+	if !m.checkMasterEpochMatch(msg.Epoch) {
 		return nil
 	}
 
-	timeoutInterval := m.timeouts.WorkerTimeoutDuration + m.timeouts.WorkerTimeoutGracefulDuration
 	entry, exists := m.workerEntries[msg.FromWorkerID]
 	if !exists {
 		if m.state != workerManagerWaitingHeartbeat {
@@ -117,19 +135,208 @@ func (m *WorkerManager) HandleHeartbeat(msg *libModel.HeartbeatPingMessage, from
 		}
 
 		// We are expecting heartbeats now
-		entry = newWorkerEntry(msg.FromWorkerID, model.ExecutorID(fromNode), m.clock.Now().Add(timeoutInterval))
+		entry = newWorkerEntry(
+			msg.FromWorkerID,
+			model.ExecutorID(fromNode),
+			m.nextExpireTime(),
+			false,
+			nil)
 		m.workerEntries[msg.FromWorkerID] = entry
 
 		log.L().Info("Worker discovered", zap.String("master-id", m.masterID),
 			zap.Any("worker-entry", entry))
 
+		entry.heartbeatCount.Store(1)
+		// We do not call onWorkerOnlined because the master is still waiting to be contacted.
 		return nil
 	}
 
-	entry.ExpireAt = m.clock.Now().Add(timeoutInterval)
+	entry.ExpireAt = m.nextExpireTime()
+
+	newHeartbeatCount := entry.heartbeatCount.Add(1)
+	if newHeartbeatCount == 1 {
+		err := m.enqueueEvent(&masterEvent{
+			Tp: workerOnlineEvent,
+			Handle: &RunningWorkerHandle{
+				workerID:   msg.FromWorkerID,
+				executorID: model.ExecutorID(fromNode),
+				manager:    m,
+			},
+		})
+		if err != nil {
+			return nil
+		}
+	}
 	return nil
 }
 
-func (m *WorkerManager) handleTombstone(workerID libModel.WorkerID, status *libModel.WorkerStatus) {
+func (m *WorkerManager) Tick(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 
+	for {
+		var event *masterEvent
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		case event = <-m.eventQueue:
+		default:
+			return nil
+		}
+
+		switch event.Tp {
+		case workerOnlineEvent:
+			m.onWorkerOnlined(ctx, event.Handle)
+		case workerOfflineEvent:
+			m.onWorkerOfflined(ctx, event.Handle)
+		case workerStatusUpdatedEvent:
+			m.onWorkerStatusUpdated(ctx, event.Handle)
+		}
+	}
+}
+
+// OnCreatingWorker is called by the BaseMaster BEFORE the RPC call for creating a worker.
+func (m *WorkerManager) OnCreatingWorker(workerID libModel.WorkerID, executorID model.ExecutorID) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if _, exists := m.workerEntries[workerID]; exists {
+		log.L().Panic("worker already exists", zap.String("worker-id", workerID))
+	}
+
+	m.workerEntries[workerID] = newWorkerEntry(
+		workerID,
+		executorID,
+		m.nextExpireTime(),
+		false,
+		&libModel.WorkerStatus{
+			Code: libModel.WorkerStatusCreated,
+		})
+}
+
+// OnCreatingWorkerFailed is called if we know for sure that the worker will never be created.
+// This method undoes whatever OnCreatingWorker does.
+func (m *WorkerManager) OnCreatingWorkerFailed(workerID libModel.WorkerID) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	delete(m.workerEntries, workerID)
+}
+
+func (m *WorkerManager) OnWorkerStatusUpdateMessage(msg *statusutil.WorkerStatusMessage) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if !m.checkMasterEpochMatch(msg.MasterEpoch) {
+		return
+	}
+
+	entry, exists := m.workerEntries[msg.Worker]
+	if exists {
+		err := entry.StatusReader().OnAsynchronousNotification(msg.Status)
+		if err != nil {
+			log.L().Warn("Error encountered when processing status update",
+				zap.String("master-id", m.masterID),
+				zap.Any("message", msg))
+		}
+		return
+	}
+
+	log.L().Info("WorkerStatusMessage dropped for unknown worker",
+		zap.String("master-id", m.masterID),
+		zap.Any("message", msg))
+}
+
+func (m *WorkerManager) runBackgroundChecker() error {
+	ticker := time.NewTicker(m.timeouts.MasterHeartbeatCheckLoopInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-m.closeCh:
+			log.L().Info("timeout checker exited", zap.String("master-id", m.masterID))
+			return nil
+		case <-ticker.C:
+		}
+
+		m.mu.Lock()
+		for workerID, entry := range m.workerEntries {
+			if entry.ExpireAt.After(m.clock.Now()) {
+				// Not timed out
+
+				if reader := entry.StatusReader(); reader != nil {
+					if _, ok := reader.Receive(); ok {
+						err := m.enqueueEvent(&masterEvent{
+							Tp: workerStatusUpdatedEvent,
+							Handle: &RunningWorkerHandle{
+								workerID:   workerID,
+								executorID: entry.ExecutorID,
+								manager:    m,
+							},
+						})
+						if err != nil {
+							m.mu.Unlock()
+							return err
+						}
+					}
+
+				}
+
+				continue
+			}
+
+			err := m.enqueueEvent(&masterEvent{
+				Tp: workerOfflineEvent,
+				Handle: &TombstoneHandle{
+					workerID: workerID,
+					manager:  m,
+				},
+			})
+			if err != nil {
+				m.mu.Unlock()
+				return err
+			}
+		}
+		m.mu.Unlock()
+	}
+}
+
+func (m *WorkerManager) nextExpireTime() time.Time {
+	timeoutInterval := m.timeouts.WorkerTimeoutDuration + m.timeouts.WorkerTimeoutGracefulDuration
+	return m.clock.Now().Add(timeoutInterval)
+}
+
+func (m *WorkerManager) checkMasterEpochMatch(msgEpoch libModel.Epoch) (ok bool) {
+	if msgEpoch > m.epoch {
+		// If there is a worker reporting to a master with a larger epoch, then
+		// we shouldn't be running.
+		// TODO We need to do some chaos testing to determining whether and how to
+		// handle this situation.
+		log.L().Panic("We are a stale master still running",
+			zap.String("master-id", m.masterID),
+			zap.Int64("msg-epoch", msgEpoch),
+			zap.Int64("own-epoch", m.epoch))
+	}
+
+	if msgEpoch < m.epoch {
+		log.L().Info("Message from smaller epoch dropped",
+			zap.String("master-id", m.masterID),
+			zap.Int64("msg-epoch", msgEpoch),
+			zap.Int64("own-epoch", m.epoch))
+		return false
+	}
+	return true
+}
+
+func (m *WorkerManager) enqueueEvent(event *masterEvent) error {
+	timer := time.NewTimer(1 * time.Second)
+	defer timer.Stop()
+
+	select {
+	case <-timer.C:
+		return derror.ErrMasterTooManyPendingEvents.GenWithStackByArgs()
+	case m.eventQueue <- event:
+	}
+
+	return nil
 }
