@@ -29,6 +29,7 @@ func TestJobFsmStateTrans(t *testing.T) {
 		createWorkerCount++
 		return id, nil
 	})
+	require.Nil(t, err)
 	require.Equal(t, 1, createWorkerCount)
 	require.Equal(t, 1, fsm.JobCount(pb.QueryJobResponse_dispatched))
 
@@ -37,6 +38,7 @@ func TestJobFsmStateTrans(t *testing.T) {
 		createWorkerCount++
 		return id, nil
 	})
+	require.Nil(t, err)
 	require.Equal(t, 1, createWorkerCount)
 
 	// OnWorkerOnline, WaitAck -> Online
