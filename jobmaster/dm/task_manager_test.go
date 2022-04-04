@@ -319,7 +319,7 @@ func (t *testDMJobmasterSuite) TestTaskManager() {
 	syncStatus2.Stage = metadata.StagePaused
 	taskManager.UpdateTaskStatus(syncStatus2)
 
-	// task2 offline
+	// worker of task2 offline
 	taskManager.UpdateTaskStatus(runtime.NewOfflineStatus(source2))
 	// mock check by interval
 	taskManager.SetNextCheckTime(time.Now().Add(time.Millisecond))

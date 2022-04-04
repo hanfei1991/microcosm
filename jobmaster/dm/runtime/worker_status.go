@@ -4,6 +4,32 @@ import (
 	"github.com/hanfei1991/microcosm/lib"
 )
 
+// WorkerStage represents the stage of a worker.
+//          ,──────────────.      ,────────────.      ,─────────────.     ,──────────────.
+//          │WorkerCreating│      │WorkerOnline│      │WorkerOffline│     │WorkerFinished│
+//          `──────┬───────'      `─────┬──────'      `──────┬──────'     `──────┬───────'
+//                 │                    │                    │                   │
+//   CreateWorker  │                    │                    │                   │
+// ───────────────►│                    │                    │                   │
+//                 │  OnWorkerOnline    │                    │                   │
+//                 ├───────────────────►│                    │                   │
+//                 │                    │  OnWorkerOffline   │                   │
+//                 │                    ├───────────────────►│                   │
+//                 │                    │                    │                   │
+//                 │                    │                    │                   │
+//                 │                    │  OnWorkerFinished  │                   │
+//                 │                    ├────────────────────┼──────────────────►│
+//                 │                    │                    │                   │
+//                 │  OnWorkerOffline/OnWorkerDispacth       │                   │
+//                 ├────────────────────┬───────────────────►│                   │
+//                 │                    │                    │                   │
+//                 │                    │                    │                   │
+//                 │                    │                    │                   │
+//                 │                    │                    │                   │
+//                 │  OnWorkerFinished  │                    │                   │
+//                 ├────────────────────┼────────────────────┼──────────────────►│
+//                 │                    │                    │                   │
+//                 │                    │                    │                   │
 type WorkerStage int
 
 const (
