@@ -264,3 +264,12 @@ func (wm *WorkerManager) destroyWorker(ctx context.Context, taskID string, worke
 	wm.workers.Delete(taskID)
 	return nil
 }
+
+func (wm *WorkerManager) removeWorkerStatusByWorkerID(workerID lib.WorkerID) {
+	wm.workers.Range(func(key, value interface{}) bool {
+		if value.(runtime.WorkerStatus).ID == workerID {
+			wm.workers.Delete(key)
+		}
+		return true
+	})
+}
