@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gogo/status"
+	"github.com/hanfei1991/microcosm/pkg/rpcutil"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/atomic"
@@ -37,14 +38,22 @@ type Service struct {
 
 	offlinedExecutors chan resourcemeta.ExecutorID
 
+	// TODO: maybe isAllLoaded can be moved inside preRPCHooker? If so, we should
+	// let xxxResponse has a Err member and set the error to it.
 	isAllLoaded atomic.Bool
+
+	preRPCHooker *rpcutil.PreRPCHooker[pb.ResourceManagerClient]
 }
 
 const (
 	offlineExecutorQueueSize = 1024
 )
 
-func NewService(metaclient metaclient.KV, executorInfoProvider ExecutorInfoProvider) *Service {
+func NewService(
+	metaclient metaclient.KV,
+	executorInfoProvider ExecutorInfoProvider,
+	preRPCHooker *rpcutil.PreRPCHooker[pb.ResourceManagerClient],
+) *Service {
 	return &Service{
 		mu:                ctxmu.New(),
 		accessor:          resourcemeta.NewMetadataAccessor(metaclient),
@@ -52,10 +61,16 @@ func NewService(metaclient metaclient.KV, executorInfoProvider ExecutorInfoProvi
 		executors:         executorInfoProvider,
 		cancelCh:          make(chan struct{}),
 		offlinedExecutors: make(chan resourcemeta.ExecutorID, offlineExecutorQueueSize),
+		preRPCHooker:      preRPCHooker,
 	}
 }
 
 func (s *Service) QueryResource(ctx context.Context, request *pb.QueryResourceRequest) (*pb.QueryResourceResponse, error) {
+	var resp2 *pb.QueryResourceResponse
+	shouldRet, err := s.preRPCHooker.PreRPC(ctx, request, resp2)
+	if shouldRet {
+		return resp2, err
+	}
 	if !s.checkAllLoaded() {
 		return nil, status.Error(codes.Unavailable, "ResourceManager is initializing")
 	}
@@ -118,6 +133,11 @@ func (s *Service) CreateResource(
 	ctx context.Context,
 	request *pb.CreateResourceRequest,
 ) (*pb.CreateResourceResponse, error) {
+	var resp2 *pb.CreateResourceResponse
+	shouldRet, err := s.preRPCHooker.PreRPC(ctx, request, resp2)
+	if shouldRet {
+		return resp2, err
+	}
 	if !s.checkAllLoaded() {
 		return nil, status.Error(codes.Unavailable, "ResourceManager is initializing")
 	}

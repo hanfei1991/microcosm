@@ -43,7 +43,28 @@ type RPCClientType any
 
 type LeaderClientWithLock[T RPCClientType] struct {
 	sync.RWMutex
-	Inner *FailoverRPCClients[T]
+	inner *FailoverRPCClients[T]
+}
+
+func (l *LeaderClientWithLock[T]) Get() *FailoverRPCClients[T] {
+	l.RLock()
+	defer l.RUnlock()
+	return l.inner
+}
+
+func (l *LeaderClientWithLock[T]) Set(c *FailoverRPCClients[T]) {
+	l.Lock()
+	defer l.Unlock()
+	l.inner = c
+}
+
+func (l *LeaderClientWithLock[T]) Close() {
+	l.Lock()
+	defer l.Unlock()
+	if l.inner != nil {
+		l.inner.Close()
+		l.inner = nil
+	}
 }
 
 // PreRPCHooker provides some common functionality that should be executed before
@@ -139,7 +160,7 @@ func (h PreRPCHooker[T]) forwardToLeader(
 	}
 	if needForward {
 		h.leaderCli.RLock()
-		inner := h.leaderCli.Inner
+		inner := h.leaderCli.Get()
 		h.leaderCli.RUnlock()
 		if inner == nil {
 			return true, errors.ErrMasterRPCNotForward.GenWithStackByArgs()
@@ -187,7 +208,7 @@ func (h PreRPCHooker[T]) isLeaderAndNeedForward(ctx context.Context) (isLeader, 
 	}
 	isLeader = leader.Name == h.id
 	h.leaderCli.RLock()
-	needForward = h.leaderCli.Inner != nil
+	needForward = h.leaderCli.Get() != nil
 	h.leaderCli.RUnlock()
 	return
 }

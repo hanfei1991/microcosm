@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hanfei1991/microcosm/pkg/externalresource/manager"
 	"github.com/hanfei1991/microcosm/pkg/rpcutil"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -58,14 +59,16 @@ type Server struct {
 		sync.RWMutex
 		m []*Member
 	}
-	leaderCli       *rpcutil.LeaderClientWithLock[pb.MasterClient]
+	masterCli       *rpcutil.LeaderClientWithLock[pb.MasterClient]
+	resourceCli     *rpcutil.LeaderClientWithLock[pb.ResourceManagerClient]
 	membership      Membership
 	leaderServiceFn func(context.Context) error
-	preRPCHooker    *rpcutil.PreRPCHooker[pb.MasterClient]
+	masterRPCHooker *rpcutil.PreRPCHooker[pb.MasterClient]
 
 	// sched scheduler
 	executorManager ExecutorManager
 	jobManager      JobManager
+	resourceManager *manager.Service
 	//
 	cfg     *Config
 	info    *model.NodeInfo
@@ -157,21 +160,34 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 		initialized:      *atomic.NewBool(false),
 		testCtx:          ctx,
 		leader:           atomic.Value{},
-		leaderCli:        &rpcutil.LeaderClientWithLock[pb.MasterClient]{},
+		masterCli:        &rpcutil.LeaderClientWithLock[pb.MasterClient]{},
+		resourceCli:      &rpcutil.LeaderClientWithLock[pb.ResourceManagerClient]{},
 		p2pMsgRouter:     p2pMsgRouter,
 		rpcLogRL:         rate.NewLimiter(rate.Every(time.Second*5), 3 /*burst*/),
 		metrics:          newServerMasterMetric(),
 		metaStoreManager: NewMetaStoreManager(),
 	}
 	server.leaderServiceFn = server.runLeaderService
-	preRPCHooker := rpcutil.NewPreRPCHooker[pb.MasterClient](
+	masterRPCHooker := rpcutil.NewPreRPCHooker[pb.MasterClient](
 		id,
 		&server.leader,
-		server.leaderCli,
+		server.masterCli,
 		&server.initialized,
 		server.rpcLogRL,
 	)
-	server.preRPCHooker = preRPCHooker
+	server.masterRPCHooker = masterRPCHooker
+	resourceRPCHooker := rpcutil.NewPreRPCHooker[pb.ResourceManagerClient](
+		id,
+		&server.leader,
+		server.resourceCli,
+		&server.initialized,
+		server.rpcLogRL,
+	)
+	server.resourceManager = manager.NewService(
+		server.metaKVClient, // TODO: in fact metaKVClient is not inited at this moment
+		nil,                 // TODO: implement ExecutorInfoProvider
+		resourceRPCHooker,
+	)
 
 	return server, nil
 }
@@ -179,7 +195,7 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 // Heartbeat implements pb interface.
 func (s *Server) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
 	var resp2 *pb.HeartbeatResponse
-	shouldRet, err := s.preRPCHooker.PreRPC(ctx, req, &resp2)
+	shouldRet, err := s.masterRPCHooker.PreRPC(ctx, req, &resp2)
 	if shouldRet {
 		return resp2, err
 	}
@@ -193,7 +209,7 @@ func (s *Server) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.H
 			addrs = append(addrs, member.AdvertiseAddr)
 		}
 		resp.Addrs = addrs
-		leader, exists := s.preRPCHooker.CheckLeader()
+		leader, exists := s.masterRPCHooker.CheckLeader()
 		if exists {
 			resp.Leader = leader.AdvertiseAddr
 		}
@@ -204,7 +220,7 @@ func (s *Server) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.H
 // SubmitJob passes request onto "JobManager".
 func (s *Server) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) (*pb.SubmitJobResponse, error) {
 	var resp2 *pb.SubmitJobResponse
-	shouldRet, err := s.preRPCHooker.PreRPC(ctx, req, &resp2)
+	shouldRet, err := s.masterRPCHooker.PreRPC(ctx, req, &resp2)
 	if shouldRet {
 		return resp2, err
 	}
@@ -213,7 +229,7 @@ func (s *Server) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) (*pb.S
 
 func (s *Server) QueryJob(ctx context.Context, req *pb.QueryJobRequest) (*pb.QueryJobResponse, error) {
 	var resp2 *pb.QueryJobResponse
-	shouldRet, err := s.preRPCHooker.PreRPC(ctx, req, &resp2)
+	shouldRet, err := s.masterRPCHooker.PreRPC(ctx, req, &resp2)
 	if shouldRet {
 		return resp2, err
 	}
@@ -222,7 +238,7 @@ func (s *Server) QueryJob(ctx context.Context, req *pb.QueryJobRequest) (*pb.Que
 
 func (s *Server) CancelJob(ctx context.Context, req *pb.CancelJobRequest) (*pb.CancelJobResponse, error) {
 	var resp2 *pb.CancelJobResponse
-	shouldRet, err := s.preRPCHooker.PreRPC(ctx, req, &resp2)
+	shouldRet, err := s.masterRPCHooker.PreRPC(ctx, req, &resp2)
 	if shouldRet {
 		return resp2, err
 	}
@@ -231,7 +247,7 @@ func (s *Server) CancelJob(ctx context.Context, req *pb.CancelJobRequest) (*pb.C
 
 func (s *Server) PauseJob(ctx context.Context, req *pb.PauseJobRequest) (*pb.PauseJobResponse, error) {
 	var resp2 *pb.PauseJobResponse
-	shouldRet, err := s.preRPCHooker.PreRPC(ctx, req, &resp2)
+	shouldRet, err := s.masterRPCHooker.PreRPC(ctx, req, &resp2)
 	if shouldRet {
 		return resp2, err
 	}
@@ -241,7 +257,7 @@ func (s *Server) PauseJob(ctx context.Context, req *pb.PauseJobRequest) (*pb.Pau
 // RegisterExecutor implements grpc interface, and passes request onto executor manager.
 func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorRequest) (*pb.RegisterExecutorResponse, error) {
 	var resp2 *pb.RegisterExecutorResponse
-	shouldRet, err := s.preRPCHooker.PreRPC(ctx, req, &resp2)
+	shouldRet, err := s.masterRPCHooker.PreRPC(ctx, req, &resp2)
 	if shouldRet {
 		return resp2, err
 	}
@@ -265,7 +281,7 @@ func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorR
 // - returns scheduler response to job master
 func (s *Server) ScheduleTask(ctx context.Context, req *pb.TaskSchedulerRequest) (*pb.TaskSchedulerResponse, error) {
 	var resp2 *pb.TaskSchedulerResponse
-	shouldRet, err := s.preRPCHooker.PreRPC(ctx, req, &resp2)
+	shouldRet, err := s.masterRPCHooker.PreRPC(ctx, req, &resp2)
 	if shouldRet {
 		return resp2, err
 	}
@@ -354,12 +370,11 @@ func (s *Server) Stop() {
 		s.etcdClient.Close()
 	}
 	// in some tests this fields is not initialized
-	if s.leaderCli != nil {
-		s.leaderCli.Lock()
-		if s.leaderCli.Inner != nil {
-			s.leaderCli.Inner.Close()
-		}
-		s.leaderCli.Unlock()
+	if s.masterCli != nil {
+		s.masterCli.Close()
+	}
+	if s.resourceCli != nil {
+		s.resourceCli.Close()
 	}
 	if s.etcd != nil {
 		s.etcd.Close()
@@ -470,6 +485,7 @@ func (s *Server) startGrpcSrv(ctx context.Context) (err error) {
 
 	gRPCSvr := func(gs *grpc.Server) {
 		pb.RegisterMasterServer(gs, s)
+		pb.RegisterResourceManagerServer(gs, s.resourceManager)
 		s.msgService = p2p.NewMessageRPCServiceWithRPCServer(s.name(), nil, gs)
 		p2pProtocol.RegisterCDCPeerToPeerServer(gs, s.msgService.GetMessageServer())
 	}
