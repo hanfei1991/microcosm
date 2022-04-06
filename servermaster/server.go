@@ -63,7 +63,7 @@ type Server struct {
 	resourceCli     *rpcutil.LeaderClientWithLock[pb.ResourceManagerClient]
 	membership      Membership
 	leaderServiceFn func(context.Context) error
-	masterRPCHooker *rpcutil.PreRPCHooker[pb.MasterClient]
+	masterRPCHook   *rpcutil.PreRPCHook[pb.MasterClient]
 
 	// sched scheduler
 	executorManager ExecutorManager
@@ -168,26 +168,14 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 		metaStoreManager: NewMetaStoreManager(),
 	}
 	server.leaderServiceFn = server.runLeaderService
-	masterRPCHooker := rpcutil.NewPreRPCHooker[pb.MasterClient](
+	masterRPCHook := rpcutil.NewPreRPCHook[pb.MasterClient](
 		id,
 		&server.leader,
 		server.masterCli,
 		&server.initialized,
 		server.rpcLogRL,
 	)
-	server.masterRPCHooker = masterRPCHooker
-	resourceRPCHooker := rpcutil.NewPreRPCHooker[pb.ResourceManagerClient](
-		id,
-		&server.leader,
-		server.resourceCli,
-		&server.initialized,
-		server.rpcLogRL,
-	)
-	server.resourceManager = manager.NewService(
-		server.metaKVClient, // TODO: in fact metaKVClient is not inited at this moment
-		nil,                 // TODO: implement ExecutorInfoProvider
-		resourceRPCHooker,
-	)
+	server.masterRPCHook = masterRPCHook
 
 	return server, nil
 }
@@ -195,7 +183,7 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 // Heartbeat implements pb interface.
 func (s *Server) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
 	var resp2 *pb.HeartbeatResponse
-	shouldRet, err := s.masterRPCHooker.PreRPC(ctx, req, &resp2)
+	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp2)
 	if shouldRet {
 		return resp2, err
 	}
@@ -209,7 +197,7 @@ func (s *Server) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.H
 			addrs = append(addrs, member.AdvertiseAddr)
 		}
 		resp.Addrs = addrs
-		leader, exists := s.masterRPCHooker.CheckLeader()
+		leader, exists := s.masterRPCHook.CheckLeader()
 		if exists {
 			resp.Leader = leader.AdvertiseAddr
 		}
@@ -220,7 +208,7 @@ func (s *Server) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.H
 // SubmitJob passes request onto "JobManager".
 func (s *Server) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) (*pb.SubmitJobResponse, error) {
 	var resp2 *pb.SubmitJobResponse
-	shouldRet, err := s.masterRPCHooker.PreRPC(ctx, req, &resp2)
+	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp2)
 	if shouldRet {
 		return resp2, err
 	}
@@ -229,7 +217,7 @@ func (s *Server) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) (*pb.S
 
 func (s *Server) QueryJob(ctx context.Context, req *pb.QueryJobRequest) (*pb.QueryJobResponse, error) {
 	var resp2 *pb.QueryJobResponse
-	shouldRet, err := s.masterRPCHooker.PreRPC(ctx, req, &resp2)
+	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp2)
 	if shouldRet {
 		return resp2, err
 	}
@@ -238,7 +226,7 @@ func (s *Server) QueryJob(ctx context.Context, req *pb.QueryJobRequest) (*pb.Que
 
 func (s *Server) CancelJob(ctx context.Context, req *pb.CancelJobRequest) (*pb.CancelJobResponse, error) {
 	var resp2 *pb.CancelJobResponse
-	shouldRet, err := s.masterRPCHooker.PreRPC(ctx, req, &resp2)
+	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp2)
 	if shouldRet {
 		return resp2, err
 	}
@@ -247,7 +235,7 @@ func (s *Server) CancelJob(ctx context.Context, req *pb.CancelJobRequest) (*pb.C
 
 func (s *Server) PauseJob(ctx context.Context, req *pb.PauseJobRequest) (*pb.PauseJobResponse, error) {
 	var resp2 *pb.PauseJobResponse
-	shouldRet, err := s.masterRPCHooker.PreRPC(ctx, req, &resp2)
+	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp2)
 	if shouldRet {
 		return resp2, err
 	}
@@ -257,7 +245,7 @@ func (s *Server) PauseJob(ctx context.Context, req *pb.PauseJobRequest) (*pb.Pau
 // RegisterExecutor implements grpc interface, and passes request onto executor manager.
 func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorRequest) (*pb.RegisterExecutorResponse, error) {
 	var resp2 *pb.RegisterExecutorResponse
-	shouldRet, err := s.masterRPCHooker.PreRPC(ctx, req, &resp2)
+	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp2)
 	if shouldRet {
 		return resp2, err
 	}
@@ -281,7 +269,7 @@ func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorR
 // - returns scheduler response to job master
 func (s *Server) ScheduleTask(ctx context.Context, req *pb.TaskSchedulerRequest) (*pb.TaskSchedulerResponse, error) {
 	var resp2 *pb.TaskSchedulerResponse
-	shouldRet, err := s.masterRPCHooker.PreRPC(ctx, req, &resp2)
+	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp2)
 	if shouldRet {
 		return resp2, err
 	}
@@ -400,6 +388,12 @@ func (s *Server) Run(ctx context.Context) (err error) {
 		return err
 	}
 
+	// startResourceManager should be put after registerMetaStore
+	err = s.startResourceManager()
+	if err != nil {
+		return err
+	}
+
 	err = s.startGrpcSrv(ctx)
 	if err != nil {
 		return
@@ -459,6 +453,34 @@ func (s *Server) registerMetaStore() error {
 	}
 	log.L().Info("register user metastore successfully", zap.Any("metastore", cfg.UserMetaConf))
 
+	return nil
+}
+
+func (s *Server) startResourceManager() error {
+	storeConf := s.metaStoreManager.GetMetaStore(metaclient.FrameMetaID)
+	if storeConf == nil {
+		return errors.ErrMetaStoreUnfounded.GenWithStackByArgs(metaclient.FrameMetaID)
+	}
+	frameCliEx, err := kvclient.NewKVClient(storeConf)
+	if err != nil {
+		log.L().Error("failed to connect to framework metastore", zap.Any("store-conf", storeConf), zap.Error(err))
+		return err
+	}
+	// [TODO] use FrameTenantID if support multi-tenant
+	s.metaKVClient = kvclient.NewPrefixKVClient(frameCliEx, tenant.DefaultUserTenantID)
+
+	resourceRPCHook := rpcutil.NewPreRPCHook[pb.ResourceManagerClient](
+		s.id,
+		&s.leader,
+		s.resourceCli,
+		&s.initialized,
+		s.rpcLogRL,
+	)
+	s.resourceManager = manager.NewService(
+		s.metaKVClient,
+		s.executorManager,
+		resourceRPCHook,
+	)
 	return nil
 }
 
@@ -582,13 +604,6 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	if storeConf == nil {
 		return errors.ErrMetaStoreUnfounded.GenWithStackByArgs(metaclient.FrameMetaID)
 	}
-	frameCliEx, err := kvclient.NewKVClient(storeConf)
-	if err != nil {
-		log.L().Error("failed to connect to framework metastore", zap.Any("store-conf", storeConf), zap.Error(err))
-		return err
-	}
-	// [TODO] use FrameTenantID if support multi-tenant
-	s.metaKVClient = kvclient.NewPrefixKVClient(frameCliEx, tenant.DefaultUserTenantID)
 
 	// job manager user framework metastore as user metastore
 	s.userMetaKVClient, err = kvclient.NewKVClient(storeConf)

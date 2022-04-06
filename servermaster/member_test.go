@@ -100,15 +100,15 @@ func TestUpdateServerMembers(t *testing.T) {
 		etcd:       etcd,
 		membership: &EtcdMembership{etcdCli: etcdCli},
 	}
-	preRPCHooker := rpcutil.NewPreRPCHooker[pb.MasterClient](
+	preRPCHook := rpcutil.NewPreRPCHook[pb.MasterClient](
 		id,
 		&s.leader,
 		s.masterCli,
 		&s.initialized,
 		s.rpcLogRL,
 	)
-	s.masterRPCHooker = preRPCHooker
-	leader, exists := s.masterRPCHooker.CheckLeader()
+	s.masterRPCHook = preRPCHook
+	leader, exists := s.masterRPCHook.CheckLeader()
 	require.Nil(t, leader)
 	require.False(t, exists)
 

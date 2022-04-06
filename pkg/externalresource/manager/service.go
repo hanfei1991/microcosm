@@ -38,11 +38,9 @@ type Service struct {
 
 	offlinedExecutors chan resourcemeta.ExecutorID
 
-	// TODO: maybe isAllLoaded can be moved inside preRPCHooker? If so, we should
-	// let xxxResponse has a Err member and set the error to it.
 	isAllLoaded atomic.Bool
 
-	preRPCHooker *rpcutil.PreRPCHooker[pb.ResourceManagerClient]
+	preRPCHook *rpcutil.PreRPCHook[pb.ResourceManagerClient]
 }
 
 const (
@@ -52,7 +50,7 @@ const (
 func NewService(
 	metaclient metaclient.KV,
 	executorInfoProvider ExecutorInfoProvider,
-	preRPCHooker *rpcutil.PreRPCHooker[pb.ResourceManagerClient],
+	preRPCHook *rpcutil.PreRPCHook[pb.ResourceManagerClient],
 ) *Service {
 	return &Service{
 		mu:                ctxmu.New(),
@@ -61,13 +59,13 @@ func NewService(
 		executors:         executorInfoProvider,
 		cancelCh:          make(chan struct{}),
 		offlinedExecutors: make(chan resourcemeta.ExecutorID, offlineExecutorQueueSize),
-		preRPCHooker:      preRPCHooker,
+		preRPCHook:        preRPCHook,
 	}
 }
 
 func (s *Service) QueryResource(ctx context.Context, request *pb.QueryResourceRequest) (*pb.QueryResourceResponse, error) {
 	var resp2 *pb.QueryResourceResponse
-	shouldRet, err := s.preRPCHooker.PreRPC(ctx, request, resp2)
+	shouldRet, err := s.preRPCHook.PreRPC(ctx, request, resp2)
 	if shouldRet {
 		return resp2, err
 	}
@@ -134,7 +132,7 @@ func (s *Service) CreateResource(
 	request *pb.CreateResourceRequest,
 ) (*pb.CreateResourceResponse, error) {
 	var resp2 *pb.CreateResourceResponse
-	shouldRet, err := s.preRPCHooker.PreRPC(ctx, request, resp2)
+	shouldRet, err := s.preRPCHook.PreRPC(ctx, request, resp2)
 	if shouldRet {
 		return resp2, err
 	}

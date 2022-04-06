@@ -55,14 +55,14 @@ func TestLeaderLoopSuccess(t *testing.T) {
 		leaderServiceFn: mockLeaderService,
 		info:            &model.NodeInfo{ID: model.DeployNodeID(name)},
 	}
-	preRPCHooker := rpcutil.NewPreRPCHooker[pb.MasterClient](
+	preRPCHook := rpcutil.NewPreRPCHook[pb.MasterClient](
 		s.id,
 		&s.leader,
 		s.masterCli,
 		&s.initialized,
 		s.rpcLogRL,
 	)
-	s.masterRPCHooker = preRPCHooker
+	s.masterRPCHook = preRPCHook
 	err := s.reset(ctx)
 	require.Nil(t, err)
 
@@ -110,14 +110,14 @@ func TestLeaderLoopMeetStaleData(t *testing.T) {
 		leaderServiceFn: mockLeaderService,
 		info:            &model.NodeInfo{ID: model.DeployNodeID(name)},
 	}
-	preRPCHooker := rpcutil.NewPreRPCHooker[pb.MasterClient](
+	preRPCHook := rpcutil.NewPreRPCHook[pb.MasterClient](
 		s.id,
 		&s.leader,
 		s.masterCli,
 		&s.initialized,
 		s.rpcLogRL,
 	)
-	s.masterRPCHooker = preRPCHooker
+	s.masterRPCHook = preRPCHook
 
 	// simulate stale campaign data
 	sess, err := concurrency.NewSession(client, concurrency.WithTTL(10))
@@ -180,14 +180,14 @@ func TestLeaderLoopWatchLeader(t *testing.T) {
 			info:       &model.NodeInfo{ID: model.DeployNodeID(names[i])},
 			masterCli:  &rpcutil.LeaderClientWithLock[pb.MasterClient]{},
 		}
-		preRPCHooker := rpcutil.NewPreRPCHooker[pb.MasterClient](
+		preRPCHook := rpcutil.NewPreRPCHook[pb.MasterClient](
 			s.id,
 			&s.leader,
 			s.masterCli,
 			&s.initialized,
 			s.rpcLogRL,
 		)
-		s.masterRPCHooker = preRPCHooker
+		s.masterRPCHook = preRPCHook
 		s.leaderServiceFn = mockLeaderServiceFn
 		servers = append(servers, s)
 	}
@@ -238,7 +238,7 @@ func TestLeaderLoopWatchLeader(t *testing.T) {
 		}
 		s := servers[i]
 		require.Eventually(t, func() bool {
-			member, exists := s.masterRPCHooker.CheckLeader()
+			member, exists := s.masterRPCHook.CheckLeader()
 			if !exists {
 				return false
 			}

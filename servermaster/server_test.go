@@ -261,6 +261,14 @@ func (m *mockExecutorManager) Start(ctx context.Context) {
 	panic("not implemented")
 }
 
+func (m *mockExecutorManager) HasExecutor(executorID string) bool {
+	panic("not implemented")
+}
+
+func (m *mockExecutorManager) ListExecutors() []string {
+	panic("not implemented")
+}
+
 func (m *mockExecutorManager) ExecutorCount(status model.ExecutorStatus) int {
 	m.executorMu.RLock()
 	defer m.executorMu.RUnlock()
