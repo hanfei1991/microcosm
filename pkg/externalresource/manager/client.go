@@ -23,8 +23,7 @@ var dialImpl = func(ctx context.Context, addr string) (pb.ResourceManagerClient,
 }
 
 func NewResourceClient(ctx context.Context, join []string) (*rpcutil.FailoverRPCClients[pb.ResourceManagerClient], error) {
-	dialer := dialImpl
-	clients, err := rpcutil.NewFailoverRPCClients(ctx, join, dialer)
+	clients, err := rpcutil.NewFailoverRPCClients(ctx, join, dialImpl)
 	if err != nil {
 		return nil, err
 	}

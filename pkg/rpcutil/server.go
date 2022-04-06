@@ -62,7 +62,10 @@ func (l *LeaderClientWithLock[T]) Close() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.inner != nil {
-		l.inner.Close()
+		err := l.inner.Close()
+		if err != nil {
+			log.L().Warn("close leader client failed", zap.Error(err))
+		}
 		l.inner = nil
 	}
 }
