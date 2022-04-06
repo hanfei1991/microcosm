@@ -84,10 +84,10 @@ func (jm *JobManagerImplV2) QueryJob(ctx context.Context, req *pb.QueryJobReques
 				Config: masterMeta.Config,
 			}
 			switch masterMeta.StatusCode {
-			case lib.MasterStatusFinished:
+			case libModel.MasterStatusFinished:
 				resp.Status = pb.QueryJobResponse_finished
 				return resp
-			case lib.MasterStatusStopped:
+			case libModel.MasterStatusStopped:
 				resp.Status = pb.QueryJobResponse_stopped
 				return resp
 			default:
@@ -112,12 +112,12 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 		err error
 	)
 
-	meta := &lib.MasterMetaKVData{
+	meta := &libModel.MasterMetaKVData{
 		// TODO: we can use job name provided from user, but we must check the
 		// job name is unique before using it.
 		ID:         jm.uuidGen.NewString(),
 		Config:     req.Config,
-		StatusCode: lib.MasterStatusUninit,
+		StatusCode: libModel.MasterStatusUninit,
 	}
 	switch req.Tp {
 	case pb.JobType_CVSDemo:
@@ -157,7 +157,7 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 		return resp
 	}
 
-	jm.JobFsm.JobDispatched(meta)
+	jm.JobFsm.JobDispatched(meta, false /*addFromFailover*/)
 	resp.JobIdStr = id
 	return resp
 }
@@ -190,7 +190,7 @@ func NewJobManagerImplV2(
 	// every time a new server master leader is elected. And we always mark the
 	// Initialized to true in order to trigger OnMasterRecovered of job manager.
 	meta := impl.MasterMeta()
-	meta.StatusCode = lib.MasterStatusInit
+	meta.StatusCode = libModel.MasterStatusInit
 	err = metadata.StoreMasterMeta(dctx, impl.BaseMaster.MetaKVClient(), meta)
 	if err != nil {
 		return nil, err
@@ -210,7 +210,7 @@ func (jm *JobManagerImplV2) InitImpl(ctx context.Context) error {
 // Tick implements lib.MasterImpl.Tick
 func (jm *JobManagerImplV2) Tick(ctx context.Context) error {
 	err := jm.JobFsm.IterPendingJobs(
-		func(job *lib.MasterMetaKVData) (string, error) {
+		func(job *libModel.MasterMetaKVData) (string, error) {
 			return jm.BaseMaster.CreateWorker(
 				job.Tp, job, defaultJobMasterCost)
 		})
@@ -219,7 +219,7 @@ func (jm *JobManagerImplV2) Tick(ctx context.Context) error {
 	}
 
 	err = jm.JobFsm.IterWaitAckJobs(
-		func(job *lib.MasterMetaKVData) (string, error) {
+		func(job *libModel.MasterMetaKVData) (string, error) {
 			return jm.BaseMaster.CreateWorker(
 				job.Tp, job, defaultJobMasterCost)
 		})
@@ -237,11 +237,14 @@ func (jm *JobManagerImplV2) OnMasterRecovered(ctx context.Context) error {
 		return err
 	}
 	for _, job := range jobs {
-		if job.StatusCode == lib.MasterStatusFinished || job.StatusCode == lib.MasterStatusStopped {
+		if job.Tp == lib.JobManager {
+			continue
+		}
+		if job.StatusCode == libModel.MasterStatusFinished || job.StatusCode == libModel.MasterStatusStopped {
 			log.L().Info("skip finished or stopped job", zap.Any("job", job))
 			continue
 		}
-		jm.JobFsm.JobDispatched(job)
+		jm.JobFsm.JobDispatched(job, true /*addFromFailover*/)
 		log.L().Info("recover job, move it to WaitAck job queue", zap.Any("job", job))
 	}
 	return nil

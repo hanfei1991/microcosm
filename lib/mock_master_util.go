@@ -56,7 +56,7 @@ func MockBaseMaster(id MasterID, masterImpl MasterImpl) *DefaultBaseMaster {
 func MockBaseMasterCreateWorker(
 	t *testing.T,
 	master *DefaultBaseMaster,
-	workerType WorkerType,
+	workerType libModel.WorkerType,
 	config WorkerConfig,
 	cost model.RescUnit,
 	masterID MasterID,
@@ -110,7 +110,7 @@ func MockBaseMasterCreateWorker(
 func MockBaseMasterCreateWorkerMetScheduleTaskError(
 	t *testing.T,
 	master *DefaultBaseMaster,
-	workerType WorkerType,
+	workerType libModel.WorkerType,
 	config WorkerConfig,
 	cost model.RescUnit,
 	masterID MasterID,

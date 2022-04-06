@@ -37,10 +37,10 @@ type dummyConfig struct {
 
 func prepareMeta(ctx context.Context, t *testing.T, metaclient metaclient.KVClient) {
 	masterKey := adapter.MasterMetaKey.Encode(masterName)
-	masterInfo := &MasterMetaKVData{
+	masterInfo := &libModel.MasterMetaKVData{
 		ID:         masterName,
 		NodeID:     masterNodeName,
-		StatusCode: MasterStatusUninit,
+		StatusCode: libModel.MasterStatusUninit,
 	}
 	masterInfoBytes, err := json.Marshal(masterInfo)
 	require.NoError(t, err)
@@ -65,10 +65,10 @@ func TestMasterInit(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, resp.Kvs, 1)
 
-	var masterData MasterMetaKVData
+	var masterData libModel.MasterMetaKVData
 	err = json.Unmarshal(resp.Kvs[0].Value, &masterData)
 	require.NoError(t, err)
-	require.Equal(t, MasterStatusInit, masterData.StatusCode)
+	require.Equal(t, libModel.MasterStatusInit, masterData.StatusCode)
 
 	master.On("CloseImpl", mock.Anything).Return(nil)
 	err = master.Close(ctx)
@@ -272,14 +272,14 @@ func TestPrepareWorkerConfig(t *testing.T) {
 	fakeWorkerID := "worker-1"
 	master.uuidGen.(*uuid.MockGenerator).Push(fakeWorkerID)
 	testCases := []struct {
-		workerType WorkerType
+		workerType libModel.WorkerType
 		config     WorkerConfig
 		// expected return result
 		rawConfig []byte
 		workerID  string
 	}{
 		{
-			FakeJobMaster, &MasterMetaKVData{ID: "master-1", Config: fakeCfgBytes},
+			FakeJobMaster, &libModel.MasterMetaKVData{ID: "master-1", Config: fakeCfgBytes},
 			fakeCfgBytes, "master-1",
 		},
 		{

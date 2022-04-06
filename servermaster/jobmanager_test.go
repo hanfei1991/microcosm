@@ -10,6 +10,7 @@ import (
 
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/lib/metadata"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
@@ -68,8 +69,8 @@ func TestJobManagerPauseJob(t *testing.T) {
 	}
 
 	pauseWorkerID := "pause-worker-id"
-	meta := &lib.MasterMetaKVData{ID: pauseWorkerID}
-	mgr.JobFsm.JobDispatched(meta)
+	meta := &libModel.MasterMetaKVData{ID: pauseWorkerID}
+	mgr.JobFsm.JobDispatched(meta, false)
 
 	mockWorkerHandler := &lib.MockWorkerHandler{WorkerID: pauseWorkerID}
 	mockWorkerHandler.On("SendMessage",
@@ -96,22 +97,22 @@ func TestJobManagerQueryJob(t *testing.T) {
 	defer cancel()
 
 	testCases := []struct {
-		meta             *lib.MasterMetaKVData
+		meta             *libModel.MasterMetaKVData
 		expectedPBStatus pb.QueryJobResponse_JobStatus
 	}{
 		{
-			&lib.MasterMetaKVData{
+			&libModel.MasterMetaKVData{
 				ID:         "master-1",
 				Tp:         lib.FakeJobMaster,
-				StatusCode: lib.MasterStatusFinished,
+				StatusCode: libModel.MasterStatusFinished,
 			},
 			pb.QueryJobResponse_finished,
 		},
 		{
-			&lib.MasterMetaKVData{
+			&libModel.MasterMetaKVData{
 				ID:         "master-2",
 				Tp:         lib.FakeJobMaster,
-				StatusCode: lib.MasterStatusStopped,
+				StatusCode: libModel.MasterStatusStopped,
 			},
 			pb.QueryJobResponse_stopped,
 		},
@@ -187,7 +188,7 @@ func TestJobManagerRecover(t *testing.T) {
 
 	// prepare mockvk with two job masters
 	metaKVClient := mockkv.NewMetaMock()
-	meta := []*lib.MasterMetaKVData{
+	meta := []*libModel.MasterMetaKVData{
 		{
 			ID: "master-1",
 			Tp: lib.FakeJobMaster,

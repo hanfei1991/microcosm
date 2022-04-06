@@ -4,10 +4,11 @@ import (
 	"context"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/hanfei1991/microcosm/jobmaster/dm/config"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	"github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
-	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -47,27 +48,27 @@ func TestJobStore(t *testing.T) {
 	require.Len(t, job.Tasks, len(jobCfg.Upstreams))
 	require.Contains(t, job.Tasks, source1)
 	require.Contains(t, job.Tasks, source1)
-	require.Equal(t, job.Tasks[source1].Stage, StageInit)
-	require.Equal(t, job.Tasks[source2].Stage, StageInit)
+	require.Equal(t, job.Tasks[source1].Stage, StageRunning)
+	require.Equal(t, job.Tasks[source2].Stage, StageRunning)
 
 	require.Error(t, jobStore.UpdateStages(context.Background(), []string{"task-not-exist"}, StageRunning))
 	require.Error(t, jobStore.UpdateStages(context.Background(), []string{source1, "task-not-exist"}, StageRunning))
 	state, _ = jobStore.Get(context.Background())
 	job = state.(*Job)
-	require.Equal(t, job.Tasks[source1].Stage, StageInit)
-	require.Equal(t, job.Tasks[source2].Stage, StageInit)
-
-	require.NoError(t, jobStore.UpdateStages(context.Background(), []string{source1, source2}, StageRunning))
-	require.Equal(t, job.Tasks[source1].Stage, StageInit)
-	require.Equal(t, job.Tasks[source2].Stage, StageInit)
-	state, _ = jobStore.Get(context.Background())
-	job = state.(*Job)
 	require.Equal(t, job.Tasks[source1].Stage, StageRunning)
 	require.Equal(t, job.Tasks[source2].Stage, StageRunning)
 
-	require.NoError(t, jobStore.UpdateStages(context.Background(), []string{source2}, StageFinished))
+	require.NoError(t, jobStore.UpdateStages(context.Background(), []string{source1, source2}, StagePaused))
+	require.Equal(t, job.Tasks[source1].Stage, StageRunning)
+	require.Equal(t, job.Tasks[source2].Stage, StageRunning)
 	state, _ = jobStore.Get(context.Background())
 	job = state.(*Job)
-	require.Equal(t, job.Tasks[source1].Stage, StageRunning)
-	require.Equal(t, job.Tasks[source2].Stage, StageFinished)
+	require.Equal(t, job.Tasks[source1].Stage, StagePaused)
+	require.Equal(t, job.Tasks[source2].Stage, StagePaused)
+
+	require.NoError(t, jobStore.UpdateStages(context.Background(), []string{source2}, StageRunning))
+	state, _ = jobStore.Get(context.Background())
+	job = state.(*Job)
+	require.Equal(t, job.Tasks[source1].Stage, StagePaused)
+	require.Equal(t, job.Tasks[source2].Stage, StageRunning)
 }

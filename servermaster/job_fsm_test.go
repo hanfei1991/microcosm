@@ -16,14 +16,14 @@ func TestJobFsmStateTrans(t *testing.T) {
 	fsm := NewJobFsm()
 
 	id := "fsm-test-job-master-1"
-	job := &lib.MasterMetaKVData{
+	job := &libModel.MasterMetaKVData{
 		ID:     id,
 		Config: []byte("simple config"),
 	}
 	worker := lib.NewTombstoneWorkerHandle(id, libModel.WorkerStatus{Code: libModel.WorkerStatusNormal}, nil)
 
 	// create new job, enter into WaitAckack job queue
-	fsm.JobDispatched(job)
+	fsm.JobDispatched(job, false)
 	require.Equal(t, 1, fsm.JobCount(pb.QueryJobResponse_dispatched))
 
 	// OnWorkerOnline, WaitAck -> Online
@@ -38,8 +38,8 @@ func TestJobFsmStateTrans(t *testing.T) {
 	require.Equal(t, 1, fsm.JobCount(pb.QueryJobResponse_pending))
 
 	// Tick, process pending jobs, Pending -> WaitAck
-	dispatchedJobs := make([]*lib.MasterMetaKVData, 0)
-	err = fsm.IterPendingJobs(func(job *lib.MasterMetaKVData) (string, error) {
+	dispatchedJobs := make([]*libModel.MasterMetaKVData, 0)
+	err = fsm.IterPendingJobs(func(job *libModel.MasterMetaKVData) (string, error) {
 		dispatchedJobs = append(dispatchedJobs, job)
 		return id, nil
 	})
@@ -54,7 +54,7 @@ func TestJobFsmStateTrans(t *testing.T) {
 	require.Equal(t, 0, fsm.JobCount(pb.QueryJobResponse_dispatched))
 
 	// Tick, Pending -> WaitAck
-	err = fsm.IterPendingJobs(func(job *lib.MasterMetaKVData) (string, error) {
+	err = fsm.IterPendingJobs(func(job *libModel.MasterMetaKVData) (string, error) {
 		return id, nil
 	})
 	require.Nil(t, err)

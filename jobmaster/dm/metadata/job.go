@@ -3,11 +3,12 @@ package metadata
 import (
 	"context"
 
+	"github.com/pingcap/errors"
+
 	"github.com/hanfei1991/microcosm/jobmaster/dm/config"
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
-	"github.com/pingcap/errors"
 )
 
 // TODO: use Stage in lib or move Stage to lib.
@@ -19,7 +20,9 @@ const (
 	StageRunning
 	StagePaused
 	StageFinished
-	StageDelete
+	// UnScheduled means the task is not scheduled.
+	// This usually happens when the worker is offline.
+	StageUnscheduled
 )
 
 // Job represents the state of a job.
@@ -51,7 +54,7 @@ type Task struct {
 func NewTask(taskCfg *config.TaskCfg) *Task {
 	return &Task{
 		Cfg:   taskCfg,
-		Stage: StageInit,
+		Stage: StageRunning, // TODO: support set stage when create task.
 	}
 }
 

@@ -21,7 +21,7 @@ type BaseJobMaster interface {
 	OnError(err error)
 	MetaKVClient() metaclient.KVClient
 	GetWorkers() map[WorkerID]WorkerHandle
-	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error)
+	CreateWorker(workerType libModel.WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error)
 	Workload() model.RescUnit
 	JobMasterID() MasterID
 	ID() worker.RunnableID
@@ -113,7 +113,7 @@ func (d *DefaultBaseJobMaster) Init(ctx context.Context) error {
 		if err := d.impl.InitImpl(ctx); err != nil {
 			return errors.Trace(err)
 		}
-		if err := d.master.markStatusCodeInMetadata(ctx, MasterStatusInit); err != nil {
+		if err := d.master.markStatusCodeInMetadata(ctx, libModel.MasterStatusInit); err != nil {
 			return errors.Trace(err)
 		}
 	} else {
@@ -165,7 +165,7 @@ func (d *DefaultBaseJobMaster) OnError(err error) {
 	d.master.OnError(err)
 }
 
-func (d *DefaultBaseJobMaster) CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error) {
+func (d *DefaultBaseJobMaster) CreateWorker(workerType libModel.WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error) {
 	return d.master.CreateWorker(workerType, config, cost)
 }
 
@@ -209,9 +209,9 @@ func (d *DefaultBaseJobMaster) Exit(ctx context.Context, status libModel.WorkerS
 	var err1 error
 	switch status.Code {
 	case libModel.WorkerStatusFinished:
-		err1 = d.master.markStatusCodeInMetadata(ctx, MasterStatusFinished)
+		err1 = d.master.markStatusCodeInMetadata(ctx, libModel.MasterStatusFinished)
 	case libModel.WorkerStatusStopped:
-		err1 = d.master.markStatusCodeInMetadata(ctx, MasterStatusStopped)
+		err1 = d.master.markStatusCodeInMetadata(ctx, libModel.MasterStatusStopped)
 	}
 	if err1 != nil {
 		return err1

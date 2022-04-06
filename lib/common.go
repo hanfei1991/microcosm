@@ -1,7 +1,6 @@
 package lib
 
 import (
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -13,26 +12,14 @@ import (
 )
 
 type (
-	WorkerType int64
-
-	MasterStatusCode int32
-
 	Epoch        = model.Epoch
 	WorkerConfig = interface{}
 	MasterID     = model.MasterID
 	WorkerID     = model.WorkerID
 )
 
-// Job master statuses
 const (
-	MasterStatusUninit = MasterStatusCode(iota + 1)
-	MasterStatusInit
-	MasterStatusFinished
-	MasterStatusStopped
-)
-
-const (
-	JobManager = WorkerType(iota + 1)
+	JobManager = model.WorkerType(iota + 1)
 	// job master
 	CvsJobMaster
 	FakeJobMaster
@@ -106,29 +93,6 @@ type StatusChangeRequest struct {
 	FromMasterID MasterID               `json:"from-master-id"`
 	Epoch        Epoch                  `json:"epoch"`
 	ExpectState  model.WorkerStatusCode `json:"expect-state"`
-}
-
-type (
-	MasterMetaKVData struct {
-		ID         MasterID         `json:"id"`
-		Addr       string           `json:"addr"`
-		NodeID     p2p.NodeID       `json:"node-id"`
-		Epoch      Epoch            `json:"epoch"`
-		StatusCode MasterStatusCode `json:"status"`
-		Tp         WorkerType       `json:"type"`
-
-		// Config holds business-specific data
-		Config []byte `json:"config"`
-		// TODO: add master status and checkpoint data
-	}
-)
-
-func (m *MasterMetaKVData) Marshal() ([]byte, error) {
-	return json.Marshal(m)
-}
-
-func (m *MasterMetaKVData) Unmarshal(data []byte) error {
-	return json.Unmarshal(data, m)
 }
 
 type WorkerMetaKVData struct {

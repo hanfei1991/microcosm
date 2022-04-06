@@ -22,7 +22,7 @@ var (
 	_ runtime.Runnable = (Worker)(nil)
 )
 
-func putMasterMeta(ctx context.Context, t *testing.T, metaclient metaclient.KVClient, metaData *MasterMetaKVData) {
+func putMasterMeta(ctx context.Context, t *testing.T, metaclient metaclient.KVClient, metaData *libModel.MasterMetaKVData) {
 	masterKey := adapter.MasterMetaKey.Encode(masterName)
 	masterInfoBytes, err := json.Marshal(metaData)
 	require.NoError(t, err)
@@ -39,11 +39,11 @@ func TestWorkerInitAndClose(t *testing.T) {
 	worker := newMockWorkerImpl(workerID1, masterName)
 	worker.clock = clock.NewMock()
 	worker.clock.(*clock.Mock).Set(time.Now())
-	putMasterMeta(ctx, t, worker.metaKVClient, &MasterMetaKVData{
+	putMasterMeta(ctx, t, worker.metaKVClient, &libModel.MasterMetaKVData{
 		ID:         masterName,
 		NodeID:     masterNodeName,
 		Epoch:      1,
-		StatusCode: MasterStatusInit,
+		StatusCode: libModel.MasterStatusInit,
 	})
 
 	worker.On("InitImpl", mock.Anything).Return(nil)
@@ -107,11 +107,11 @@ func TestWorkerHeartbeatPingPong(t *testing.T) {
 	worker := newMockWorkerImpl(workerID1, masterName)
 	worker.clock = clock.NewMock()
 	worker.clock.(*clock.Mock).Set(time.Now())
-	putMasterMeta(ctx, t, worker.metaKVClient, &MasterMetaKVData{
+	putMasterMeta(ctx, t, worker.metaKVClient, &libModel.MasterMetaKVData{
 		ID:         masterName,
 		NodeID:     masterNodeName,
 		Epoch:      1,
-		StatusCode: MasterStatusInit,
+		StatusCode: libModel.MasterStatusInit,
 	})
 
 	worker.On("InitImpl", mock.Anything).Return(nil)
@@ -164,11 +164,11 @@ func TestWorkerMasterFailover(t *testing.T) {
 	worker := newMockWorkerImpl(workerID1, masterName)
 	worker.clock = clock.NewMock()
 	worker.clock.(*clock.Mock).Set(time.Now())
-	putMasterMeta(ctx, t, worker.metaKVClient, &MasterMetaKVData{
+	putMasterMeta(ctx, t, worker.metaKVClient, &libModel.MasterMetaKVData{
 		ID:         masterName,
 		NodeID:     masterNodeName,
 		Epoch:      1,
-		StatusCode: MasterStatusInit,
+		StatusCode: libModel.MasterStatusInit,
 	})
 
 	worker.On("InitImpl", mock.Anything).Return(nil)
@@ -201,11 +201,11 @@ func TestWorkerMasterFailover(t *testing.T) {
 	masterAckedTimeAfterPing := worker.masterClient.getLastMasterAckedPingTime()
 
 	worker.clock.(*clock.Mock).Add(time.Second * 1)
-	putMasterMeta(ctx, t, worker.metaKVClient, &MasterMetaKVData{
+	putMasterMeta(ctx, t, worker.metaKVClient, &libModel.MasterMetaKVData{
 		ID:         masterName,
 		NodeID:     executorNodeID3,
 		Epoch:      2,
-		StatusCode: MasterStatusInit,
+		StatusCode: libModel.MasterStatusInit,
 	})
 
 	worker.On("OnMasterFailover", mock.Anything).Return(nil)
@@ -227,11 +227,11 @@ func TestWorkerStatus(t *testing.T) {
 	worker := newMockWorkerImpl(workerID1, masterName)
 	worker.clock = clock.NewMock()
 	worker.clock.(*clock.Mock).Set(time.Now())
-	putMasterMeta(ctx, t, worker.metaKVClient, &MasterMetaKVData{
+	putMasterMeta(ctx, t, worker.metaKVClient, &libModel.MasterMetaKVData{
 		ID:         masterName,
 		NodeID:     masterNodeName,
 		Epoch:      1,
-		StatusCode: MasterStatusInit,
+		StatusCode: libModel.MasterStatusInit,
 	})
 
 	worker.On("InitImpl", mock.Anything).Return(nil)
@@ -285,11 +285,11 @@ func TestWorkerSuicide(t *testing.T) {
 	worker := newMockWorkerImpl(workerID1, masterName)
 	worker.clock = clock.NewMock()
 	worker.clock.(*clock.Mock).Set(time.Now())
-	putMasterMeta(ctx, t, worker.metaKVClient, &MasterMetaKVData{
+	putMasterMeta(ctx, t, worker.metaKVClient, &libModel.MasterMetaKVData{
 		ID:         masterName,
 		NodeID:     masterNodeName,
 		Epoch:      1,
-		StatusCode: MasterStatusInit,
+		StatusCode: libModel.MasterStatusInit,
 	})
 
 	worker.On("InitImpl", mock.Anything).Return(nil)

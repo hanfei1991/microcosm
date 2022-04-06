@@ -7,9 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hanfei1991/microcosm/lib/metadata"
-	libModel "github.com/hanfei1991/microcosm/lib/model"
-
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -20,7 +17,8 @@ import (
 
 	"github.com/hanfei1991/microcosm/client"
 	runtime "github.com/hanfei1991/microcosm/executor/worker"
-	"github.com/hanfei1991/microcosm/lib/quota"
+	"github.com/hanfei1991/microcosm/lib/metadata"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/statusutil"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
@@ -32,6 +30,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/meta/kvclient"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
+	"github.com/hanfei1991/microcosm/pkg/quota"
 	"github.com/hanfei1991/microcosm/pkg/tenant"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
 )
@@ -74,8 +73,9 @@ type MasterImpl interface {
 }
 
 const (
-	createWorkerTimeout        = 10 * time.Second
-	maxCreateWorkerConcurrency = 100
+	createWorkerWaitQuotaTimeout = 5 * time.Second
+	createWorkerTimeout          = 10 * time.Second
+	maxCreateWorkerConcurrency   = 100
 )
 
 type BaseMaster interface {
@@ -83,14 +83,14 @@ type BaseMaster interface {
 	MetaKVClient() metaclient.KVClient
 	Init(ctx context.Context) error
 	Poll(ctx context.Context) error
-	MasterMeta() *MasterMetaKVData
+	MasterMeta() *libModel.MasterMetaKVData
 	MasterID() MasterID
 	GetWorkers() map[WorkerID]WorkerHandle
 	IsMasterReady() bool
 	Close(ctx context.Context) error
 	OnError(err error)
 	// CreateWorker registers worker handler and dispatches worker to executor
-	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error)
+	CreateWorker(workerType libModel.WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error)
 }
 
 type DefaultBaseMaster struct {
@@ -125,7 +125,7 @@ type DefaultBaseMaster struct {
 	advertiseAddr string
 	nodeID        p2p.NodeID
 	timeoutConfig TimeoutConfig
-	masterMeta    *MasterMetaKVData
+	masterMeta    *libModel.MasterMetaKVData
 
 	// user metastore prefix kvclient
 	// Don't close it. It's just a prefix wrapper for underlying userRawKVClient
@@ -162,7 +162,7 @@ func NewBaseMaster(
 	var (
 		nodeID        p2p.NodeID
 		advertiseAddr string
-		masterMeta    = &MasterMetaKVData{}
+		masterMeta    = &libModel.MasterMetaKVData{}
 		params        masterParams
 	)
 	if ctx != nil {
@@ -230,7 +230,7 @@ func (m *DefaultBaseMaster) Init(ctx context.Context) error {
 		}
 	}
 
-	if err := m.markStatusCodeInMetadata(ctx, MasterStatusInit); err != nil {
+	if err := m.markStatusCodeInMetadata(ctx, libModel.MasterStatusInit); err != nil {
 		return errors.Trace(err)
 	}
 	return nil
@@ -339,7 +339,7 @@ func (m *DefaultBaseMaster) doPoll(ctx context.Context) error {
 	return nil
 }
 
-func (m *DefaultBaseMaster) MasterMeta() *MasterMetaKVData {
+func (m *DefaultBaseMaster) MasterMeta() *libModel.MasterMetaKVData {
 	return m.masterMeta
 }
 
@@ -487,13 +487,13 @@ func (m *DefaultBaseMaster) refreshMetadata(ctx context.Context) (isInit bool, e
 
 	m.masterMeta = masterMeta
 	// isInit true means the master is created but has not been initialized.
-	isInit = masterMeta.StatusCode == MasterStatusUninit
+	isInit = masterMeta.StatusCode == libModel.MasterStatusUninit
 
 	return
 }
 
 func (m *DefaultBaseMaster) markStatusCodeInMetadata(
-	ctx context.Context, code MasterStatusCode,
+	ctx context.Context, code libModel.MasterStatusCode,
 ) error {
 	metaClient := metadata.NewMasterMetadataClient(m.id, m.metaKVClient)
 	masterMeta, err := metaClient.Load(ctx)
@@ -511,11 +511,11 @@ func (m *DefaultBaseMaster) markStatusCodeInMetadata(
 // - If workerType is worker type, the config is a user defined config struct, we
 //   marshal it to byte slice as returned config, and generate a random WorkerID.
 func (m *DefaultBaseMaster) prepareWorkerConfig(
-	workerType WorkerType, config WorkerConfig,
+	workerType libModel.WorkerType, config WorkerConfig,
 ) (rawConfig []byte, workerID WorkerID, err error) {
 	switch workerType {
 	case CvsJobMaster, FakeJobMaster, DMJobMaster:
-		masterMeta, ok := config.(*MasterMetaKVData)
+		masterMeta, ok := config.(*libModel.MasterMetaKVData)
 		if !ok {
 			err = derror.ErrMasterInvalidMeta.GenWithStackByArgs(config)
 			return
@@ -540,14 +540,16 @@ func (m *DefaultBaseMaster) prepareWorkerConfig(
 	return
 }
 
-func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error) {
+func (m *DefaultBaseMaster) CreateWorker(workerType libModel.WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error) {
 	log.L().Info("CreateWorker",
 		zap.Int64("worker-type", int64(workerType)),
 		zap.Any("worker-config", config),
 		zap.String("master-id", m.id))
 
-	if !m.createWorkerQuota.TryConsume() {
-		return "", derror.ErrMasterConcurrencyExceeded.GenWithStackByArgs()
+	quotaCtx, cancel := context.WithTimeout(context.Background(), createWorkerWaitQuotaTimeout)
+	defer cancel()
+	if err := m.createWorkerQuota.Consume(quotaCtx); err != nil {
+		return "", derror.ErrMasterConcurrencyExceeded.Wrap(err)
 	}
 
 	configBytes, workerID, err := m.prepareWorkerConfig(workerType, config)

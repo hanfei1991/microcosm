@@ -71,8 +71,9 @@ type BaseWorker interface {
 	UpdateStatus(ctx context.Context, status libModel.WorkerStatus) error
 	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) (bool, error)
 	OpenStorage(ctx context.Context, resourcePath resourcemeta.ResourceID) (broker.Handle, error)
-	// Exit should be called when worker (in user logic) wants to exit
-	// Worker should update its worker status code to correct value before calling Exit
+	// Exit should be called when worker (in user logic) wants to exit.
+	// When `err` is not nil, the status code is assigned WorkerStatusError.
+	// Otherwise worker should set its status code to a meaningful value.
 	Exit(ctx context.Context, status libModel.WorkerStatus, err error) error
 }
 
@@ -402,7 +403,16 @@ func (w *DefaultBaseWorker) runWatchDog(ctx context.Context) error {
 	}
 }
 
-func (w *DefaultBaseWorker) initMessageHandlers(ctx context.Context) error {
+func (w *DefaultBaseWorker) initMessageHandlers(ctx context.Context) (retErr error) {
+	defer func() {
+		if retErr != nil {
+			if err := w.messageHandlerManager.Clean(context.Background()); err != nil {
+				log.L().Warn("Failed to clean up message handlers",
+					zap.String("master-id", w.masterID),
+					zap.String("worker-id", w.id))
+			}
+		}
+	}()
 	topic := HeartbeatPongTopic(w.masterClient.MasterID(), w.id)
 	ok, err := w.messageHandlerManager.RegisterHandler(
 		ctx,

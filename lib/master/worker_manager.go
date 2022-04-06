@@ -279,7 +279,6 @@ func (m *WorkerManager) runBackgroundChecker() error {
 							return err
 						}
 					}
-
 				}
 
 				continue

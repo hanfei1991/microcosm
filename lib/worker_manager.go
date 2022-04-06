@@ -491,6 +491,13 @@ func (m *workerManagerImpl) MessageSender() p2p.MessageSender {
 }
 
 func (m *workerManagerImpl) GetWorkerHandle(id WorkerID) WorkerHandle {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return m.getWorkerHandle(id)
+}
+
+func (m *workerManagerImpl) getWorkerHandle(id WorkerID) WorkerHandle {
 	if _, exists := m.workerInfos[id]; exists {
 		return &workerHandleImpl{
 			manager: m,
@@ -512,7 +519,7 @@ func (m *workerManagerImpl) GetWorkers() map[WorkerID]WorkerHandle {
 
 	ret := make(map[WorkerID]WorkerHandle)
 	for workerID := range m.workerInfos {
-		ret[workerID] = m.GetWorkerHandle(workerID)
+		ret[workerID] = m.getWorkerHandle(workerID)
 	}
 
 	for workerID, status := range m.tombstones {
