@@ -19,7 +19,7 @@ type workerEntry struct {
 
 	mu          sync.Mutex
 	ExpireAt    time.Time
-	IsTombstone bool
+	isTombstone bool
 
 	statusReaderMu sync.RWMutex
 	statusReader   *statusutil.Reader
@@ -42,7 +42,7 @@ func newWorkerEntry(
 		ID:           id,
 		ExecutorID:   executorID,
 		ExpireAt:     expireAt,
-		IsTombstone:  isTombstone,
+		isTombstone:  isTombstone,
 		statusReader: stReader,
 	}
 }
@@ -58,7 +58,11 @@ func (e *workerEntry) MarkAsTombstone() {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	e.IsTombstone = true
+	e.isTombstone = true
+}
+
+func (e *workerEntry) IsTombstone() bool {
+	return e.isTombstone
 }
 
 func (e *workerEntry) StatusReader() *statusutil.Reader {

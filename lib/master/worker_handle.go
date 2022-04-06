@@ -3,6 +3,9 @@ package master
 import (
 	"context"
 
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/zap"
+
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
@@ -24,28 +27,41 @@ type RunningWorkerHandle struct {
 }
 
 func (h *RunningWorkerHandle) Status() *libModel.WorkerStatus {
-	// TODO implement me
-	panic("implement me")
+	h.manager.mu.Lock()
+	defer h.manager.mu.Unlock()
+
+	entry, exists := h.manager.workerEntries[h.workerID]
+	if !exists {
+		log.L().Panic("Using a stale handle", zap.String("worker-id", h.workerID))
+	}
+
+	return entry.StatusReader().Status()
 }
 
 func (h *RunningWorkerHandle) ID() libModel.WorkerID {
-	// TODO implement me
-	panic("implement me")
+	return h.workerID
 }
 
 func (h *RunningWorkerHandle) GetTombstone() *TombstoneHandle {
-	// TODO implement me
-	panic("implement me")
+	return nil
 }
 
 func (h *RunningWorkerHandle) Unwrap() *RunningWorkerHandle {
-	// TODO implement me
-	panic("implement me")
+	return h
 }
 
 func (h *RunningWorkerHandle) ToPB() (*pb.WorkerInfo, error) {
-	// TODO implement me
-	panic("implement me")
+	statusBytes, err := h.Status().Marshal()
+	if err != nil {
+		return nil, err
+	}
+
+	ret := &pb.WorkerInfo{
+		Id:         h.workerID,
+		ExecutorId: string(h.executorID),
+		Status:     statusBytes,
+	}
+	return ret, nil
 }
 
 func (h *RunningWorkerHandle) SendMessage(
@@ -72,27 +88,30 @@ type TombstoneHandle struct {
 	manager  *WorkerManager
 }
 
-func (t TombstoneHandle) Status() *libModel.WorkerStatus {
-	// TODO implement me
-	panic("implement me")
+func (h *TombstoneHandle) Status() *libModel.WorkerStatus {
+	h.manager.mu.Lock()
+	defer h.manager.mu.Unlock()
+
+	entry, exists := h.manager.workerEntries[h.workerID]
+	if !exists {
+		log.L().Panic("Using a stale handle", zap.String("worker-id", h.workerID))
+	}
+
+	return entry.StatusReader().Status()
 }
 
-func (t TombstoneHandle) ID() libModel.WorkerID {
-	// TODO implement me
-	panic("implement me")
+func (h *TombstoneHandle) ID() libModel.WorkerID {
+	return h.workerID
 }
 
-func (t TombstoneHandle) GetTombstone() *TombstoneHandle {
-	// TODO implement me
-	panic("implement me")
+func (h *TombstoneHandle) GetTombstone() *TombstoneHandle {
+	return h
 }
 
-func (t TombstoneHandle) Unwrap() *RunningWorkerHandle {
-	// TODO implement me
-	panic("implement me")
+func (h *TombstoneHandle) Unwrap() *RunningWorkerHandle {
+	return nil
 }
 
-func (t TombstoneHandle) ToPB() (*pb.WorkerInfo, error) {
-	// TODO implement me
-	panic("implement me")
+func (h *TombstoneHandle) ToPB() (*pb.WorkerInfo, error) {
+	return nil, nil
 }

@@ -31,9 +31,9 @@ type WorkerManager struct {
 	masterID libModel.MasterID
 	epoch    libModel.Epoch
 
-	onWorkerOnlined       func(ctx context.Context, handle WorkerHandle)
-	onWorkerOfflined      func(ctx context.Context, handle WorkerHandle)
-	onWorkerStatusUpdated func(ctx context.Context, handle WorkerHandle)
+	onWorkerOnlined       Callback
+	onWorkerOfflined      Callback
+	onWorkerStatusUpdated Callback
 
 	eventQueue chan *masterEvent
 	closeCh    chan struct{}
@@ -53,11 +53,44 @@ const (
 	workerManagerWaitingHeartbeat
 )
 
-func NewWorkerManager(meta metaclient.KVClient, masterID libModel.MasterID) *WorkerManager {
-	ret := &WorkerManager{
-		workerMetaClient: metadata.NewWorkerMetadataClient(masterID, meta),
-		eventQueue:       make(chan *masterEvent, 1024),
+type Callback = func(ctx context.Context, handle WorkerHandle)
+
+func NewWorkerManager(
+	masterID libModel.MasterID,
+	epoch libModel.Epoch,
+	meta metaclient.KVClient,
+	messageSender p2p.MessageSender,
+	onWorkerOnline Callback,
+	onWorkerOffline Callback,
+	onWorkerStatusUpdated Callback,
+	isInit bool,
+) *WorkerManager {
+	state := workerManagerReady
+	if !isInit {
+		state = workerManagerWaitingHeartbeat
 	}
+
+	ret := &WorkerManager{
+		workerEntries: make(map[libModel.WorkerID]*workerEntry),
+		state:         state,
+
+		workerMetaClient: metadata.NewWorkerMetadataClient(masterID, meta),
+		messageSender:    messageSender,
+
+		masterID: masterID,
+		epoch:    epoch,
+
+		onWorkerOnlined:       onWorkerOnline,
+		onWorkerOfflined:      onWorkerOffline,
+		onWorkerStatusUpdated: onWorkerStatusUpdated,
+
+		eventQueue: make(chan *masterEvent, 1024),
+		closeCh:    make(chan struct{}),
+		errCh:      make(chan error, 1),
+
+		clock: clock.New(),
+	}
+
 	ret.wg.Add(1)
 	go func() {
 		defer ret.wg.Done()
@@ -76,6 +109,10 @@ func NewWorkerManager(meta metaclient.KVClient, masterID libModel.MasterID) *Wor
 	}()
 
 	return ret
+}
+
+func (m *WorkerManager) Close() {
+	close(m.closeCh)
 }
 
 // InitAfterRecover should be called after the master has failed over.
@@ -170,6 +207,8 @@ func (m *WorkerManager) HandleHeartbeat(msg *libModel.HeartbeatPingMessage, from
 	return nil
 }
 
+// Tick should be called by the BaseMaster so that the callbacks can be
+// run in the main goroutine.
 func (m *WorkerManager) Tick(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -191,6 +230,10 @@ func (m *WorkerManager) Tick(ctx context.Context) error {
 			m.onWorkerOfflined(ctx, event.Handle)
 		case workerStatusUpdatedEvent:
 			m.onWorkerStatusUpdated(ctx, event.Handle)
+		}
+
+		if event.beforeHook != nil {
+			event.beforeHook()
 		}
 	}
 }
@@ -223,6 +266,7 @@ func (m *WorkerManager) OnCreatingWorkerFailed(workerID libModel.WorkerID) {
 	delete(m.workerEntries, workerID)
 }
 
+// OnWorkerStatusUpdateMessage should be called in the message handler for WorkerStatusMessage.
 func (m *WorkerManager) OnWorkerStatusUpdateMessage(msg *statusutil.WorkerStatusMessage) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -245,6 +289,29 @@ func (m *WorkerManager) OnWorkerStatusUpdateMessage(msg *statusutil.WorkerStatus
 	log.L().Info("WorkerStatusMessage dropped for unknown worker",
 		zap.String("master-id", m.masterID),
 		zap.Any("message", msg))
+}
+
+func (m *WorkerManager) GetWorkers() map[libModel.WorkerID]WorkerHandle {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	ret := make(map[libModel.WorkerID]WorkerHandle, len(m.workerEntries))
+	for workerID, entry := range m.workerEntries {
+		if entry.IsTombstone() {
+			ret[workerID] = &TombstoneHandle{
+				workerID: workerID,
+				manager:  m,
+			}
+			continue
+		}
+
+		ret[workerID] = &RunningWorkerHandle{
+			workerID:   workerID,
+			executorID: entry.ExecutorID,
+			manager:    m,
+		}
+	}
+	return ret
 }
 
 func (m *WorkerManager) runBackgroundChecker() error {
@@ -284,11 +351,15 @@ func (m *WorkerManager) runBackgroundChecker() error {
 				continue
 			}
 
+			// The worker has timed out.
 			err := m.enqueueEvent(&masterEvent{
 				Tp: workerOfflineEvent,
 				Handle: &TombstoneHandle{
 					workerID: workerID,
 					manager:  m,
+				},
+				beforeHook: func() {
+					entry.MarkAsTombstone()
 				},
 			})
 			if err != nil {

@@ -9,6 +9,7 @@ const (
 )
 
 type masterEvent struct {
-	Tp     masterEventType
-	Handle WorkerHandle
+	Tp         masterEventType
+	Handle     WorkerHandle
+	beforeHook func()
 }

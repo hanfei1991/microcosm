@@ -17,6 +17,7 @@ import (
 
 	"github.com/hanfei1991/microcosm/client"
 	runtime "github.com/hanfei1991/microcosm/executor/worker"
+	"github.com/hanfei1991/microcosm/lib/master"
 	"github.com/hanfei1991/microcosm/lib/metadata"
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/statusutil"
@@ -111,7 +112,7 @@ type DefaultBaseMaster struct {
 
 	// workerManager maintains the list of all workers and
 	// their statuses.
-	workerManager workerManager
+	workerManager *master.WorkerManager
 
 	currentEpoch atomic.Int64
 
@@ -249,14 +250,20 @@ func (m *DefaultBaseMaster) doInit(ctx context.Context) (isFirstStartUp bool, er
 		return false, errors.Trace(err)
 	}
 
-	// TODO refactor context use when we can replace stdContext with dcontext.
-	dctx := dcontext.NewContext(ctx, log.L()).WithDeps(m.deps)
-	m.workerManager = newWorkerManager(
-		dctx,
+	m.workerManager = master.NewWorkerManager(
 		m.id,
-		!isInit,
 		epoch,
-		&m.timeoutConfig)
+		m.metaKVClient,
+		m.messageSender,
+		func(_ context.Context, handle master.WorkerHandle) {
+			m.Impl.OnWorkerOnline(handle)
+		},
+		func(_ context.Context, handle master.WorkerHandle) {
+			m.Impl.OnWorkerOffline(handle, nil)
+		},
+		func(_ context.Context, handle master.WorkerHandle) {
+			m.Impl.OnWorkerStatusUpdated(handle, handle.Status())
+		}, isInit)
 
 	if err := m.registerMessageHandlers(ctx); err != nil {
 		return false, errors.Trace(err)
@@ -269,10 +276,10 @@ func (m *DefaultBaseMaster) doInit(ctx context.Context) (isFirstStartUp bool, er
 func (m *DefaultBaseMaster) registerMessageHandlers(ctx context.Context) error {
 	ok, err := m.messageHandlerManager.RegisterHandler(
 		ctx,
-		HeartbeatPingTopic(m.id),
-		&HeartbeatPingMessage{},
+		libModel.HeartbeatPingTopic(m.id),
+		&libModel.HeartbeatPingMessage{},
 		func(sender p2p.NodeID, value p2p.MessageValue) error {
-			msg := value.(*HeartbeatPingMessage)
+			msg := value.(*libModel.HeartbeatPingMessage)
 			if err := m.workerManager.HandleHeartbeat(msg, sender); err != nil {
 				return errors.Trace(err)
 			}
@@ -282,7 +289,7 @@ func (m *DefaultBaseMaster) registerMessageHandlers(ctx context.Context) error {
 		return err
 	}
 	if !ok {
-		log.L().Panic("duplicate handler", zap.String("topic", HeartbeatPingTopic(m.id)))
+		log.L().Panic("duplicate handler", zap.String("topic", libModel.HeartbeatPingTopic(m.id)))
 	}
 
 	ok, err = m.messageHandlerManager.RegisterHandler(
@@ -291,7 +298,7 @@ func (m *DefaultBaseMaster) registerMessageHandlers(ctx context.Context) error {
 		&statusutil.WorkerStatusMessage{},
 		func(sender p2p.NodeID, value p2p.MessageValue) error {
 			msg := value.(*statusutil.WorkerStatusMessage)
-			m.workerManager.OnWorkerStatusUpdated(msg)
+			m.workerManager.OnWorkerStatusUpdateMessage(msg)
 			return nil
 		})
 	if err != nil {
@@ -329,11 +336,6 @@ func (m *DefaultBaseMaster) doPoll(ctx context.Context) error {
 
 	if err := m.messageHandlerManager.CheckError(ctx); err != nil {
 		return errors.Trace(err)
-	}
-
-	err := m.workerManager.CheckStatusUpdate(m.Impl.OnWorkerStatusUpdated)
-	if err != nil {
-		return err
 	}
 
 	return nil
@@ -407,44 +409,46 @@ func (m *DefaultBaseMaster) runWorkerCheck(ctx context.Context) error {
 		case <-ticker.C:
 		}
 
-		offlinedWorkers, onlinedWorkers := m.workerManager.Tick(ctx)
-		// It is logical to call `OnWorkerOnline` first and then call `OnWorkerOffline`.
-		// In case that these two events for the same worker is detected in the same tick.
-		for _, workerInfo := range onlinedWorkers {
-			log.L().Info("worker is online", zap.Any("master-id", m.id), zap.Any("worker-info", workerInfo))
+		/*
+			offlinedWorkers, onlinedWorkers := m.workerManager.Tick(ctx)
+			// It is logical to call `OnWorkerOnline` first and then call `OnWorkerOffline`.
+			// In case that these two events for the same worker is detected in the same tick.
+			for _, workerInfo := range onlinedWorkers {
+				log.L().Info("worker is online", zap.Any("master-id", m.id), zap.Any("worker-info", workerInfo))
 
-			handle := m.workerManager.GetWorkerHandle(workerInfo.ID)
-			err := m.Impl.OnWorkerOnline(handle)
-			if err != nil {
-				return errors.Trace(err)
-			}
-		}
-
-		for _, workerInfo := range offlinedWorkers {
-			status, ok := m.workerManager.GetStatus(workerInfo.ID)
-			if !ok {
-				log.L().Panic(
-					"offlined worker has no status found",
-					zap.Any("worker-info", workerInfo),
-				)
-			}
-			log.L().Info("worker is offline", zap.Any("master-id", m.id), zap.Any("worker-info", workerInfo), zap.Any("worker-status", status))
-			tombstoneHandle := NewTombstoneWorkerHandle(workerInfo.ID, *status, nil)
-			var offlineError error
-			switch status.Code {
-			case libModel.WorkerStatusFinished:
-				offlineError = derror.ErrWorkerFinish.FastGenByArgs()
-			case libModel.WorkerStatusStopped:
-				offlineError = derror.ErrWorkerStop.FastGenByArgs()
-			default:
-				offlineError = derror.ErrWorkerOffline.FastGenByArgs(workerInfo.ID)
+				handle := m.workerManager.GetWorkerHandle(workerInfo.ID)
+				err := m.Impl.OnWorkerOnline(handle)
+				if err != nil {
+					return errors.Trace(err)
+				}
 			}
 
-			err := m.Impl.OnWorkerOffline(tombstoneHandle, offlineError)
-			if err != nil {
-				return errors.Trace(err)
+			for _, workerInfo := range offlinedWorkers {
+				status, ok := m.workerManager.GetStatus(workerInfo.ID)
+				if !ok {
+					log.L().Panic(
+						"offlined worker has no status found",
+						zap.Any("worker-info", workerInfo),
+					)
+				}
+				log.L().Info("worker is offline", zap.Any("master-id", m.id), zap.Any("worker-info", workerInfo), zap.Any("worker-status", status))
+				tombstoneHandle := NewTombstoneWorkerHandle(workerInfo.ID, *status, nil)
+				var offlineError error
+				switch status.Code {
+				case libModel.WorkerStatusFinished:
+					offlineError = derror.ErrWorkerFinish.FastGenByArgs()
+				case libModel.WorkerStatusStopped:
+					offlineError = derror.ErrWorkerStop.FastGenByArgs()
+				default:
+					offlineError = derror.ErrWorkerOffline.FastGenByArgs(workerInfo.ID)
+				}
+
+				err := m.Impl.OnWorkerOffline(tombstoneHandle, offlineError)
+				if err != nil {
+					return errors.Trace(err)
+				}
 			}
-		}
+		*/
 	}
 }
 
@@ -602,6 +606,9 @@ func (m *DefaultBaseMaster) CreateWorker(workerType libModel.WorkerType, config 
 			}
 			return
 		}
+
+		m.workerManager.OnCreatingWorker(workerID, executorID)
+
 		executorClient := m.executorClientManager.ExecutorClient(executorID)
 		executorResp, err := executorClient.Send(requestCtx, &client.ExecutorRequest{
 			Cmd: client.CmdDispatchTask,
@@ -623,6 +630,7 @@ func (m *DefaultBaseMaster) CreateWorker(workerType libModel.WorkerType, config 
 		log.L().Info("Worker dispatched", zap.Any("master-id", m.id), zap.Any("response", dispatchTaskResp))
 		errCode := dispatchTaskResp.GetErrorCode()
 		if errCode != pb.DispatchTaskErrorCode_OK {
+			m.workerManager.OnCreatingWorkerFailed(workerID)
 			err1 := m.Impl.OnWorkerDispatched(dispatchFailedDummyHandler,
 				errors.Errorf("dispatch worker failed with error code: %d", errCode))
 			if err1 != nil {
@@ -631,10 +639,7 @@ func (m *DefaultBaseMaster) CreateWorker(workerType libModel.WorkerType, config 
 			return
 		}
 
-		if err := m.workerManager.OnWorkerCreated(ctx, workerID, p2p.NodeID(executorID)); err != nil {
-			m.OnError(errors.Trace(err))
-		}
-		handle := m.workerManager.GetWorkerHandle(workerID)
+		handle := m.workerManager.GetWorkers()[workerID]
 
 		if err := m.Impl.OnWorkerDispatched(handle, nil); err != nil {
 			m.OnError(errors.Trace(err))
