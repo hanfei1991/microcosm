@@ -173,7 +173,11 @@ func TestRunLeaderService(t *testing.T) {
 	s, err := NewServer(cfg, nil)
 	require.Nil(t, err)
 
-	s.registerMetaStore()
+	// meta operation fail:context deadline exceeded
+	_ = s.registerMetaStore()
+
+	err = s.startResourceManager()
+	require.NoError(t, err)
 
 	err = s.startGrpcSrv(ctx)
 	require.Nil(t, err)
