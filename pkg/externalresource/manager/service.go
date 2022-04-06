@@ -65,7 +65,7 @@ func NewService(
 
 func (s *Service) QueryResource(ctx context.Context, request *pb.QueryResourceRequest) (*pb.QueryResourceResponse, error) {
 	var resp2 *pb.QueryResourceResponse
-	shouldRet, err := s.preRPCHook.PreRPC(ctx, request, resp2)
+	shouldRet, err := s.preRPCHook.PreRPC(ctx, request, &resp2)
 	if shouldRet {
 		return resp2, err
 	}
@@ -132,7 +132,7 @@ func (s *Service) CreateResource(
 	request *pb.CreateResourceRequest,
 ) (*pb.CreateResourceResponse, error) {
 	var resp2 *pb.CreateResourceResponse
-	shouldRet, err := s.preRPCHook.PreRPC(ctx, request, resp2)
+	shouldRet, err := s.preRPCHook.PreRPC(ctx, request, &resp2)
 	if shouldRet {
 		return resp2, err
 	}
