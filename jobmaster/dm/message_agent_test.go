@@ -17,30 +17,57 @@ import (
 )
 
 func TestUpdateWorkerHandle(t *testing.T) {
-	messageAgent := NewMessageAgent("mock-jobmaster", nil)
+	messageAgent := NewMessageAgent(nil, "mock-jobmaster", nil)
 	require.Equal(t, lenSyncMap(messageAgent.senders), 0)
-	workerHandle := lib.NewTombstoneWorkerHandle("", libModel.WorkerStatus{}, nil)
+	workerHandle1 := lib.NewTombstoneWorkerHandle("worker1", libModel.WorkerStatus{}, nil)
+	workerHandle2 := lib.NewTombstoneWorkerHandle("worker2", libModel.WorkerStatus{}, nil)
 
 	// add worker handle
-	messageAgent.UpdateWorkerHandle("task1", workerHandle)
+	messageAgent.UpdateWorkerHandle("task1", workerHandle1)
 	require.Equal(t, lenSyncMap(messageAgent.senders), 1)
 	w, ok := messageAgent.senders.Load("task1")
 	require.True(t, ok)
-	require.Equal(t, w, workerHandle)
+	require.Equal(t, w, workerHandle1)
+	messageAgent.UpdateWorkerHandle("task2", workerHandle2)
+	require.Equal(t, lenSyncMap(messageAgent.senders), 2)
+	w, ok = messageAgent.senders.Load("task1")
+	require.True(t, ok)
+	require.Equal(t, w, workerHandle1)
+	w, ok = messageAgent.senders.Load("task2")
+	require.True(t, ok)
+	require.Equal(t, w, workerHandle2)
 
 	// remove worker handle
+	messageAgent.UpdateWorkerHandle("task3", nil)
+	require.Equal(t, lenSyncMap(messageAgent.senders), 2)
+	w, ok = messageAgent.senders.Load("task1")
+	require.True(t, ok)
+	require.Equal(t, w, workerHandle1)
+	w, ok = messageAgent.senders.Load("task2")
+	require.True(t, ok)
+	require.Equal(t, w, workerHandle2)
 	messageAgent.UpdateWorkerHandle("task2", nil)
 	require.Equal(t, lenSyncMap(messageAgent.senders), 1)
 	w, ok = messageAgent.senders.Load("task1")
 	require.True(t, ok)
-	require.Equal(t, w, workerHandle)
-	messageAgent.UpdateWorkerHandle("task1", nil)
-	require.Equal(t, lenSyncMap(messageAgent.senders), 0)
+	require.Equal(t, w, workerHandle1)
+
+	// mock jobmaster recover
+	initWorkerHandleMap := make(map[string]Sender)
+	messageAgent.senders.Range(func(key, value interface{}) bool {
+		initWorkerHandleMap[key.(string)] = value.(Sender)
+		return true
+	})
+	messageAgent = NewMessageAgent(initWorkerHandleMap, "mock-jobmaster", nil)
+	require.Equal(t, lenSyncMap(messageAgent.senders), 1)
+	w, ok = messageAgent.senders.Load("task1")
+	require.True(t, ok)
+	require.Equal(t, w, workerHandle1)
 }
 
 func TestOperateWorker(t *testing.T) {
 	mockMasterImpl := &MockMasterImpl{}
-	messageAgent := NewMessageAgent("mock-jobmaster", mockMasterImpl)
+	messageAgent := NewMessageAgent(nil, "mock-jobmaster", mockMasterImpl)
 	task1 := "task1"
 	worker1 := "worker1"
 
@@ -68,7 +95,7 @@ func TestOperateWorker(t *testing.T) {
 
 func TestOperateTask(t *testing.T) {
 	mockMasterImpl := &MockMasterImpl{}
-	messageAgent := NewMessageAgent("mock-jobmaster", mockMasterImpl)
+	messageAgent := NewMessageAgent(nil, "mock-jobmaster", mockMasterImpl)
 	task1 := "task1"
 	worker1 := "worker1"
 
@@ -84,7 +111,7 @@ func TestOperateTask(t *testing.T) {
 }
 
 func TestOnWorkerMessage(t *testing.T) {
-	messageAgent := NewMessageAgent("", nil)
+	messageAgent := NewMessageAgent(nil, "", nil)
 	require.EqualError(t, messageAgent.OnWorkerMessage(dmpkg.MessageWithID{ID: 0, Message: "response"}), "request 0 not found")
 }
 

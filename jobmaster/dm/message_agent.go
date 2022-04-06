@@ -44,12 +44,16 @@ type MessageAgent struct {
 	senders sync.Map
 }
 
-func NewMessageAgent(id lib.WorkerID, masterImpl MasterImpl) *MessageAgent {
-	return &MessageAgent{
+func NewMessageAgent(initSenders map[string]Sender, id lib.WorkerID, masterImpl MasterImpl) *MessageAgent {
+	messageAgent := &MessageAgent{
 		masterImpl:  masterImpl,
 		clocker:     clock.New(),
 		messageImpl: dmpkg.NewMessageImpl(),
 	}
+	for task, sender := range initSenders {
+		messageAgent.UpdateWorkerHandle(task, sender)
+	}
+	return messageAgent
 }
 
 func (agent *MessageAgent) UpdateWorkerHandle(taskID string, sender Sender) {
