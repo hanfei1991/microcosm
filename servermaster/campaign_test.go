@@ -173,12 +173,13 @@ func TestLeaderLoopWatchLeader(t *testing.T) {
 		cfg.Etcd.Name = names[i]
 		cfg.AdvertiseAddr = addrs[i]
 		s := &Server{
-			id:         genServerMasterUUID(names[i]),
-			cfg:        cfg,
-			etcd:       etcds[i],
-			etcdClient: client,
-			info:       &model.NodeInfo{ID: model.DeployNodeID(names[i])},
-			masterCli:  &rpcutil.LeaderClientWithLock[pb.MasterClient]{},
+			id:          genServerMasterUUID(names[i]),
+			cfg:         cfg,
+			etcd:        etcds[i],
+			etcdClient:  client,
+			info:        &model.NodeInfo{ID: model.DeployNodeID(names[i])},
+			masterCli:   &rpcutil.LeaderClientWithLock[pb.MasterClient]{},
+			resourceCli: &rpcutil.LeaderClientWithLock[pb.ResourceManagerClient]{},
 		}
 		preRPCHook := rpcutil.NewPreRPCHook[pb.MasterClient](
 			s.id,
