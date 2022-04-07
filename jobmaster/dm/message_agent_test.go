@@ -18,18 +18,18 @@ import (
 
 func TestUpdateWorkerHandle(t *testing.T) {
 	messageAgent := NewMessageAgent(nil, "mock-jobmaster", nil)
-	require.Equal(t, lenSyncMap(messageAgent.senders), 0)
+	require.Equal(t, lenSyncMap(&messageAgent.senders), 0)
 	workerHandle1 := lib.NewTombstoneWorkerHandle("worker1", libModel.WorkerStatus{}, nil)
 	workerHandle2 := lib.NewTombstoneWorkerHandle("worker2", libModel.WorkerStatus{}, nil)
 
 	// add worker handle
 	messageAgent.UpdateWorkerHandle("task1", workerHandle1)
-	require.Equal(t, lenSyncMap(messageAgent.senders), 1)
+	require.Equal(t, lenSyncMap(&messageAgent.senders), 1)
 	w, ok := messageAgent.senders.Load("task1")
 	require.True(t, ok)
 	require.Equal(t, w, workerHandle1)
 	messageAgent.UpdateWorkerHandle("task2", workerHandle2)
-	require.Equal(t, lenSyncMap(messageAgent.senders), 2)
+	require.Equal(t, lenSyncMap(&messageAgent.senders), 2)
 	w, ok = messageAgent.senders.Load("task1")
 	require.True(t, ok)
 	require.Equal(t, w, workerHandle1)
@@ -39,7 +39,7 @@ func TestUpdateWorkerHandle(t *testing.T) {
 
 	// remove worker handle
 	messageAgent.UpdateWorkerHandle("task3", nil)
-	require.Equal(t, lenSyncMap(messageAgent.senders), 2)
+	require.Equal(t, lenSyncMap(&messageAgent.senders), 2)
 	w, ok = messageAgent.senders.Load("task1")
 	require.True(t, ok)
 	require.Equal(t, w, workerHandle1)
@@ -47,7 +47,7 @@ func TestUpdateWorkerHandle(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, w, workerHandle2)
 	messageAgent.UpdateWorkerHandle("task2", nil)
-	require.Equal(t, lenSyncMap(messageAgent.senders), 1)
+	require.Equal(t, lenSyncMap(&messageAgent.senders), 1)
 	w, ok = messageAgent.senders.Load("task1")
 	require.True(t, ok)
 	require.Equal(t, w, workerHandle1)
@@ -59,7 +59,7 @@ func TestUpdateWorkerHandle(t *testing.T) {
 		return true
 	})
 	messageAgent = NewMessageAgent(initWorkerHandleMap, "mock-jobmaster", nil)
-	require.Equal(t, lenSyncMap(messageAgent.senders), 1)
+	require.Equal(t, lenSyncMap(&messageAgent.senders), 1)
 	w, ok = messageAgent.senders.Load("task1")
 	require.True(t, ok)
 	require.Equal(t, w, workerHandle1)
@@ -115,7 +115,7 @@ func TestOnWorkerMessage(t *testing.T) {
 	require.EqualError(t, messageAgent.OnWorkerMessage(dmpkg.MessageWithID{ID: 0, Message: "response"}), "request 0 not found")
 }
 
-func lenSyncMap(m sync.Map) int {
+func lenSyncMap(m *sync.Map) int {
 	var i int
 	m.Range(func(k, v interface{}) bool {
 		i++
