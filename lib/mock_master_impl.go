@@ -36,6 +36,7 @@ type MockMasterImpl struct {
 
 	dispatchedWorkers chan WorkerHandle
 	dispatchedResult  chan error
+	updatedStatuses   chan *libModel.WorkerStatus
 
 	messageHandlerManager *p2p.MockMessageHandlerManager
 	messageSender         p2p.MessageSender
@@ -51,6 +52,7 @@ func NewMockMasterImpl(masterID, id MasterID) *MockMasterImpl {
 		id:                id,
 		dispatchedWorkers: make(chan WorkerHandle),
 		dispatchedResult:  make(chan error, 1),
+		updatedStatuses:   make(chan *libModel.WorkerStatus, 1024),
 	}
 	ret.DefaultBaseMaster = MockBaseMaster(id, ret)
 	ret.messageHandlerManager = ret.DefaultBaseMaster.messageHandlerManager.(*p2p.MockMessageHandlerManager)
@@ -129,6 +131,11 @@ func (m *MockMasterImpl) OnMasterRecovered(ctx context.Context) error {
 func (m *MockMasterImpl) OnWorkerStatusUpdated(worker WorkerHandle, newStatus *libModel.WorkerStatus) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	select {
+	case m.updatedStatuses <- newStatus:
+	default:
+	}
 
 	args := m.Called(worker, newStatus)
 	return args.Error(0)

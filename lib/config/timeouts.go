@@ -27,3 +27,7 @@ func (config TimeoutConfig) Adjust() TimeoutConfig {
 	}
 	return tc
 }
+
+func DefaultTimeoutConfig() TimeoutConfig {
+	return defaultTimeoutConfig
+}

@@ -143,9 +143,9 @@ func MockBaseMasterWorkerHeartbeat(
 ) {
 	err := master.messageHandlerManager.(*p2p.MockMessageHandlerManager).InvokeHandler(
 		t,
-		HeartbeatPingTopic(masterID),
+		libModel.HeartbeatPingTopic(masterID),
 		executorID,
-		&HeartbeatPingMessage{
+		&libModel.HeartbeatPingMessage{
 			SendTime:     clock.MonoNow(),
 			FromWorkerID: workerID,
 			Epoch:        master.currentEpoch.Load(),

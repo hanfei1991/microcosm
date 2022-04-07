@@ -413,13 +413,13 @@ func (w *DefaultBaseWorker) initMessageHandlers(ctx context.Context) (retErr err
 			}
 		}
 	}()
-	topic := HeartbeatPongTopic(w.masterClient.MasterID(), w.id)
+	topic := libModel.HeartbeatPongTopic(w.masterClient.MasterID(), w.id)
 	ok, err := w.messageHandlerManager.RegisterHandler(
 		ctx,
 		topic,
-		&HeartbeatPongMessage{},
+		&libModel.HeartbeatPongMessage{},
 		func(sender p2p.NodeID, value p2p.MessageValue) error {
-			msg := value.(*HeartbeatPongMessage)
+			msg := value.(*libModel.HeartbeatPongMessage)
 			log.L().Debug("heartbeat pong received",
 				zap.Any("msg", msg))
 			w.masterClient.HandleHeartbeat(sender, msg)
@@ -563,7 +563,7 @@ func (m *masterClient) Epoch() Epoch {
 	return m.masterEpoch
 }
 
-func (m *masterClient) HandleHeartbeat(sender p2p.NodeID, msg *HeartbeatPongMessage) {
+func (m *masterClient) HandleHeartbeat(sender p2p.NodeID, msg *libModel.HeartbeatPongMessage) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -615,14 +615,14 @@ func (m *masterClient) SendHeartBeat(ctx context.Context, clock clock.Clock) err
 	// the timestamp to be a local monotonic timestamp, which is not exposed by the
 	// standard library `time`.
 	sendTime := clock.Mono()
-	heartbeatMsg := &HeartbeatPingMessage{
+	heartbeatMsg := &libModel.HeartbeatPingMessage{
 		SendTime:     sendTime,
 		FromWorkerID: m.workerID,
 		Epoch:        m.masterEpoch,
 	}
 
 	log.L().Debug("sending heartbeat", zap.String("worker", m.workerID))
-	ok, err := m.messageSender.SendToNode(ctx, m.masterNode, HeartbeatPingTopic(m.masterID), heartbeatMsg)
+	ok, err := m.messageSender.SendToNode(ctx, m.masterNode, libModel.HeartbeatPingTopic(m.masterID), heartbeatMsg)
 	if err != nil {
 		return errors.Trace(err)
 	}

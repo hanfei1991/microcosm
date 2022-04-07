@@ -337,7 +337,7 @@ func (jm *JobMaster) OnJobManagerMessage(topic p2p.Topic, message p2p.MessageVal
 					continue
 				}
 				handle := *(*lib.WorkerHandle)(worker.handle.Load())
-
+				workerID := handle.ID()
 				wTopic := lib.WorkerStatusChangeRequestTopic(jm.BaseJobMaster.ID(), handle.ID())
 				wMessage := &lib.StatusChangeRequest{
 					SendTime:     jm.clocker.Mono(),
@@ -345,13 +345,18 @@ func (jm *JobMaster) OnJobManagerMessage(topic p2p.Topic, message p2p.MessageVal
 					Epoch:        jm.BaseJobMaster.CurrentEpoch(),
 					ExpectState:  libModel.WorkerStatusStopped,
 				}
-				ctx, cancel := context.WithTimeout(jm.ctx, time.Second*2)
-				if err := handle.SendMessage(ctx, wTopic, wMessage, false /*nonblocking*/); err != nil {
+
+				if handle := handle.Unwrap(); handle != nil {
+					ctx, cancel := context.WithTimeout(jm.ctx, time.Second*2)
+					if err := handle.SendMessage(ctx, wTopic, wMessage, false /*nonblocking*/); err != nil {
+						cancel()
+						return err
+					}
+					log.L().Info("sent message to worker", zap.String("topic", topic), zap.Any("message", wMessage))
 					cancel()
-					return err
+				} else {
+					log.L().Info("skip sending message to tombstone worker", zap.String("worker-id", workerID))
 				}
-				log.L().Info("sent message to worker", zap.String("topic", topic), zap.Any("message", wMessage))
-				cancel()
 			}
 		default:
 			log.L().Info("FakeMaster: ignore status change state", zap.Int32("state", int32(msg.ExpectState)))

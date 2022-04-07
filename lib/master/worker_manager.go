@@ -64,6 +64,7 @@ func NewWorkerManager(
 	onWorkerOffline Callback,
 	onWorkerStatusUpdated Callback,
 	isInit bool,
+	timeoutConfig config.TimeoutConfig,
 ) *WorkerManager {
 	state := workerManagerReady
 	if !isInit {
@@ -88,7 +89,8 @@ func NewWorkerManager(
 		closeCh:    make(chan struct{}),
 		errCh:      make(chan error, 1),
 
-		clock: clock.New(),
+		clock:    clock.New(),
+		timeouts: timeoutConfig,
 	}
 
 	ret.wg.Add(1)
@@ -312,6 +314,13 @@ func (m *WorkerManager) GetWorkers() map[libModel.WorkerID]WorkerHandle {
 		}
 	}
 	return ret
+}
+
+func (m *WorkerManager) IsInitialized() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return m.state == workerManagerReady
 }
 
 func (m *WorkerManager) runBackgroundChecker() error {
