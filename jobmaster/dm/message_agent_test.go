@@ -83,7 +83,7 @@ func TestOperateWorker(t *testing.T) {
 	_, err = messageAgent.CreateWorker(context.Background(), task1, lib.WorkerDMDump, &config.TaskCfg{})
 	require.EqualError(t, err, fmt.Sprintf("worker for task %s already exist", task1))
 
-	// destory worker
+	// destroy worker
 	require.EqualError(t, messageAgent.DestroyWorker(context.Background(), "task-not-exist", "worker-not-exist"), fmt.Sprintf("worker for task %s not exist", "task-not-exist"))
 	require.EqualError(t, messageAgent.DestroyWorker(context.Background(), task1, "worker-not-exist"), fmt.Sprintf("worker for task %s mismatch: want %s, get %s", task1, "worker-not-exist", worker1))
 	// worker offline
