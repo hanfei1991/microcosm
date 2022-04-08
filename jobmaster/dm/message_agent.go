@@ -27,7 +27,7 @@ type Master interface {
 	CurrentEpoch() lib.Epoch
 }
 
-type Sender interface {
+type SendHandle interface {
 	ID() lib.WorkerID
 	SendMessage(ctx context.Context, topic string, message interface{}, nonblocking bool) error
 }
@@ -40,10 +40,10 @@ type MessageAgent struct {
 	// for stop a task
 	id lib.WorkerID
 	// taskID -> Sender(WorkerHandle)
-	senders sync.Map
+	sendHandles sync.Map
 }
 
-func NewMessageAgent(initSenders map[string]Sender, id lib.WorkerID, master Master) *MessageAgent {
+func NewMessageAgent(initSenders map[string]SendHandle, id lib.WorkerID, master Master) *MessageAgent {
 	messageAgent := &MessageAgent{
 		master:      master,
 		clocker:     clock.New(),
@@ -55,30 +55,30 @@ func NewMessageAgent(initSenders map[string]Sender, id lib.WorkerID, master Mast
 	return messageAgent
 }
 
-func (agent *MessageAgent) UpdateWorkerHandle(taskID string, sender Sender) {
-	if sender == nil {
-		agent.senders.Delete(taskID)
+func (agent *MessageAgent) UpdateWorkerHandle(taskID string, sendHandle SendHandle) {
+	if sendHandle == nil {
+		agent.sendHandles.Delete(taskID)
 	} else {
-		agent.senders.Store(taskID, sender)
+		agent.sendHandles.Store(taskID, sendHandle)
 	}
 }
 
 // Manage all interactions with workers in the message agent
 // Though we can create worker in jobmaster directly
 func (agent *MessageAgent) CreateWorker(ctx context.Context, taskID string, workerType lib.WorkerType, taskCfg *config.TaskCfg) (lib.WorkerID, error) {
-	if _, ok := agent.senders.Load(taskID); ok {
+	if _, ok := agent.sendHandles.Load(taskID); ok {
 		return "", errors.Errorf("worker for task %s already exist", taskID)
 	}
 	return agent.master.CreateWorker(workerType, taskCfg, 1)
 }
 
 func (agent *MessageAgent) StopWorker(ctx context.Context, taskID lib.WorkerID, workerID lib.WorkerID) error {
-	v, ok := agent.senders.Load(taskID)
+	v, ok := agent.sendHandles.Load(taskID)
 	if !ok {
 		return errors.Errorf("worker for task %s not exist", taskID)
 	}
 
-	sender := v.(Sender)
+	sender := v.(SendHandle)
 	if sender.ID() != workerID {
 		return errors.Errorf("worker for task %s mismatch: want %s, get %s", taskID, workerID, sender.ID())
 	}
@@ -93,11 +93,11 @@ func (agent *MessageAgent) StopWorker(ctx context.Context, taskID lib.WorkerID, 
 
 	ctx, cancel := context.WithTimeout(ctx, DefaultMessageTimeOut)
 	defer cancel()
-	return agent.messagePair.SendMessage(ctx, topic, message, sender)
+	return sender.SendMessage(ctx, topic, message, true)
 }
 
 func (agent *MessageAgent) OperateTask(ctx context.Context, taskID string, stage metadata.TaskStage) error {
-	v, ok := agent.senders.Load(taskID)
+	v, ok := agent.sendHandles.Load(taskID)
 	if !ok {
 		return errors.Errorf("worker for task %s not exist", taskID)
 	}
@@ -110,7 +110,7 @@ func (agent *MessageAgent) OperateTask(ctx context.Context, taskID string, stage
 
 	ctx, cancel := context.WithTimeout(ctx, DefaultMessageTimeOut)
 	defer cancel()
-	return agent.messagePair.SendMessage(ctx, topic, message, v.(Sender))
+	return v.(SendHandle).SendMessage(ctx, topic, message, true)
 }
 
 func (agent *MessageAgent) OnWorkerMessage(message interface{}) error {

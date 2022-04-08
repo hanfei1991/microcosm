@@ -18,49 +18,49 @@ import (
 
 func TestUpdateWorkerHandle(t *testing.T) {
 	messageAgent := NewMessageAgent(nil, "mock-jobmaster", nil)
-	require.Equal(t, lenSyncMap(&messageAgent.senders), 0)
+	require.Equal(t, lenSyncMap(&messageAgent.sendHandles), 0)
 	workerHandle1 := lib.NewTombstoneWorkerHandle("worker1", libModel.WorkerStatus{}, nil)
 	workerHandle2 := lib.NewTombstoneWorkerHandle("worker2", libModel.WorkerStatus{}, nil)
 
 	// add worker handle
 	messageAgent.UpdateWorkerHandle("task1", workerHandle1)
-	require.Equal(t, lenSyncMap(&messageAgent.senders), 1)
-	w, ok := messageAgent.senders.Load("task1")
+	require.Equal(t, lenSyncMap(&messageAgent.sendHandles), 1)
+	w, ok := messageAgent.sendHandles.Load("task1")
 	require.True(t, ok)
 	require.Equal(t, w, workerHandle1)
 	messageAgent.UpdateWorkerHandle("task2", workerHandle2)
-	require.Equal(t, lenSyncMap(&messageAgent.senders), 2)
-	w, ok = messageAgent.senders.Load("task1")
+	require.Equal(t, lenSyncMap(&messageAgent.sendHandles), 2)
+	w, ok = messageAgent.sendHandles.Load("task1")
 	require.True(t, ok)
 	require.Equal(t, w, workerHandle1)
-	w, ok = messageAgent.senders.Load("task2")
+	w, ok = messageAgent.sendHandles.Load("task2")
 	require.True(t, ok)
 	require.Equal(t, w, workerHandle2)
 
 	// remove worker handle
 	messageAgent.UpdateWorkerHandle("task3", nil)
-	require.Equal(t, lenSyncMap(&messageAgent.senders), 2)
-	w, ok = messageAgent.senders.Load("task1")
+	require.Equal(t, lenSyncMap(&messageAgent.sendHandles), 2)
+	w, ok = messageAgent.sendHandles.Load("task1")
 	require.True(t, ok)
 	require.Equal(t, w, workerHandle1)
-	w, ok = messageAgent.senders.Load("task2")
+	w, ok = messageAgent.sendHandles.Load("task2")
 	require.True(t, ok)
 	require.Equal(t, w, workerHandle2)
 	messageAgent.UpdateWorkerHandle("task2", nil)
-	require.Equal(t, lenSyncMap(&messageAgent.senders), 1)
-	w, ok = messageAgent.senders.Load("task1")
+	require.Equal(t, lenSyncMap(&messageAgent.sendHandles), 1)
+	w, ok = messageAgent.sendHandles.Load("task1")
 	require.True(t, ok)
 	require.Equal(t, w, workerHandle1)
 
 	// mock jobmaster recover
-	initWorkerHandleMap := make(map[string]Sender)
-	messageAgent.senders.Range(func(key, value interface{}) bool {
-		initWorkerHandleMap[key.(string)] = value.(Sender)
+	initWorkerHandleMap := make(map[string]SendHandle)
+	messageAgent.sendHandles.Range(func(key, value interface{}) bool {
+		initWorkerHandleMap[key.(string)] = value.(SendHandle)
 		return true
 	})
 	messageAgent = NewMessageAgent(initWorkerHandleMap, "mock-jobmaster", nil)
-	require.Equal(t, lenSyncMap(&messageAgent.senders), 1)
-	w, ok = messageAgent.senders.Load("task1")
+	require.Equal(t, lenSyncMap(&messageAgent.sendHandles), 1)
+	w, ok = messageAgent.sendHandles.Load("task1")
 	require.True(t, ok)
 	require.Equal(t, w, workerHandle1)
 }
