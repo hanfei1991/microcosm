@@ -256,14 +256,14 @@ func (m *DefaultBaseMaster) doInit(ctx context.Context) (isFirstStartUp bool, er
 		epoch,
 		m.metaKVClient,
 		m.messageSender,
-		func(_ context.Context, handle master.WorkerHandle) {
-			m.Impl.OnWorkerOnline(handle)
+		func(_ context.Context, handle master.WorkerHandle) error {
+			return m.Impl.OnWorkerOnline(handle)
 		},
-		func(_ context.Context, handle master.WorkerHandle) {
-			m.Impl.OnWorkerOffline(handle, nil)
+		func(_ context.Context, handle master.WorkerHandle) error {
+			return m.Impl.OnWorkerOffline(handle, nil)
 		},
-		func(_ context.Context, handle master.WorkerHandle) {
-			m.Impl.OnWorkerStatusUpdated(handle, handle.Status())
+		func(_ context.Context, handle master.WorkerHandle) error {
+			return m.Impl.OnWorkerStatusUpdated(handle, handle.Status())
 		}, isInit, m.timeoutConfig)
 
 	if err := m.registerMessageHandlers(ctx); err != nil {
@@ -281,6 +281,23 @@ func (m *DefaultBaseMaster) registerMessageHandlers(ctx context.Context) error {
 		&libModel.HeartbeatPingMessage{},
 		func(sender p2p.NodeID, value p2p.MessageValue) error {
 			msg := value.(*libModel.HeartbeatPingMessage)
+			ok, err := m.messageSender.SendToNode(
+				ctx,
+				sender,
+				libModel.HeartbeatPongTopic(m.id, msg.FromWorkerID),
+				&libModel.HeartbeatPongMessage{
+					SendTime:   msg.SendTime,
+					ReplyTime:  m.clock.Now(),
+					ToWorkerID: m.id,
+					Epoch:      m.currentEpoch.Load(),
+				})
+			if err != nil {
+				return err
+			}
+			if !ok {
+				// TODO add a retry mechanism
+				return nil
+			}
 			if err := m.workerManager.HandleHeartbeat(msg, sender); err != nil {
 				return errors.Trace(err)
 			}

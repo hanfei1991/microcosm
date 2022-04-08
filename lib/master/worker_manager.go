@@ -53,7 +53,7 @@ const (
 	workerManagerWaitingHeartbeat
 )
 
-type Callback = func(ctx context.Context, handle WorkerHandle)
+type Callback = func(ctx context.Context, handle WorkerHandle) error
 
 func NewWorkerManager(
 	masterID libModel.MasterID,
@@ -227,11 +227,17 @@ func (m *WorkerManager) Tick(ctx context.Context) error {
 
 		switch event.Tp {
 		case workerOnlineEvent:
-			m.onWorkerOnlined(ctx, event.Handle)
+			if err := m.onWorkerOnlined(ctx, event.Handle); err != nil {
+				return err
+			}
 		case workerOfflineEvent:
-			m.onWorkerOfflined(ctx, event.Handle)
+			if err := m.onWorkerOfflined(ctx, event.Handle); err != nil {
+				return err
+			}
 		case workerStatusUpdatedEvent:
-			m.onWorkerStatusUpdated(ctx, event.Handle)
+			if err := m.onWorkerStatusUpdated(ctx, event.Handle); err != nil {
+				return err
+			}
 		}
 
 		if event.beforeHook != nil {
