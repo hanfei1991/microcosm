@@ -165,7 +165,7 @@ func (c *etcdImpl) Do(ctx context.Context, op metaclient.Op) (metaclient.OpRespo
 	default:
 	}
 
-	return nil, &etcdError{
+	return metaclient.OpResponse{}, &etcdError{
 		displayed: cerrors.ErrMetaOptionInvalid.Wrap(fmt.Errorf("unrecognized op type:%d", op.T)),
 	}
 }
