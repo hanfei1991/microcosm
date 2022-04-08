@@ -53,6 +53,33 @@ func TestJobManagerSubmitJob(t *testing.T) {
 	require.Equal(t, pb.QueryJobResponse_pending, queryResp.Status)
 }
 
+func TestCreateWorkerReturnError(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	mockMaster := lib.NewMockMasterImpl("", "create-worker-with-errro")
+	mockMaster.DefaultBaseMaster.
+		On("CreateWorker", mock.Anything, mock.Anything, mock.Anything).
+		Return("", errors.ErrMasterConcurrencyExceeded.FastGenByArgs())
+	mgr := &JobManagerImplV2{
+		BaseMaster: mockMaster.DefaultBaseMaster,
+		JobFsm:     NewJobFsm(),
+		uuidGen:    uuid.NewGenerator(),
+	}
+	// set master impl to JobManagerImplV2
+	mockMaster.Impl = mgr
+	err := mockMaster.Init(ctx)
+	require.Nil(t, err)
+	req := &pb.SubmitJobRequest{
+		Tp:     pb.JobType_CVSDemo,
+		Config: []byte("{\"srcHost\":\"0.0.0.0:1234\", \"dstHost\":\"0.0.0.0:1234\", \"srcDir\":\"data\", \"dstDir\":\"data1\"}"),
+	}
+	resp := mgr.SubmitJob(ctx, req)
+	require.Nil(t, resp.Err)
+}
+
 func TestJobManagerPauseJob(t *testing.T) {
 	t.Parallel()
 
