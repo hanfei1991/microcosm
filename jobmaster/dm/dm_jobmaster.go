@@ -212,11 +212,11 @@ func (jm *JobMaster) registerMessageHandler(ctx context.Context) error {
 	return nil
 }
 
-func (jm *JobMaster) getInitStatus() ([]runtime.TaskStatus, []runtime.WorkerStatus, map[string]Sender, error) {
+func (jm *JobMaster) getInitStatus() ([]runtime.TaskStatus, []runtime.WorkerStatus, map[string]SendHandle, error) {
 	workerHandles := jm.GetWorkers()
 	taskStatusList := make([]runtime.TaskStatus, 0, len(workerHandles))
 	workerStatusList := make([]runtime.WorkerStatus, 0, len(workerHandles))
-	workerHandleMap := make(map[string]Sender, len(workerHandles))
+	sendHandleMap := make(map[string]SendHandle, len(workerHandles))
 	for _, workerHandle := range workerHandles {
 		taskStatus, err := runtime.UnmarshalTaskStatus(workerHandle.Status().ExtBytes)
 		if err != nil {
@@ -224,8 +224,8 @@ func (jm *JobMaster) getInitStatus() ([]runtime.TaskStatus, []runtime.WorkerStat
 		}
 		taskStatusList = append(taskStatusList, taskStatus)
 		workerStatusList = append(workerStatusList, runtime.NewWorkerStatus(taskStatus.GetTask(), taskStatus.GetUnit(), workerHandle.ID(), runtime.WorkerOnline))
-		workerHandleMap[taskStatus.GetTask()] = workerHandle
+		sendHandleMap[taskStatus.GetTask()] = workerHandle
 	}
 
-	return taskStatusList, workerStatusList, workerHandleMap, nil
+	return taskStatusList, workerStatusList, sendHandleMap, nil
 }
