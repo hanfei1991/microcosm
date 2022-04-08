@@ -20,13 +20,11 @@ var (
 	DefaultRequestTimeOut = time.Second * 30
 )
 
-type MasterImpl interface {
+type Master interface {
 	// for create worker
 	CreateWorker(workerType lib.WorkerType, config lib.WorkerConfig, cost model.RescUnit) (lib.WorkerID, error)
 	// for operate-task
 	CurrentEpoch() lib.Epoch
-	// for topic
-	JobMasterID() lib.MasterID
 }
 
 type Sender interface {
@@ -34,21 +32,22 @@ type Sender interface {
 	SendMessage(ctx context.Context, topic string, message interface{}, nonblocking bool) error
 }
 
+// MessageAgent hold by Jobmaster, it manage all interactions with workers
 type MessageAgent struct {
-	masterImpl  MasterImpl
+	master      Master
 	clocker     clock.Clock
-	messageImpl *dmpkg.MessageImpl
+	messagePair *dmpkg.MessagePair
 	// for stop a task
 	id lib.WorkerID
 	// taskID -> Sender(WorkerHandle)
 	senders sync.Map
 }
 
-func NewMessageAgent(initSenders map[string]Sender, id lib.WorkerID, masterImpl MasterImpl) *MessageAgent {
+func NewMessageAgent(initSenders map[string]Sender, id lib.WorkerID, master Master) *MessageAgent {
 	messageAgent := &MessageAgent{
-		masterImpl:  masterImpl,
+		master:      master,
 		clocker:     clock.New(),
-		messageImpl: dmpkg.NewMessageImpl(),
+		messagePair: dmpkg.NewMessagePair(),
 	}
 	for task, sender := range initSenders {
 		messageAgent.UpdateWorkerHandle(task, sender)
@@ -64,14 +63,16 @@ func (agent *MessageAgent) UpdateWorkerHandle(taskID string, sender Sender) {
 	}
 }
 
+// Manage all interactions with workers in the message agent
+// Though we can create worker in jobmaster directly
 func (agent *MessageAgent) CreateWorker(ctx context.Context, taskID string, workerType lib.WorkerType, taskCfg *config.TaskCfg) (lib.WorkerID, error) {
 	if _, ok := agent.senders.Load(taskID); ok {
 		return "", errors.Errorf("worker for task %s already exist", taskID)
 	}
-	return agent.masterImpl.CreateWorker(workerType, taskCfg, 1)
+	return agent.master.CreateWorker(workerType, taskCfg, 1)
 }
 
-func (agent *MessageAgent) DestroyWorker(ctx context.Context, taskID lib.WorkerID, workerID lib.WorkerID) error {
+func (agent *MessageAgent) StopWorker(ctx context.Context, taskID lib.WorkerID, workerID lib.WorkerID) error {
 	v, ok := agent.senders.Load(taskID)
 	if !ok {
 		return errors.Errorf("worker for task %s not exist", taskID)
@@ -86,13 +87,13 @@ func (agent *MessageAgent) DestroyWorker(ctx context.Context, taskID lib.WorkerI
 	message := &lib.StatusChangeRequest{
 		SendTime:     agent.clocker.Mono(),
 		FromMasterID: agent.id,
-		Epoch:        agent.masterImpl.CurrentEpoch(),
+		Epoch:        agent.master.CurrentEpoch(),
 		ExpectState:  libModel.WorkerStatusStopped,
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, DefaultMessageTimeOut)
 	defer cancel()
-	return agent.messageImpl.SendMessage(ctx, topic, message, sender)
+	return agent.messagePair.SendMessage(ctx, topic, message, sender)
 }
 
 func (agent *MessageAgent) OperateTask(ctx context.Context, taskID string, stage metadata.TaskStage) error {
@@ -101,7 +102,7 @@ func (agent *MessageAgent) OperateTask(ctx context.Context, taskID string, stage
 		return errors.Errorf("worker for task %s not exist", taskID)
 	}
 
-	topic := dmpkg.OperateTaskMessageTopic(agent.masterImpl.JobMasterID(), taskID)
+	topic := dmpkg.OperateTaskMessageTopic(agent.id, taskID)
 	message := &dmpkg.OperateTaskMessage{
 		TaskID: taskID,
 		Stage:  stage,
@@ -109,9 +110,9 @@ func (agent *MessageAgent) OperateTask(ctx context.Context, taskID string, stage
 
 	ctx, cancel := context.WithTimeout(ctx, DefaultMessageTimeOut)
 	defer cancel()
-	return agent.messageImpl.SendMessage(ctx, topic, message, v.(Sender))
+	return agent.messagePair.SendMessage(ctx, topic, message, v.(Sender))
 }
 
 func (agent *MessageAgent) OnWorkerMessage(message interface{}) error {
-	return agent.messageImpl.OnResponse(message.(dmpkg.MessageWithID))
+	return agent.messagePair.OnResponse(message.(dmpkg.MessageWithID))
 }

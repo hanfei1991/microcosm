@@ -37,7 +37,7 @@ func TestMessageIDAllocator(t *testing.T) {
 func TestMessageImpl(t *testing.T) {
 	t.Parallel()
 
-	messageImpl := NewMessageImpl()
+	messagePair := NewMessagePair()
 	mockSender := &MockSender{}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -45,14 +45,14 @@ func TestMessageImpl(t *testing.T) {
 	messageErr := errors.New("message error")
 	// asynchronous send
 	mockSender.SetResult([]error{messageErr})
-	require.EqualError(t, messageImpl.SendMessage(ctx, "topic", "message", mockSender), messageErr.Error())
+	require.EqualError(t, messagePair.SendMessage(ctx, "topic", "message", mockSender), messageErr.Error())
 	mockSender.SetResult([]error{nil})
-	require.NoError(t, messageImpl.SendMessage(ctx, "topic", "message", mockSender))
+	require.NoError(t, messagePair.SendMessage(ctx, "topic", "message", mockSender))
 	mockSender.ClearMessage()
 
 	// synchronous send
 	mockSender.SetResult([]error{messageErr})
-	resp, err := messageImpl.SendRequest(ctx, "topic", "request", mockSender)
+	resp, err := messagePair.SendRequest(ctx, "topic", "request", mockSender)
 	require.EqualError(t, err, messageErr.Error())
 	require.Nil(t, resp)
 	mockSender.ClearMessage()
@@ -60,18 +60,18 @@ func TestMessageImpl(t *testing.T) {
 	mockSender.SetResult([]error{nil})
 	ctx2, cancel2 := context.WithTimeout(ctx, 100*time.Millisecond)
 	defer cancel2()
-	resp, err = messageImpl.SendRequest(ctx2, "topic", "request", mockSender)
+	resp, err = messagePair.SendRequest(ctx2, "topic", "request", mockSender)
 	require.EqualError(t, err, context.DeadlineExceeded.Error())
 	require.Nil(t, resp)
 	// late response
 	msg := mockSender.PopMessage().(MessageWithID)
-	require.EqualError(t, messageImpl.OnResponse(MessageWithID{ID: msg.ID, Message: "response"}), fmt.Sprintf("request %d not found", msg.ID))
+	require.EqualError(t, messagePair.OnResponse(MessageWithID{ID: msg.ID, Message: "response"}), fmt.Sprintf("request %d not found", msg.ID))
 
 	go func() {
 		mockSender.SetResult([]error{nil})
 		ctx3, cancel3 := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel3()
-		resp, err := messageImpl.SendRequest(ctx3, "topic", "request", mockSender)
+		resp, err := messagePair.SendRequest(ctx3, "topic", "request", mockSender)
 		require.NoError(t, err)
 		require.Equal(t, "response", resp)
 	}()
@@ -79,10 +79,13 @@ func TestMessageImpl(t *testing.T) {
 		return mockSender.Len() == 1
 	}, 5*time.Second, 100*time.Millisecond)
 	msg = mockSender.PopMessage().(MessageWithID)
-	require.NoError(t, messageImpl.OnResponse(MessageWithID{ID: msg.ID, Message: "response"}))
+	require.NoError(t, messagePair.OnResponse(MessageWithID{ID: msg.ID, Message: "response"}))
 
 	// duplicate response
-	require.EqualError(t, messageImpl.OnResponse(MessageWithID{ID: msg.ID, Message: "response"}), fmt.Sprintf("request %d not found", msg.ID))
+	require.Eventually(t, func() bool {
+		err := messagePair.OnResponse(MessageWithID{ID: msg.ID, Message: "response"})
+		return err != nil && err.Error() == fmt.Sprintf("request %d not found", msg.ID)
+	}, 5*time.Second, 100*time.Millisecond)
 }
 
 type MockSender struct {

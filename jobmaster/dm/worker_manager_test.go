@@ -511,7 +511,7 @@ func (mockAgent *MockWorkerAgent) CreateWorker(ctx context.Context, taskID strin
 	return result.workerID, result.err
 }
 
-func (mockAgent *MockWorkerAgent) DestroyWorker(ctx context.Context, taskID string, workerID lib.WorkerID) error {
+func (mockAgent *MockWorkerAgent) StopWorker(ctx context.Context, taskID string, workerID lib.WorkerID) error {
 	mockAgent.Lock()
 	defer mockAgent.Unlock()
 	if len(mockAgent.destroyResults) == 0 {

@@ -26,29 +26,29 @@ type Sender interface {
 	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error
 }
 
-// MessageImpl implement a simple synchronous request/response message pattern since the lib currently only support asynchronous message.
+// MessagePair implement a simple synchronous request/response message pattern since the lib currently only support asynchronous message.
 // Caller should persist the request message if needed.
 // Caller should add retry mechanism if needed.
-type MessageImpl struct {
+type MessagePair struct {
 	// messageID -> response channel
 	// TODO: limit the MaxPendingMessageCount if needed.
 	pendings    sync.Map
 	idAllocator *MessageIDAllocator
 }
 
-func NewMessageImpl() *MessageImpl {
-	return &MessageImpl{
+func NewMessagePair() *MessagePair {
+	return &MessagePair{
 		idAllocator: &MessageIDAllocator{},
 	}
 }
 
 // SendMessage sends a message asynchronously.
-func (m *MessageImpl) SendMessage(ctx context.Context, topic p2p.Topic, message Message, sender Sender) error {
+func (m *MessagePair) SendMessage(ctx context.Context, topic p2p.Topic, message Message, sender Sender) error {
 	return sender.SendMessage(ctx, topic, message, true)
 }
 
 // SendRequest sends a request message and wait for response.
-func (m *MessageImpl) SendRequest(ctx context.Context, topic p2p.Topic, req Request, sender Sender) (interface{}, error) {
+func (m *MessagePair) SendRequest(ctx context.Context, topic p2p.Topic, req Request, sender Sender) (interface{}, error) {
 	msg := MessageWithID{ID: m.idAllocator.Alloc(), Message: req}
 	respCh := make(chan Response, 1)
 	m.pendings.Store(msg.ID, respCh)
@@ -67,7 +67,7 @@ func (m *MessageImpl) SendRequest(ctx context.Context, topic p2p.Topic, req Requ
 }
 
 // OnResponse receives a response message.
-func (m *MessageImpl) OnResponse(msg MessageWithID) error {
+func (m *MessagePair) OnResponse(msg MessageWithID) error {
 	respCh, ok := m.pendings.Load(msg.ID)
 	if !ok {
 		return errors.Errorf("request %d not found", msg.ID)
@@ -75,7 +75,6 @@ func (m *MessageImpl) OnResponse(msg MessageWithID) error {
 
 	select {
 	case respCh.(chan Response) <- msg.Message:
-		m.pendings.Delete(msg.ID)
 		return nil
 	default:
 	}

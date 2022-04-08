@@ -66,7 +66,7 @@ func TestUpdateWorkerHandle(t *testing.T) {
 }
 
 func TestOperateWorker(t *testing.T) {
-	mockMasterImpl := &MockMasterImpl{}
+	mockMasterImpl := &MockMaster{}
 	messageAgent := NewMessageAgent(nil, "mock-jobmaster", mockMasterImpl)
 	task1 := "task1"
 	worker1 := "worker1"
@@ -84,17 +84,17 @@ func TestOperateWorker(t *testing.T) {
 	require.EqualError(t, err, fmt.Sprintf("worker for task %s already exist", task1))
 
 	// destroy worker
-	require.EqualError(t, messageAgent.DestroyWorker(context.Background(), "task-not-exist", "worker-not-exist"), fmt.Sprintf("worker for task %s not exist", "task-not-exist"))
-	require.EqualError(t, messageAgent.DestroyWorker(context.Background(), task1, "worker-not-exist"), fmt.Sprintf("worker for task %s mismatch: want %s, get %s", task1, "worker-not-exist", worker1))
+	require.EqualError(t, messageAgent.StopWorker(context.Background(), "task-not-exist", "worker-not-exist"), fmt.Sprintf("worker for task %s not exist", "task-not-exist"))
+	require.EqualError(t, messageAgent.StopWorker(context.Background(), task1, "worker-not-exist"), fmt.Sprintf("worker for task %s mismatch: want %s, get %s", task1, "worker-not-exist", worker1))
 	// worker offline
-	require.Error(t, messageAgent.DestroyWorker(context.Background(), task1, worker1))
+	require.Error(t, messageAgent.StopWorker(context.Background(), task1, worker1))
 	// worker normal
 	messageAgent.UpdateWorkerHandle(task1, &MockSender{id: worker1})
-	require.NoError(t, messageAgent.DestroyWorker(context.Background(), task1, worker1))
+	require.NoError(t, messageAgent.StopWorker(context.Background(), task1, worker1))
 }
 
 func TestOperateTask(t *testing.T) {
-	mockMasterImpl := &MockMasterImpl{}
+	mockMasterImpl := &MockMaster{}
 	messageAgent := NewMessageAgent(nil, "mock-jobmaster", mockMasterImpl)
 	task1 := "task1"
 	worker1 := "worker1"
@@ -124,18 +124,14 @@ func lenSyncMap(m *sync.Map) int {
 	return i
 }
 
-type MockMasterImpl struct{}
+type MockMaster struct{}
 
-func (m *MockMasterImpl) CreateWorker(workerType lib.WorkerType, config lib.WorkerConfig, cost model.RescUnit) (lib.WorkerID, error) {
+func (m *MockMaster) CreateWorker(workerType lib.WorkerType, config lib.WorkerConfig, cost model.RescUnit) (lib.WorkerID, error) {
 	return "mock-worker", nil
 }
 
-func (m *MockMasterImpl) CurrentEpoch() lib.Epoch {
+func (m *MockMaster) CurrentEpoch() lib.Epoch {
 	return 0
-}
-
-func (m *MockMasterImpl) JobMasterID() lib.MasterID {
-	return "mock-jobmaster"
 }
 
 type MockSender struct {

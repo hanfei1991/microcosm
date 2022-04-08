@@ -9,12 +9,13 @@ import (
 )
 
 // Message use for asynchronous message.
+// It use json format to transfer, all the fields should be public.
 type Message interface{}
 
 // MessageWithID use for synchronous request/response message.
 type MessageWithID struct {
 	ID      uint64
-	Message interface{}
+	Message Message
 }
 
 type Request Message
