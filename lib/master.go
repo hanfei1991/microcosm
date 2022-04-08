@@ -26,11 +26,9 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/deps"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	extKV "github.com/hanfei1991/microcosm/pkg/meta/extension"
-	//	"github.com/hanfei1991/microcosm/pkg/meta/kvclient"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/pkg/quota"
-	//	"github.com/hanfei1991/microcosm/pkg/tenant"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
 )
 
@@ -65,6 +63,7 @@ type MasterImpl interface {
 	// OnWorkerMessage is called when a customized message is received.
 	OnWorkerMessage(worker WorkerHandle, topic p2p.Topic, message interface{}) error
 
+	// OnWorkerStatusUpdated is called when a worker's status is updated.
 	OnWorkerStatusUpdated(worker WorkerHandle, newStatus *libModel.WorkerStatus) error
 
 	// CloseImpl is called when the master is being closed

@@ -53,6 +53,7 @@ func NewDMJobMaster(ctx *dcontext.Context, workerID lib.WorkerID, masterID lib.M
 	}
 
 	// TODO: we should expose the message handler register Func in base master.
+	// nolint:errcheck
 	ctx.Deps().Construct(func(m p2p.MessageHandlerManager) (p2p.MessageHandlerManager, error) {
 		jm.messageHandlerManager = m
 		return m, nil
