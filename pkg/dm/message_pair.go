@@ -42,11 +42,6 @@ func NewMessagePair() *MessagePair {
 	}
 }
 
-// SendMessage sends a message asynchronously.
-func (m *MessagePair) SendMessage(ctx context.Context, topic p2p.Topic, message Message, sender Sender) error {
-	return sender.SendMessage(ctx, topic, message, true)
-}
-
 // SendRequest sends a request message and wait for response.
 func (m *MessagePair) SendRequest(ctx context.Context, topic p2p.Topic, req Request, sender Sender) (interface{}, error) {
 	msg := MessageWithID{ID: m.idAllocator.Alloc(), Message: req}
@@ -54,7 +49,7 @@ func (m *MessagePair) SendRequest(ctx context.Context, topic p2p.Topic, req Requ
 	m.pendings.Store(msg.ID, respCh)
 	defer m.pendings.Delete(msg.ID)
 
-	if err := m.SendMessage(ctx, topic, msg, sender); err != nil {
+	if err := sender.SendMessage(ctx, topic, msg, true); err != nil {
 		return nil, err
 	}
 

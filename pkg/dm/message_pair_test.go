@@ -34,7 +34,7 @@ func TestMessageIDAllocator(t *testing.T) {
 	require.Equal(t, uint64(1004), allocator.Alloc())
 }
 
-func TestMessageImpl(t *testing.T) {
+func TestMessagePair(t *testing.T) {
 	t.Parallel()
 
 	messagePair := NewMessagePair()
@@ -43,13 +43,6 @@ func TestMessageImpl(t *testing.T) {
 	defer cancel()
 
 	messageErr := errors.New("message error")
-	// asynchronous send
-	mockSender.SetResult([]error{messageErr})
-	require.EqualError(t, messagePair.SendMessage(ctx, "topic", "message", mockSender), messageErr.Error())
-	mockSender.SetResult([]error{nil})
-	require.NoError(t, messagePair.SendMessage(ctx, "topic", "message", mockSender))
-	mockSender.ClearMessage()
-
 	// synchronous send
 	mockSender.SetResult([]error{messageErr})
 	resp, err := messagePair.SendRequest(ctx, "topic", "request", mockSender)
