@@ -26,9 +26,11 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/deps"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	extKV "github.com/hanfei1991/microcosm/pkg/meta/extension"
+	"github.com/hanfei1991/microcosm/pkg/meta/kvclient"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/pkg/quota"
+	"github.com/hanfei1991/microcosm/pkg/tenant"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
 )
 
@@ -203,9 +205,7 @@ func NewBaseMaster(
 
 		createWorkerQuota: quota.NewConcurrencyQuota(maxCreateWorkerConcurrency),
 		// [TODO] use tenantID if support muliti-tenant
-		// userMetaKVClient: kvclient.NewPrefixKVClient(params.UserRawKVClient, tenant.DefaultUserTenantID),
-		// temporary use to pass unit test
-		userMetaKVClient: params.UserRawKVClient,
+		userMetaKVClient: kvclient.NewPrefixKVClient(params.UserRawKVClient, tenant.DefaultUserTenantID),
 		deps:             ctx.Deps(),
 	}
 }
