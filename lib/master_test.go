@@ -23,12 +23,9 @@ const (
 	masterName            = "my-master"
 	masterNodeName        = "node-1"
 	executorNodeID1       = "node-exec-1"
-	executorNodeID2       = "node-exec-2"
 	executorNodeID3       = "node-exec-3"
 	workerTypePlaceholder = 999
 	workerID1             = WorkerID("worker-1")
-	workerID2             = WorkerID("worker-2")
-	workerID3             = WorkerID("worker-3")
 )
 
 type dummyConfig struct {
@@ -158,16 +155,16 @@ func TestMasterCreateWorker(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, workerID1, workerID)
 
-	master.On("OnWorkerOnline", mock.AnythingOfType("*master.RunningWorkerHandle")).Return(nil)
-
-	MockBaseMasterWorkerHeartbeat(t, master.DefaultBaseMaster, masterName, workerID1, executorNodeID1)
+	master.On("OnWorkerDispatched", mock.AnythingOfType("*master.runningHandleImpl"), nil).Return(nil)
+	master.On("OnWorkerOnline", mock.AnythingOfType("*master.runningHandleImpl")).Return(nil)
 
 	require.Eventuallyf(t, func() bool {
+		MockBaseMasterWorkerHeartbeat(t, master.DefaultBaseMaster, masterName, workerID1, executorNodeID1)
 		master.On("Tick", mock.Anything).Return(nil)
 		err = master.Poll(ctx)
 		require.NoError(t, err)
 		return master.onlineWorkerCount.Load() == 1
-	}, time.Second*1, time.Millisecond*10, "final worker count %d", master.onlineWorkerCount.Load())
+	}, time.Second*10, time.Millisecond*10, "final worker count %d", master.onlineWorkerCount.Load())
 
 	workerList := master.GetWorkers()
 	require.Len(t, workerList, 1)
@@ -246,9 +243,15 @@ func TestMasterCreateWorkerMetError(t *testing.T) {
 		workerID1,
 		executorNodeID1)
 
+	master.On("OnWorkerDispatched", mock.Anything, mock.Anything).
+		Return(nil).
+		Run(func(args mock.Arguments) {
+			err := args.Error(1)
+			require.Regexp(t, ".*ErrClusterResourceNotEnough.*", err)
+		})
+
 	_, err = master.CreateWorker(workerTypePlaceholder, &dummyConfig{param: 1}, 100)
-	require.Error(t, err)
-	require.Regexp(t, ".*ErrClusterResourceNotEnough.*", err)
+	require.NoError(t, err)
 }
 
 func TestPrepareWorkerConfig(t *testing.T) {

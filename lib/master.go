@@ -67,7 +67,6 @@ type MasterImpl interface {
 
 	// OnWorkerMessage is called when a customized message is received.
 	OnWorkerMessage(worker WorkerHandle, topic p2p.Topic, message interface{}) error
-
 	OnWorkerStatusUpdated(worker WorkerHandle, newStatus *libModel.WorkerStatus) error
 
 	// CloseImpl is called when the master is being closed
@@ -264,7 +263,10 @@ func (m *DefaultBaseMaster) doInit(ctx context.Context) (isFirstStartUp bool, er
 		},
 		func(_ context.Context, handle master.WorkerHandle) error {
 			return m.Impl.OnWorkerStatusUpdated(handle, handle.Status())
-		}, isInit, m.timeoutConfig)
+		},
+		func(_ context.Context, handle master.WorkerHandle, err error) error {
+			return m.Impl.OnWorkerDispatched(handle, err)
+		}, isInit, m.timeoutConfig, m.clock)
 
 	if err := m.registerMessageHandlers(ctx); err != nil {
 		return false, errors.Trace(err)
@@ -355,11 +357,7 @@ func (m *DefaultBaseMaster) doPoll(ctx context.Context) error {
 	if err := m.messageHandlerManager.CheckError(ctx); err != nil {
 		return errors.Trace(err)
 	}
-	if err := m.workerManager.Tick(ctx); err != nil {
-		return err
-	}
-
-	return nil
+	return m.workerManager.Tick(ctx)
 }
 
 func (m *DefaultBaseMaster) MasterMeta() *libModel.MasterMetaKVData {
@@ -411,66 +409,6 @@ func (m *DefaultBaseMaster) startBackgroundTasks() {
 			m.OnError(err)
 		}
 	}()
-
-	m.wg.Add(1)
-	go func() {
-		defer m.wg.Done()
-		if err := m.runWorkerCheck(cctx); err != nil {
-			m.OnError(err)
-		}
-	}()
-}
-
-func (m *DefaultBaseMaster) runWorkerCheck(ctx context.Context) error {
-	ticker := time.NewTicker(m.timeoutConfig.MasterHeartbeatCheckLoopInterval)
-	for {
-		select {
-		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
-		case <-ticker.C:
-		}
-
-		/*
-			offlinedWorkers, onlinedWorkers := m.workerManager.Tick(ctx)
-			// It is logical to call `OnWorkerOnline` first and then call `OnWorkerOffline`.
-			// In case that these two events for the same worker is detected in the same tick.
-			for _, workerInfo := range onlinedWorkers {
-				log.L().Info("worker is online", zap.Any("master-id", m.id), zap.Any("worker-info", workerInfo))
-
-				handle := m.workerManager.GetWorkerHandle(workerInfo.ID)
-				err := m.Impl.OnWorkerOnline(handle)
-				if err != nil {
-					return errors.Trace(err)
-				}
-			}
-
-			for _, workerInfo := range offlinedWorkers {
-				status, ok := m.workerManager.GetStatus(workerInfo.ID)
-				if !ok {
-					log.L().Panic(
-						"offlined worker has no status found",
-						zap.Any("worker-info", workerInfo),
-					)
-				}
-				log.L().Info("worker is offline", zap.Any("master-id", m.id), zap.Any("worker-info", workerInfo), zap.Any("worker-status", status))
-				tombstoneHandle := NewTombstoneWorkerHandle(workerInfo.ID, *status, nil)
-				var offlineError error
-				switch status.Code {
-				case libModel.WorkerStatusFinished:
-					offlineError = derror.ErrWorkerFinish.FastGenByArgs()
-				case libModel.WorkerStatusStopped:
-					offlineError = derror.ErrWorkerStop.FastGenByArgs()
-				default:
-					offlineError = derror.ErrWorkerOffline.FastGenByArgs(workerInfo.ID)
-				}
-
-				err := m.Impl.OnWorkerOffline(tombstoneHandle, offlineError)
-				if err != nil {
-					return errors.Trace(err)
-				}
-			}
-		*/
-	}
 }
 
 func (m *DefaultBaseMaster) OnError(err error) {
@@ -581,62 +519,73 @@ func (m *DefaultBaseMaster) CreateWorker(
 		return "", derror.ErrMasterConcurrencyExceeded.Wrap(err)
 	}
 
-	defer func() {
-		m.createWorkerQuota.Release()
-	}()
-
 	configBytes, workerID, err := m.prepareWorkerConfig(workerType, config)
 	if err != nil {
 		return "", err
 	}
 
-	requestCtx, cancel := context.WithTimeout(context.Background(), createWorkerTimeout)
-	defer cancel()
-	// This following API should be refined.
-	resp, err := m.serverMasterClient.ScheduleTask(requestCtx, &pb.TaskSchedulerRequest{Tasks: []*pb.ScheduleTask{{
-		Task: &pb.TaskRequest{
-			Id: 0,
-		},
-		Cost: int64(cost),
-	}}},
-		// TODO (zixiong) make the timeout configurable
-		time.Second*10)
-	if err != nil {
-		return "", err
-	}
-	schedule := resp.GetSchedule()
-	if len(schedule) != 1 {
-		log.L().Panic("unexpected schedule result", zap.Any("schedule", schedule))
-	}
-	executorID := model.ExecutorID(schedule[0].ExecutorId)
+	go func() {
+		defer func() {
+			m.createWorkerQuota.Release()
+		}()
 
-	err = m.executorClientManager.AddExecutor(executorID, schedule[0].Addr)
-	if err != nil {
-		return "", err
-	}
+		requestCtx, cancel := context.WithTimeout(context.Background(), createWorkerTimeout)
+		defer cancel()
+		// This following API should be refined.
+		resp, err := m.serverMasterClient.ScheduleTask(requestCtx, &pb.TaskSchedulerRequest{Tasks: []*pb.ScheduleTask{{
+			Task: &pb.TaskRequest{
+				Id: 0,
+			},
+			Cost: int64(cost),
+		}}},
+			// TODO (zixiong) make the timeout configurable
+			time.Second*10)
+		if err != nil {
+			m.workerManager.OnCreatingWorkerFinished(workerID, err)
+			return
+		}
 
-	m.workerManager.OnCreatingWorker(workerID, executorID)
-	executorClient := m.executorClientManager.ExecutorClient(executorID)
-	executorResp, err := executorClient.Send(requestCtx, &client.ExecutorRequest{
-		Cmd: client.CmdDispatchTask,
-		Req: &pb.DispatchTaskRequest{
-			TaskTypeId: int64(workerType),
-			TaskConfig: configBytes,
-			MasterId:   m.id,
-			WorkerId:   workerID,
-		},
-	})
-	if err != nil {
-		m.workerManager.OnCreatingWorkerFailed(workerID)
-		return "", err
-	}
-	dispatchTaskResp := executorResp.Resp.(*pb.DispatchTaskResponse)
-	log.L().Info("Worker dispatched", zap.Any("master-id", m.id), zap.Any("response", dispatchTaskResp))
-	errCode := dispatchTaskResp.GetErrorCode()
-	if errCode != pb.DispatchTaskErrorCode_OK {
-		m.workerManager.OnCreatingWorkerFailed(workerID)
-		return "", errors.Errorf("dispatch worker failed with error code: %d", errCode)
-	}
+		schedule := resp.GetSchedule()
+		if len(schedule) != 1 {
+			log.L().Panic("unexpected schedule result", zap.Any("schedule", schedule))
+		}
+		executorID := model.ExecutorID(schedule[0].ExecutorId)
+
+		m.workerManager.OnCreatingWorker(workerID, executorID)
+
+		err = m.executorClientManager.AddExecutor(executorID, schedule[0].Addr)
+		if err != nil {
+			m.workerManager.OnCreatingWorkerFinished(workerID, err)
+			return
+		}
+
+		executorClient := m.executorClientManager.ExecutorClient(executorID)
+		executorResp, err := executorClient.Send(requestCtx, &client.ExecutorRequest{
+			Cmd: client.CmdDispatchTask,
+			Req: &pb.DispatchTaskRequest{
+				TaskTypeId: int64(workerType),
+				TaskConfig: configBytes,
+				MasterId:   m.id,
+				WorkerId:   workerID,
+			},
+		})
+		if err != nil {
+			// The executor may have already launched the worker.
+			// TODO summarize the kind of errors that could be received
+			// after success.
+			m.workerManager.OnCreatingWorkerFinished(workerID, nil)
+			return
+		}
+		dispatchTaskResp := executorResp.Resp.(*pb.DispatchTaskResponse)
+		log.L().Info("Worker dispatched", zap.Any("master-id", m.id), zap.Any("response", dispatchTaskResp))
+		errCode := dispatchTaskResp.GetErrorCode()
+		if errCode != pb.DispatchTaskErrorCode_OK {
+			err := errors.Errorf("dispatch worker failed with error code: %d", errCode)
+			m.workerManager.OnCreatingWorkerFinished(workerID, err)
+			return
+		}
+		m.workerManager.OnCreatingWorkerFinished(workerID, nil)
+	}()
 
 	return workerID, nil
 }

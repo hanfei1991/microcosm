@@ -78,6 +78,7 @@ func (c *MasterMetadataClient) LoadAllMasters(ctx context.Context) ([]*libModel.
 		if err := json.Unmarshal(kv.Value, masterMeta); err != nil {
 			return nil, errors.Trace(err)
 		}
+		meta = append(meta, masterMeta)
 	}
 	return meta, nil
 }

@@ -20,6 +20,11 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
+type (
+	Callback                 = func(ctx context.Context, handle WorkerHandle) error
+	workerDispatchedCallback = func(ctx context.Context, handle WorkerHandle, err error) error
+)
+
 type WorkerManager struct {
 	mu            sync.Mutex
 	workerEntries map[libModel.WorkerID]*workerEntry
@@ -34,6 +39,7 @@ type WorkerManager struct {
 	onWorkerOnlined       Callback
 	onWorkerOfflined      Callback
 	onWorkerStatusUpdated Callback
+	onWorkerDispatched    workerDispatchedCallback
 
 	eventQueue chan *masterEvent
 	closeCh    chan struct{}
@@ -53,8 +59,6 @@ const (
 	workerManagerWaitingHeartbeat
 )
 
-type Callback = func(ctx context.Context, handle WorkerHandle) error
-
 func NewWorkerManager(
 	masterID libModel.MasterID,
 	epoch libModel.Epoch,
@@ -63,8 +67,10 @@ func NewWorkerManager(
 	onWorkerOnline Callback,
 	onWorkerOffline Callback,
 	onWorkerStatusUpdated Callback,
+	onWorkerDispatched workerDispatchedCallback,
 	isInit bool,
 	timeoutConfig config.TimeoutConfig,
+	clock clock.Clock,
 ) *WorkerManager {
 	state := workerManagerReady
 	if !isInit {
@@ -84,12 +90,13 @@ func NewWorkerManager(
 		onWorkerOnlined:       onWorkerOnline,
 		onWorkerOfflined:      onWorkerOffline,
 		onWorkerStatusUpdated: onWorkerStatusUpdated,
+		onWorkerDispatched:    onWorkerDispatched,
 
 		eventQueue: make(chan *masterEvent, 1024),
 		closeCh:    make(chan struct{}),
 		errCh:      make(chan error, 1),
 
-		clock:    clock.New(),
+		clock:    clock,
 		timeouts: timeoutConfig,
 	}
 
@@ -115,13 +122,14 @@ func NewWorkerManager(
 
 func (m *WorkerManager) Close() {
 	close(m.closeCh)
+	m.wg.Wait()
 }
 
 // InitAfterRecover should be called after the master has failed over.
 // This method will block until a timeout period for heartbeats has passed.
 func (m *WorkerManager) InitAfterRecover(ctx context.Context) error {
 	timeoutInterval := m.timeouts.WorkerTimeoutDuration + m.timeouts.WorkerTimeoutGracefulDuration
-	timer := time.NewTimer(timeoutInterval)
+	timer := m.clock.Timer(timeoutInterval)
 	defer timer.Stop()
 
 	select {
@@ -195,8 +203,9 @@ func (m *WorkerManager) HandleHeartbeat(msg *libModel.HeartbeatPingMessage, from
 	newHeartbeatCount := entry.heartbeatCount.Add(1)
 	if newHeartbeatCount == 1 {
 		err := m.enqueueEvent(&masterEvent{
-			Tp: workerOnlineEvent,
-			Handle: &RunningWorkerHandle{
+			Tp:       workerOnlineEvent,
+			WorkerID: msg.FromWorkerID,
+			Handle: &runningHandleImpl{
 				workerID:   msg.FromWorkerID,
 				executorID: model.ExecutorID(fromNode),
 				manager:    m,
@@ -238,6 +247,10 @@ func (m *WorkerManager) Tick(ctx context.Context) error {
 			if err := m.onWorkerStatusUpdated(ctx, event.Handle); err != nil {
 				return err
 			}
+		case workerDispatched:
+			if err := m.onWorkerDispatched(ctx, event.Handle, event.Err); err != nil {
+				return err
+			}
 		}
 
 		if event.beforeHook != nil {
@@ -265,13 +278,46 @@ func (m *WorkerManager) OnCreatingWorker(workerID libModel.WorkerID, executorID 
 		})
 }
 
-// OnCreatingWorkerFailed is called if we know for sure that the worker will never be created.
+// OnCreatingWorkerFinished is called if we know for sure that the worker will never be created.
 // This method undoes whatever OnCreatingWorker does.
-func (m *WorkerManager) OnCreatingWorkerFailed(workerID libModel.WorkerID) {
+func (m *WorkerManager) OnCreatingWorkerFinished(workerID libModel.WorkerID, errIn error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	delete(m.workerEntries, workerID)
+	var event *masterEvent
+	if errIn != nil {
+		event = &masterEvent{
+			Tp:       workerDispatched,
+			WorkerID: workerID,
+			Handle: &tombstoneHandleImpl{
+				workerID: workerID,
+				manager:  m,
+			},
+			Err: errIn,
+		}
+		delete(m.workerEntries, workerID)
+	} else {
+		entry, exists := m.workerEntries[workerID]
+		if !exists {
+			log.L().Panic("unexpected call of OnCreatingWorkerFinished",
+				zap.String("worker-id", workerID))
+		}
+		event = &masterEvent{
+			Tp:       workerDispatched,
+			WorkerID: workerID,
+			Handle: &runningHandleImpl{
+				workerID:   workerID,
+				executorID: entry.ExecutorID,
+				manager:    m,
+			},
+			Err: errIn,
+		}
+	}
+	err := m.enqueueEvent(event)
+	if err != nil {
+		log.L().Warn("workerDispatchFailed event is dropped",
+			zap.Error(errIn))
+	}
 }
 
 // OnWorkerStatusUpdateMessage should be called in the message handler for WorkerStatusMessage.
@@ -306,14 +352,14 @@ func (m *WorkerManager) GetWorkers() map[libModel.WorkerID]WorkerHandle {
 	ret := make(map[libModel.WorkerID]WorkerHandle, len(m.workerEntries))
 	for workerID, entry := range m.workerEntries {
 		if entry.IsTombstone() {
-			ret[workerID] = &TombstoneHandle{
+			ret[workerID] = &tombstoneHandleImpl{
 				workerID: workerID,
 				manager:  m,
 			}
 			continue
 		}
 
-		ret[workerID] = &RunningWorkerHandle{
+		ret[workerID] = &runningHandleImpl{
 			workerID:   workerID,
 			executorID: entry.ExecutorID,
 			manager:    m,
@@ -349,8 +395,9 @@ func (m *WorkerManager) runBackgroundChecker() error {
 				if reader := entry.StatusReader(); reader != nil {
 					if _, ok := reader.Receive(); ok {
 						err := m.enqueueEvent(&masterEvent{
-							Tp: workerStatusUpdatedEvent,
-							Handle: &RunningWorkerHandle{
+							Tp:       workerStatusUpdatedEvent,
+							WorkerID: workerID,
+							Handle: &runningHandleImpl{
 								workerID:   workerID,
 								executorID: entry.ExecutorID,
 								manager:    m,
@@ -368,8 +415,9 @@ func (m *WorkerManager) runBackgroundChecker() error {
 
 			// The worker has timed out.
 			err := m.enqueueEvent(&masterEvent{
-				Tp: workerOfflineEvent,
-				Handle: &TombstoneHandle{
+				Tp:       workerOfflineEvent,
+				WorkerID: workerID,
+				Handle: &tombstoneHandleImpl{
 					workerID: workerID,
 					manager:  m,
 				},

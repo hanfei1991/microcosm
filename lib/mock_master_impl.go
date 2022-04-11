@@ -50,7 +50,7 @@ func NewMockMasterImpl(masterID, id MasterID) *MockMasterImpl {
 	ret := &MockMasterImpl{
 		masterID:          masterID,
 		id:                id,
-		dispatchedWorkers: make(chan WorkerHandle),
+		dispatchedWorkers: make(chan WorkerHandle, 1),
 		dispatchedResult:  make(chan error, 1),
 		updatedStatuses:   make(chan *libModel.WorkerStatus, 1024),
 	}

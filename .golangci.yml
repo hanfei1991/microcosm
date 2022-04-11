@@ -20,8 +20,6 @@ linters:
     - asciicheck
     - exportloopref
     - makezero
-    - gocognit
-    - gocyclo
 
 linters-settings:
   revive:

@@ -15,18 +15,37 @@ import (
 type WorkerHandle interface {
 	Status() *libModel.WorkerStatus
 	ID() libModel.WorkerID
-	GetTombstone() *TombstoneHandle
-	Unwrap() *RunningWorkerHandle
+	GetTombstone() TombstoneHandle
+	Unwrap() RunningHandle
 	ToPB() (*pb.WorkerInfo, error)
 }
 
-type RunningWorkerHandle struct {
+type RunningHandle interface {
+	Status() *libModel.WorkerStatus
+	ID() libModel.WorkerID
+	ToPB() (*pb.WorkerInfo, error)
+	SendMessage(
+		ctx context.Context,
+		topic p2p.Topic,
+		message interface{},
+		nonblocking bool,
+	) error
+}
+
+type TombstoneHandle interface {
+	Status() *libModel.WorkerStatus
+	ID() libModel.WorkerID
+	ToPB() (*pb.WorkerInfo, error)
+	CleanTombstone(ctx context.Context) error
+}
+
+type runningHandleImpl struct {
 	workerID   libModel.WorkerID
 	executorID model.ExecutorID
 	manager    *WorkerManager
 }
 
-func (h *RunningWorkerHandle) Status() *libModel.WorkerStatus {
+func (h *runningHandleImpl) Status() *libModel.WorkerStatus {
 	h.manager.mu.Lock()
 	defer h.manager.mu.Unlock()
 
@@ -38,19 +57,19 @@ func (h *RunningWorkerHandle) Status() *libModel.WorkerStatus {
 	return entry.StatusReader().Status()
 }
 
-func (h *RunningWorkerHandle) ID() libModel.WorkerID {
+func (h *runningHandleImpl) ID() libModel.WorkerID {
 	return h.workerID
 }
 
-func (h *RunningWorkerHandle) GetTombstone() *TombstoneHandle {
+func (h *runningHandleImpl) GetTombstone() TombstoneHandle {
 	return nil
 }
 
-func (h *RunningWorkerHandle) Unwrap() *RunningWorkerHandle {
+func (h *runningHandleImpl) Unwrap() RunningHandle {
 	return h
 }
 
-func (h *RunningWorkerHandle) ToPB() (*pb.WorkerInfo, error) {
+func (h *runningHandleImpl) ToPB() (*pb.WorkerInfo, error) {
 	statusBytes, err := h.Status().Marshal()
 	if err != nil {
 		return nil, err
@@ -64,7 +83,7 @@ func (h *RunningWorkerHandle) ToPB() (*pb.WorkerInfo, error) {
 	return ret, nil
 }
 
-func (h *RunningWorkerHandle) SendMessage(
+func (h *runningHandleImpl) SendMessage(
 	ctx context.Context,
 	topic p2p.Topic,
 	message interface{},
@@ -83,12 +102,12 @@ func (h *RunningWorkerHandle) SendMessage(
 	return nil
 }
 
-type TombstoneHandle struct {
+type tombstoneHandleImpl struct {
 	workerID libModel.WorkerID
 	manager  *WorkerManager
 }
 
-func (h *TombstoneHandle) Status() *libModel.WorkerStatus {
+func (h *tombstoneHandleImpl) Status() *libModel.WorkerStatus {
 	h.manager.mu.Lock()
 	defer h.manager.mu.Unlock()
 
@@ -100,18 +119,22 @@ func (h *TombstoneHandle) Status() *libModel.WorkerStatus {
 	return entry.StatusReader().Status()
 }
 
-func (h *TombstoneHandle) ID() libModel.WorkerID {
+func (h *tombstoneHandleImpl) ID() libModel.WorkerID {
 	return h.workerID
 }
 
-func (h *TombstoneHandle) GetTombstone() *TombstoneHandle {
+func (h *tombstoneHandleImpl) GetTombstone() TombstoneHandle {
 	return h
 }
 
-func (h *TombstoneHandle) Unwrap() *RunningWorkerHandle {
+func (h *tombstoneHandleImpl) Unwrap() RunningHandle {
 	return nil
 }
 
-func (h *TombstoneHandle) ToPB() (*pb.WorkerInfo, error) {
+func (h *tombstoneHandleImpl) ToPB() (*pb.WorkerInfo, error) {
 	return nil, nil
+}
+
+func (h *tombstoneHandleImpl) CleanTombstone(ctx context.Context) error {
+	panic("implement me")
 }
