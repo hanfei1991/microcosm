@@ -18,6 +18,7 @@ import (
 	"github.com/hanfei1991/microcosm/lib/registry"
 	"github.com/hanfei1991/microcosm/model"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
+	dmpkg "github.com/hanfei1991/microcosm/pkg/dm"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
@@ -99,6 +100,7 @@ func (jm *JobMaster) OnWorkerDispatched(worker lib.WorkerHandle, result error) e
 	if result != nil {
 		log.L().Error("failed to create worker", zap.String("worker_id", worker.ID()), zap.Error(result))
 		jm.workerManager.removeWorkerStatusByWorkerID(worker.ID())
+		jm.workerManager.SetNextCheckTime(time.Now())
 	}
 	return nil
 }
@@ -121,9 +123,21 @@ func (jm *JobMaster) OnWorkerOffline(worker lib.WorkerHandle, reason error) erro
 		return errors.Trace(err)
 	}
 
+	if taskStatus.GetStage() == metadata.StageFinished {
+		return jm.onWorkerFinished(taskStatus, worker)
+	}
 	jm.taskManager.UpdateTaskStatus(runtime.NewOfflineStatus(taskStatus.GetTask()))
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus(taskStatus.GetTask(), taskStatus.GetUnit(), worker.ID(), runtime.WorkerOffline))
 	jm.messageAgent.UpdateWorkerHandle(taskStatus.GetTask(), nil)
+	jm.workerManager.SetNextCheckTime(time.Now())
+	return nil
+}
+
+func (jm *JobMaster) onWorkerFinished(taskStatus runtime.TaskStatus, worker lib.WorkerHandle) error {
+	jm.taskManager.UpdateTaskStatus(taskStatus)
+	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus(taskStatus.GetTask(), taskStatus.GetUnit(), worker.ID(), runtime.WorkerFinished))
+	jm.messageAgent.UpdateWorkerHandle(taskStatus.GetTask(), nil)
+	jm.workerManager.SetNextCheckTime(time.Now())
 	return nil
 }
 
@@ -139,9 +153,13 @@ func (jm *JobMaster) OnJobManagerMessage(topic p2p.Topic, message interface{}) e
 
 func (jm *JobMaster) OnWorkerMessage(worker lib.WorkerHandle, topic p2p.Topic, message interface{}) error {
 	switch message.(type) {
-	// TODO: add DDL request
+	// TODO: handle DDL request
 	default:
-		return jm.messageAgent.OnWorkerMessage(message)
+		if response, ok := message.(dmpkg.MessageWithID); !ok {
+			return errors.Errorf("unexpected message type %T", message)
+		} else {
+			return jm.messageAgent.OnWorkerMessage(response)
+		}
 	}
 }
 
