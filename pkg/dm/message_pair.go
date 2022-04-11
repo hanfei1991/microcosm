@@ -49,7 +49,7 @@ func (m *MessagePair) SendRequest(ctx context.Context, topic p2p.Topic, req Requ
 	m.pendings.Store(msg.ID, respCh)
 	defer m.pendings.Delete(msg.ID)
 
-	if err := sender.SendMessage(ctx, topic, msg, true); err != nil {
+	if err := sender.SendMessage(ctx, topic, msg, false /* block */); err != nil {
 		return nil, err
 	}
 
