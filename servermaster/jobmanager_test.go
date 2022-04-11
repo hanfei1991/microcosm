@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/hanfei1991/microcosm/lib"
+	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	"github.com/hanfei1991/microcosm/pkg/errors"
@@ -53,22 +54,31 @@ func TestJobManagerSubmitJob(t *testing.T) {
 	require.Equal(t, pb.QueryJobResponse_pending, queryResp.Status)
 }
 
+type mockBaseMasterCreateWorkerFailed struct {
+	*lib.MockMasterImpl
+}
+
+func (m *mockBaseMasterCreateWorkerFailed) CreateWorker(
+	workerType lib.WorkerType, config lib.WorkerConfig, cost model.RescUnit,
+) (lib.WorkerID, error) {
+	return "", errors.ErrMasterConcurrencyExceeded.FastGenByArgs()
+}
+
 func TestCreateWorkerReturnError(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	mockMaster := lib.NewMockMasterImpl("", "create-worker-with-errro")
-	mockMaster.DefaultBaseMaster.
-		On("CreateWorker", mock.Anything, mock.Anything, mock.Anything).
-		Return("", errors.ErrMasterConcurrencyExceeded.FastGenByArgs())
+	masterImpl := lib.NewMockMasterImpl("", "create-worker-with-error")
+	mockMaster := &mockBaseMasterCreateWorkerFailed{
+		MockMasterImpl: masterImpl,
+	}
 	mgr := &JobManagerImplV2{
-		BaseMaster: mockMaster.DefaultBaseMaster,
+		BaseMaster: mockMaster,
 		JobFsm:     NewJobFsm(),
 		uuidGen:    uuid.NewGenerator(),
 	}
-	// set master impl to JobManagerImplV2
 	mockMaster.Impl = mgr
 	err := mockMaster.Init(ctx)
 	require.Nil(t, err)
@@ -77,7 +87,8 @@ func TestCreateWorkerReturnError(t *testing.T) {
 		Config: []byte("{\"srcHost\":\"0.0.0.0:1234\", \"dstHost\":\"0.0.0.0:1234\", \"srcDir\":\"data\", \"dstDir\":\"data1\"}"),
 	}
 	resp := mgr.SubmitJob(ctx, req)
-	require.Nil(t, resp.Err)
+	require.NotNil(t, resp.Err)
+	require.Regexp(t, ".*ErrMasterConcurrencyExceeded.*", resp.Err.Message)
 }
 
 func TestJobManagerPauseJob(t *testing.T) {
