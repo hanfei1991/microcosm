@@ -21,8 +21,8 @@ import (
 )
 
 type (
-	Callback                 = func(ctx context.Context, handle WorkerHandle) error
-	workerDispatchedCallback = func(ctx context.Context, handle WorkerHandle, err error) error
+	Callback          = func(ctx context.Context, handle WorkerHandle) error
+	CallbackWithError = func(ctx context.Context, handle WorkerHandle, err error) error
 )
 
 type WorkerManager struct {
@@ -37,9 +37,9 @@ type WorkerManager struct {
 	epoch    libModel.Epoch
 
 	onWorkerOnlined       Callback
-	onWorkerOfflined      Callback
+	onWorkerOfflined      CallbackWithError
 	onWorkerStatusUpdated Callback
-	onWorkerDispatched    workerDispatchedCallback
+	onWorkerDispatched    CallbackWithError
 
 	eventQueue chan *masterEvent
 	closeCh    chan struct{}
@@ -65,9 +65,9 @@ func NewWorkerManager(
 	meta metaclient.KVClient,
 	messageSender p2p.MessageSender,
 	onWorkerOnline Callback,
-	onWorkerOffline Callback,
+	onWorkerOffline CallbackWithError,
 	onWorkerStatusUpdated Callback,
-	onWorkerDispatched workerDispatchedCallback,
+	onWorkerDispatched CallbackWithError,
 	isInit bool,
 	timeoutConfig config.TimeoutConfig,
 	clock clock.Clock,
@@ -240,7 +240,7 @@ func (m *WorkerManager) Tick(ctx context.Context) error {
 				return err
 			}
 		case workerOfflineEvent:
-			if err := m.onWorkerOfflined(ctx, event.Handle); err != nil {
+			if err := m.onWorkerOfflined(ctx, event.Handle, event.Err); err != nil {
 				return err
 			}
 		case workerStatusUpdatedEvent:
@@ -419,6 +419,19 @@ func (m *WorkerManager) runBackgroundChecker() error {
 
 			// The worker has timed out.
 			entry.isOffline.Store(true)
+
+			var offlineError error
+			if reader := entry.StatusReader(); reader != nil {
+				switch reader.Status().Code {
+				case libModel.WorkerStatusFinished:
+					offlineError = derror.ErrWorkerFinish.FastGenByArgs()
+				case libModel.WorkerStatusStopped:
+					offlineError = derror.ErrWorkerStop.FastGenByArgs()
+				default:
+					offlineError = derror.ErrWorkerOffline.FastGenByArgs(workerID)
+				}
+			}
+
 			err := m.enqueueEvent(&masterEvent{
 				Tp:       workerOfflineEvent,
 				WorkerID: workerID,
@@ -426,6 +439,7 @@ func (m *WorkerManager) runBackgroundChecker() error {
 					workerID: workerID,
 					manager:  m,
 				},
+				Err: offlineError,
 				beforeHook: func() {
 					entry.MarkAsTombstone()
 				},

@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	derror "github.com/hanfei1991/microcosm/pkg/errors"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/require"
@@ -92,7 +94,7 @@ func (s *workerManageTestSuite) onWorkerOnline(ctx context.Context, handle Worke
 	return nil
 }
 
-func (s *workerManageTestSuite) onWorkerOffline(ctx context.Context, handle WorkerHandle) error {
+func (s *workerManageTestSuite) onWorkerOffline(ctx context.Context, handle WorkerHandle, err error) error {
 	if event, exists := s.events[handle.ID()]; exists {
 		log.L().Warn("found unexpected event", zap.Any("event", event))
 		return errors.New("unexpected event already exists")
@@ -100,6 +102,7 @@ func (s *workerManageTestSuite) onWorkerOffline(ctx context.Context, handle Work
 	s.events[handle.ID()] = &masterEvent{
 		Tp:     workerOfflineEvent,
 		Handle: handle,
+		Err:    err,
 	}
 	return nil
 }
@@ -268,6 +271,13 @@ func TestCreateWorkerAndWorkerStatusUpdatedAndTimesOut(t *testing.T) {
 	require.Equal(t, &libModel.WorkerStatus{
 		Code: libModel.WorkerStatusFinished,
 	}, event.Handle.Status())
+
+	suite.AdvanceClockBy(30 * time.Second)
+	event = suite.WaitForEvent(t, "worker-1")
+	require.Equal(t, workerOfflineEvent, event.Tp)
+	require.NotNil(t, event.Handle.GetTombstone())
+	require.True(t, derror.ErrWorkerFinish.Equal(event.Err))
+
 	suite.Close()
 }
 

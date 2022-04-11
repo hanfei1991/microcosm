@@ -3,9 +3,8 @@ package master
 import (
 	"context"
 
-	"go.uber.org/atomic"
-
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/atomic"
 
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/model"

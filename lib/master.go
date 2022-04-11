@@ -258,8 +258,8 @@ func (m *DefaultBaseMaster) doInit(ctx context.Context) (isFirstStartUp bool, er
 		func(_ context.Context, handle master.WorkerHandle) error {
 			return m.Impl.OnWorkerOnline(handle)
 		},
-		func(_ context.Context, handle master.WorkerHandle) error {
-			return m.Impl.OnWorkerOffline(handle, nil)
+		func(_ context.Context, handle master.WorkerHandle, err error) error {
+			return m.Impl.OnWorkerOffline(handle, err)
 		},
 		func(_ context.Context, handle master.WorkerHandle) error {
 			return m.Impl.OnWorkerStatusUpdated(handle, handle.Status())
