@@ -198,7 +198,7 @@ func (m *WorkerManager) HandleHeartbeat(msg *libModel.HeartbeatPingMessage, from
 		return nil
 	}
 
-	entry.ExpireAt = m.nextExpireTime()
+	entry.SetExpireTime(m.nextExpireTime())
 
 	newHeartbeatCount := entry.heartbeatCount.Add(1)
 	if newHeartbeatCount == 1 {
@@ -307,7 +307,7 @@ func (m *WorkerManager) OnCreatingWorkerFinished(workerID libModel.WorkerID, err
 			WorkerID: workerID,
 			Handle: &runningHandleImpl{
 				workerID:   workerID,
-				executorID: entry.ExecutorID,
+				executorID: entry.executorID,
 				manager:    m,
 			},
 			Err: errIn,
@@ -361,7 +361,7 @@ func (m *WorkerManager) GetWorkers() map[libModel.WorkerID]WorkerHandle {
 
 		ret[workerID] = &runningHandleImpl{
 			workerID:   workerID,
-			executorID: entry.ExecutorID,
+			executorID: entry.executorID,
 			manager:    m,
 		}
 	}
@@ -389,7 +389,11 @@ func (m *WorkerManager) runBackgroundChecker() error {
 
 		m.mu.Lock()
 		for workerID, entry := range m.workerEntries {
-			if entry.ExpireAt.After(m.clock.Now()) {
+			if entry.isOffline.Load() {
+				// Prevent repeated delivery of the workerOffline event.
+				continue
+			}
+			if entry.ExpireTime().After(m.clock.Now()) {
 				// Not timed out
 
 				if reader := entry.StatusReader(); reader != nil {
@@ -399,7 +403,7 @@ func (m *WorkerManager) runBackgroundChecker() error {
 							WorkerID: workerID,
 							Handle: &runningHandleImpl{
 								workerID:   workerID,
-								executorID: entry.ExecutorID,
+								executorID: entry.executorID,
 								manager:    m,
 							},
 						})
@@ -414,6 +418,7 @@ func (m *WorkerManager) runBackgroundChecker() error {
 			}
 
 			// The worker has timed out.
+			entry.isOffline.Store(true)
 			err := m.enqueueEvent(&masterEvent{
 				Tp:       workerOfflineEvent,
 				WorkerID: workerID,

@@ -5,7 +5,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 
 	"github.com/hanfei1991/microcosm/lib/config"
@@ -78,6 +81,10 @@ func (s *workerManageTestSuite) PutMeta(workerID libModel.WorkerID, status *libM
 }
 
 func (s *workerManageTestSuite) onWorkerOnline(ctx context.Context, handle WorkerHandle) error {
+	if event, exists := s.events[handle.ID()]; exists {
+		log.L().Warn("found unexpected event", zap.Any("event", event))
+		return errors.New("unexpected event already exists")
+	}
 	s.events[handle.ID()] = &masterEvent{
 		Tp:     workerOnlineEvent,
 		Handle: handle,
@@ -86,6 +93,10 @@ func (s *workerManageTestSuite) onWorkerOnline(ctx context.Context, handle Worke
 }
 
 func (s *workerManageTestSuite) onWorkerOffline(ctx context.Context, handle WorkerHandle) error {
+	if event, exists := s.events[handle.ID()]; exists {
+		log.L().Warn("found unexpected event", zap.Any("event", event))
+		return errors.New("unexpected event already exists")
+	}
 	s.events[handle.ID()] = &masterEvent{
 		Tp:     workerOfflineEvent,
 		Handle: handle,
@@ -94,6 +105,10 @@ func (s *workerManageTestSuite) onWorkerOffline(ctx context.Context, handle Work
 }
 
 func (s *workerManageTestSuite) onWorkerStatusUpdated(ctx context.Context, handle WorkerHandle) error {
+	if event, exists := s.events[handle.ID()]; exists {
+		log.L().Warn("found unexpected event", zap.Any("event", event))
+		return errors.New("unexpected event already exists")
+	}
 	s.events[handle.ID()] = &masterEvent{
 		Tp:     workerStatusUpdatedEvent,
 		Handle: handle,
@@ -102,6 +117,10 @@ func (s *workerManageTestSuite) onWorkerStatusUpdated(ctx context.Context, handl
 }
 
 func (s *workerManageTestSuite) onWorkerDispatched(ctx context.Context, handle WorkerHandle, err error) error {
+	if event, exists := s.events[handle.ID()]; exists {
+		log.L().Warn("found unexpected event", zap.Any("event", event))
+		return errors.New("unexpected event already exists")
+	}
 	s.events[handle.ID()] = &masterEvent{
 		Tp:     workerDispatched,
 		Handle: handle,
@@ -140,6 +159,37 @@ func (s *workerManageTestSuite) WaitForEvent(t *testing.T, workerID libModel.Wor
 		require.Equal(t, workerID, event.Handle.ID())
 		delete(s.events, workerID)
 		return event
+	}
+}
+
+func (s *workerManageTestSuite) AssertNoEvents(t *testing.T, workerID libModel.WorkerID, waitFor time.Duration) {
+	timeoutCtx, cancel := context.WithTimeout(context.Background(), waitFor)
+	defer cancel()
+
+	rl := rate.NewLimiter(rate.Every(10*time.Millisecond), 1)
+
+	for {
+		select {
+		case <-timeoutCtx.Done():
+			return
+		default:
+		}
+
+		// The Tick should return very quickly.
+		tickCtx, cancel := context.WithTimeout(timeoutCtx, 100*time.Millisecond)
+		err := s.manager.Tick(tickCtx)
+		cancel()
+		if err != nil {
+			if context.DeadlineExceeded == errors.Cause(err) {
+				return
+			}
+			require.NoError(t, err)
+		}
+
+		_, exists := s.events[workerID]
+		require.False(t, exists)
+
+		_ = rl.Wait(timeoutCtx)
 	}
 }
 
@@ -187,10 +237,14 @@ func TestCreateWorkerAndWorkerTimesOut(t *testing.T) {
 	suite := NewWorkerManageTestSuite(true)
 	suite.manager.OnCreatingWorker("worker-1", "executor-1")
 	suite.AdvanceClockBy(30 * time.Second)
+	suite.AdvanceClockBy(30 * time.Second)
+	suite.AdvanceClockBy(30 * time.Second)
 
 	event := suite.WaitForEvent(t, "worker-1")
 	require.Equal(t, workerOfflineEvent, event.Tp)
 	require.NotNil(t, event.Handle.GetTombstone())
+
+	suite.AssertNoEvents(t, "worker-1", 500*time.Millisecond)
 	suite.Close()
 }
 

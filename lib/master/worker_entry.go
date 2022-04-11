@@ -14,17 +14,18 @@ import (
 )
 
 type workerEntry struct {
-	ID         libModel.WorkerID
-	ExecutorID model.ExecutorID
+	id         libModel.WorkerID
+	executorID model.ExecutorID
 
 	mu          sync.Mutex
-	ExpireAt    time.Time
+	expireAt    time.Time
 	isTombstone bool
 
 	statusReaderMu sync.RWMutex
 	statusReader   *statusutil.Reader
 
 	heartbeatCount atomic.Int64
+	isOffline      atomic.Bool
 }
 
 func newWorkerEntry(
@@ -39,9 +40,9 @@ func newWorkerEntry(
 		stReader = statusutil.NewReader(initWorkerStatus)
 	}
 	return &workerEntry{
-		ID:           id,
-		ExecutorID:   executorID,
-		ExpireAt:     expireAt,
+		id:           id,
+		executorID:   executorID,
+		expireAt:     expireAt,
 		isTombstone:  isTombstone,
 		statusReader: stReader,
 	}
@@ -81,4 +82,18 @@ func (e *workerEntry) InitStatus(status *libModel.WorkerStatus) {
 	}
 
 	e.statusReader = statusutil.NewReader(status)
+}
+
+func (e *workerEntry) SetExpireTime(expireAt time.Time) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	e.expireAt = expireAt
+}
+
+func (e *workerEntry) ExpireTime() time.Time {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	return e.expireAt
 }
