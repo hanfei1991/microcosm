@@ -152,15 +152,12 @@ func (jm *JobMaster) OnJobManagerMessage(topic p2p.Topic, message interface{}) e
 }
 
 func (jm *JobMaster) OnWorkerMessage(worker lib.WorkerHandle, topic p2p.Topic, message interface{}) error {
-	switch message.(type) {
 	// TODO: handle DDL request
-	default:
-		if response, ok := message.(dmpkg.MessageWithID); !ok {
-			return errors.Errorf("unexpected message type %T", message)
-		} else {
-			return jm.messageAgent.OnWorkerMessage(response)
-		}
+	response, ok := message.(dmpkg.MessageWithID)
+	if !ok {
+		return errors.Errorf("unexpected message type %T", message)
 	}
+	return jm.messageAgent.OnWorkerMessage(response)
 }
 
 func (jm *JobMaster) OnMasterMessage(topic p2p.Topic, message interface{}) error {
