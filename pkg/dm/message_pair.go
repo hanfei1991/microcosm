@@ -49,7 +49,7 @@ func (m *MessagePair) SendRequest(ctx context.Context, topic p2p.Topic, req Requ
 	m.pendings.Store(msg.ID, respCh)
 	defer m.pendings.Delete(msg.ID)
 
-	if err := sender.SendMessage(ctx, topic, msg, true); err != nil {
+	if err := sender.SendMessage(ctx, topic, msg, false /* block */); err != nil {
 		return nil, err
 	}
 
@@ -73,5 +73,5 @@ func (m *MessagePair) OnResponse(msg MessageWithID) error {
 		return nil
 	default:
 	}
-	return errors.Errorf("cannot handle response of request %d", msg.ID)
+	return errors.Errorf("duplicated response of request %d, and the last response is not consumed", msg.ID)
 }

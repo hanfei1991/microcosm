@@ -269,6 +269,7 @@ func (wm *WorkerManager) removeWorkerStatusByWorkerID(workerID lib.WorkerID) {
 	wm.workerStatusMap.Range(func(key, value interface{}) bool {
 		if value.(runtime.WorkerStatus).ID == workerID {
 			wm.workerStatusMap.Delete(key)
+			return false
 		}
 		return true
 	})
