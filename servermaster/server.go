@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hanfei1991/microcosm/pkg/externalresource/manager"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	p2pProtocol "github.com/pingcap/tiflow/proto/p2p"
@@ -60,14 +61,16 @@ type Server struct {
 		sync.RWMutex
 		m []*Member
 	}
-	leaderCli       *rpcutil.LeaderClientWithLock[pb.MasterClient]
+	masterCli       *rpcutil.LeaderClientWithLock[pb.MasterClient]
+	resourceCli     *rpcutil.LeaderClientWithLock[pb.ResourceManagerClient]
 	membership      Membership
 	leaderServiceFn func(context.Context) error
-	preRPCHooker    *rpcutil.PreRPCHooker[pb.MasterClient]
+	masterRPCHook   *rpcutil.PreRPCHook[pb.MasterClient]
 
 	// sched scheduler
 	executorManager ExecutorManager
 	jobManager      JobManager
+	resourceManager *manager.Service
 	//
 	cfg     *Config
 	info    *model.NodeInfo
@@ -159,21 +162,22 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 		initialized:      *atomic.NewBool(false),
 		testCtx:          ctx,
 		leader:           atomic.Value{},
-		leaderCli:        &rpcutil.LeaderClientWithLock[pb.MasterClient]{},
+		masterCli:        &rpcutil.LeaderClientWithLock[pb.MasterClient]{},
+		resourceCli:      &rpcutil.LeaderClientWithLock[pb.ResourceManagerClient]{},
 		p2pMsgRouter:     p2pMsgRouter,
 		rpcLogRL:         rate.NewLimiter(rate.Every(time.Second*5), 3 /*burst*/),
 		metrics:          newServerMasterMetric(),
 		metaStoreManager: NewMetaStoreManager(),
 	}
 	server.leaderServiceFn = server.runLeaderService
-	preRPCHooker := rpcutil.NewPreRPCHooker[pb.MasterClient](
+	masterRPCHook := rpcutil.NewPreRPCHook[pb.MasterClient](
 		id,
 		&server.leader,
-		server.leaderCli,
+		server.masterCli,
 		&server.initialized,
 		server.rpcLogRL,
 	)
-	server.preRPCHooker = preRPCHooker
+	server.masterRPCHook = masterRPCHook
 
 	return server, nil
 }
@@ -181,7 +185,7 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 // Heartbeat implements pb interface.
 func (s *Server) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
 	var resp2 *pb.HeartbeatResponse
-	shouldRet, err := s.preRPCHooker.PreRPC(ctx, req, &resp2)
+	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp2)
 	if shouldRet {
 		return resp2, err
 	}
@@ -195,7 +199,7 @@ func (s *Server) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.H
 			addrs = append(addrs, member.AdvertiseAddr)
 		}
 		resp.Addrs = addrs
-		leader, exists := s.preRPCHooker.CheckLeader()
+		leader, exists := s.masterRPCHook.CheckLeader()
 		if exists {
 			resp.Leader = leader.AdvertiseAddr
 		}
@@ -206,7 +210,7 @@ func (s *Server) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.H
 // SubmitJob passes request onto "JobManager".
 func (s *Server) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) (*pb.SubmitJobResponse, error) {
 	var resp2 *pb.SubmitJobResponse
-	shouldRet, err := s.preRPCHooker.PreRPC(ctx, req, &resp2)
+	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp2)
 	if shouldRet {
 		return resp2, err
 	}
@@ -215,7 +219,7 @@ func (s *Server) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) (*pb.S
 
 func (s *Server) QueryJob(ctx context.Context, req *pb.QueryJobRequest) (*pb.QueryJobResponse, error) {
 	var resp2 *pb.QueryJobResponse
-	shouldRet, err := s.preRPCHooker.PreRPC(ctx, req, &resp2)
+	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp2)
 	if shouldRet {
 		return resp2, err
 	}
@@ -224,7 +228,7 @@ func (s *Server) QueryJob(ctx context.Context, req *pb.QueryJobRequest) (*pb.Que
 
 func (s *Server) CancelJob(ctx context.Context, req *pb.CancelJobRequest) (*pb.CancelJobResponse, error) {
 	var resp2 *pb.CancelJobResponse
-	shouldRet, err := s.preRPCHooker.PreRPC(ctx, req, &resp2)
+	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp2)
 	if shouldRet {
 		return resp2, err
 	}
@@ -233,7 +237,7 @@ func (s *Server) CancelJob(ctx context.Context, req *pb.CancelJobRequest) (*pb.C
 
 func (s *Server) PauseJob(ctx context.Context, req *pb.PauseJobRequest) (*pb.PauseJobResponse, error) {
 	var resp2 *pb.PauseJobResponse
-	shouldRet, err := s.preRPCHooker.PreRPC(ctx, req, &resp2)
+	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp2)
 	if shouldRet {
 		return resp2, err
 	}
@@ -243,7 +247,7 @@ func (s *Server) PauseJob(ctx context.Context, req *pb.PauseJobRequest) (*pb.Pau
 // RegisterExecutor implements grpc interface, and passes request onto executor manager.
 func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorRequest) (*pb.RegisterExecutorResponse, error) {
 	var resp2 *pb.RegisterExecutorResponse
-	shouldRet, err := s.preRPCHooker.PreRPC(ctx, req, &resp2)
+	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp2)
 	if shouldRet {
 		return resp2, err
 	}
@@ -267,7 +271,7 @@ func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorR
 // - returns scheduler response to job master
 func (s *Server) ScheduleTask(ctx context.Context, req *pb.TaskSchedulerRequest) (*pb.TaskSchedulerResponse, error) {
 	var resp2 *pb.TaskSchedulerResponse
-	shouldRet, err := s.preRPCHooker.PreRPC(ctx, req, &resp2)
+	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp2)
 	if shouldRet {
 		return resp2, err
 	}
@@ -356,12 +360,11 @@ func (s *Server) Stop() {
 		s.etcdClient.Close()
 	}
 	// in some tests this fields is not initialized
-	if s.leaderCli != nil {
-		s.leaderCli.Lock()
-		if s.leaderCli.Inner != nil {
-			s.leaderCli.Inner.Close()
-		}
-		s.leaderCli.Unlock()
+	if s.masterCli != nil {
+		s.masterCli.Close()
+	}
+	if s.resourceCli != nil {
+		s.resourceCli.Close()
 	}
 	if s.etcd != nil {
 		s.etcd.Close()
@@ -383,6 +386,12 @@ func (s *Server) Run(ctx context.Context) (err error) {
 	registerMetrics()
 
 	err = s.registerMetaStore()
+	if err != nil {
+		return err
+	}
+
+	// startResourceManager should be put after registerMetaStore
+	err = s.startResourceManager()
 	if err != nil {
 		return err
 	}
@@ -449,6 +458,34 @@ func (s *Server) registerMetaStore() error {
 	return nil
 }
 
+func (s *Server) startResourceManager() error {
+	storeConf := s.metaStoreManager.GetMetaStore(metaclient.FrameMetaID)
+	if storeConf == nil {
+		return errors.ErrMetaStoreUnfounded.GenWithStackByArgs(metaclient.FrameMetaID)
+	}
+	frameCliEx, err := kvclient.NewKVClient(storeConf)
+	if err != nil {
+		log.L().Error("failed to connect to framework metastore", zap.Any("store-conf", storeConf), zap.Error(err))
+		return err
+	}
+	// [TODO] use FrameTenantID if support multi-tenant
+	s.metaKVClient = kvclient.NewPrefixKVClient(frameCliEx, tenant.DefaultUserTenantID)
+
+	resourceRPCHook := rpcutil.NewPreRPCHook[pb.ResourceManagerClient](
+		s.id,
+		&s.leader,
+		s.resourceCli,
+		&s.initialized,
+		s.rpcLogRL,
+	)
+	s.resourceManager = manager.NewService(
+		s.metaKVClient,
+		s.executorManager,
+		resourceRPCHook,
+	)
+	return nil
+}
+
 func (s *Server) startGrpcSrv(ctx context.Context) (err error) {
 	etcdCfg := etcdutils.GenEmbedEtcdConfigWithLogger(s.cfg.LogLevel)
 	// prepare to join an existing etcd cluster.
@@ -472,6 +509,7 @@ func (s *Server) startGrpcSrv(ctx context.Context) (err error) {
 
 	gRPCSvr := func(gs *grpc.Server) {
 		pb.RegisterMasterServer(gs, s)
+		pb.RegisterResourceManagerServer(gs, s.resourceManager)
 		s.msgService = p2p.NewMessageRPCServiceWithRPCServer(s.name(), nil, gs)
 		p2pProtocol.RegisterCDCPeerToPeerServer(gs, s.msgService.GetMessageServer())
 	}
@@ -568,13 +606,6 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	if storeConf == nil {
 		return errors.ErrMetaStoreUnfounded.GenWithStackByArgs(metaclient.FrameMetaID)
 	}
-	frameCliEx, err := kvclient.NewKVClient(storeConf)
-	if err != nil {
-		log.L().Error("failed to connect to framework metastore", zap.Any("store-conf", storeConf), zap.Error(err))
-		return err
-	}
-	// [TODO] use FrameTenantID if support multi-tenant
-	s.metaKVClient = kvclient.NewPrefixKVClient(frameCliEx, tenant.DefaultUserTenantID)
 
 	// job manager user framework metastore as user metastore
 	s.userMetaKVClient, err = kvclient.NewKVClient(storeConf)

@@ -4,15 +4,15 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/hanfei1991/microcosm/lib/metadata"
-	libModel "github.com/hanfei1991/microcosm/lib/model"
-
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 
 	cvs "github.com/hanfei1991/microcosm/jobmaster/cvsJob"
 	"github.com/hanfei1991/microcosm/lib"
+	"github.com/hanfei1991/microcosm/lib/metadata"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/pb"
+	"github.com/hanfei1991/microcosm/pkg/clock"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	derrors "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
@@ -45,6 +45,8 @@ type JobManagerImplV2 struct {
 
 	masterMetaClient *metadata.MasterMetadataClient
 	uuidGen          uuid.Generator
+	clocker          clock.Clock
+	tombstoneCleaned bool
 }
 
 func (jm *JobManagerImplV2) PauseJob(ctx context.Context, req *pb.PauseJobRequest) *pb.PauseJobResponse {
@@ -185,6 +187,7 @@ func NewJobManagerImplV2(
 		JobFsm:           NewJobFsm(),
 		uuidGen:          uuid.NewGenerator(),
 		masterMetaClient: cli,
+		clocker:          clock.New(),
 	}
 	impl.BaseMaster = lib.NewBaseMaster(
 		dctx,
@@ -224,13 +227,16 @@ func (jm *JobManagerImplV2) Tick(ctx context.Context) error {
 		return err
 	}
 
-	err = jm.JobFsm.IterWaitAckJobs(
-		func(job *libModel.MasterMetaKVData) (string, error) {
-			return jm.BaseMaster.CreateWorker(
-				job.Tp, job, defaultJobMasterCost)
-		})
-	if err != nil {
-		return err
+	if !jm.tombstoneCleaned && jm.BaseMaster.IsMasterReady() {
+		err = jm.JobFsm.IterWaitAckJobs(
+			func(job *libModel.MasterMetaKVData) (string, error) {
+				return jm.BaseMaster.CreateWorker(
+					job.Tp, job, defaultJobMasterCost)
+			})
+		if err != nil {
+			return err
+		}
+		jm.tombstoneCleaned = true
 	}
 
 	return nil

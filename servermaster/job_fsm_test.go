@@ -21,12 +21,28 @@ func TestJobFsmStateTrans(t *testing.T) {
 		Config: []byte("simple config"),
 	}
 
-	// create new job, enter into WaitAckack job queue
-	fsm.JobDispatched(job, false)
+	createWorkerCount := 0
+
+	// Failover, job fsm loads tombstone job master
+	fsm.JobDispatched(job, true)
+	err := fsm.IterWaitAckJobs(func(job *libModel.MasterMetaKVData) (string, error) {
+		createWorkerCount++
+		return id, nil
+	})
+	require.Nil(t, err)
+	require.Equal(t, 1, createWorkerCount)
 	require.Equal(t, 1, fsm.JobCount(pb.QueryJobResponse_dispatched))
 
+	// job that is not added from failover won't be processed
+	err = fsm.IterWaitAckJobs(func(job *libModel.MasterMetaKVData) (string, error) {
+		createWorkerCount++
+		return id, nil
+	})
+	require.Nil(t, err)
+	require.Equal(t, 1, createWorkerCount)
+
 	// OnWorkerOnline, WaitAck -> Online
-	err := fsm.JobOnline(&master.MockHandle{
+	err = fsm.JobOnline(&master.MockHandle{
 		WorkerID:     id,
 		WorkerStatus: &libModel.WorkerStatus{Code: libModel.WorkerStatusNormal},
 		ExecutorID:   "executor-1",

@@ -13,6 +13,7 @@ import (
 	"github.com/hanfei1991/microcosm/lib/metadata"
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/pb"
+	"github.com/hanfei1991/microcosm/pkg/clock"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
@@ -69,6 +70,7 @@ func TestJobManagerPauseJob(t *testing.T) {
 	mgr := &JobManagerImplV2{
 		BaseMaster: mockMaster.DefaultBaseMaster,
 		JobFsm:     NewJobFsm(),
+		clocker:    clock.New(),
 	}
 
 	pauseWorkerID := "pause-worker-id"
