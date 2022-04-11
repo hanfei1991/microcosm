@@ -47,6 +47,7 @@ func NewMessageAgent(initSenders map[string]SendHandle, id lib.WorkerID, master 
 	messageAgent := &MessageAgent{
 		master:      master,
 		clocker:     clock.New(),
+		id:          id,
 		messagePair: dmpkg.NewMessagePair(),
 	}
 	for task, sender := range initSenders {
