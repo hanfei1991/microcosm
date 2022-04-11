@@ -97,6 +97,9 @@ func (agent *MessageAgent) StopWorker(ctx context.Context, taskID lib.WorkerID, 
 }
 
 func (agent *MessageAgent) OperateTask(ctx context.Context, taskID string, stage metadata.TaskStage) error {
+	if stage != metadata.StageRunning && stage != metadata.StagePaused {
+		return errors.Errorf("invalid expected stage %d for task %s", stage, taskID)
+	}
 	v, ok := agent.sendHandles.Load(taskID)
 	if !ok {
 		return errors.Errorf("worker for task %s not exist", taskID)
@@ -113,6 +116,6 @@ func (agent *MessageAgent) OperateTask(ctx context.Context, taskID string, stage
 	return v.(SendHandle).SendMessage(ctx, topic, message, true)
 }
 
-func (agent *MessageAgent) OnWorkerMessage(message interface{}) error {
-	return agent.messagePair.OnResponse(message.(dmpkg.MessageWithID))
+func (agent *MessageAgent) OnWorkerMessage(response dmpkg.MessageWithID) error {
+	return agent.messagePair.OnResponse(response)
 }

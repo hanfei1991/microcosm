@@ -73,5 +73,5 @@ func (m *MessagePair) OnResponse(msg MessageWithID) error {
 		return nil
 	default:
 	}
-	return errors.Errorf("cannot handle response of request %d", msg.ID)
+	return errors.Errorf("duplicated response of request %d, and the last response is not consumed.", msg.ID)
 }

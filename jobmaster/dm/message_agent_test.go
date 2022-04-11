@@ -108,6 +108,8 @@ func TestOperateTask(t *testing.T) {
 	require.NoError(t, messageAgent.OperateTask(context.Background(), task1, metadata.StagePaused))
 	// task not exist
 	require.EqualError(t, messageAgent.OperateTask(context.Background(), "task-not-exist", metadata.StagePaused), fmt.Sprintf("worker for task %s not exist", "task-not-exist"))
+	// wrong stage
+	require.EqualError(t, messageAgent.OperateTask(context.Background(), task1, metadata.StageInit), fmt.Sprintf("invalid expected stage %d for task %s", metadata.StageInit, task1))
 }
 
 func TestOnWorkerMessage(t *testing.T) {
