@@ -13,10 +13,8 @@ import (
 )
 
 type (
-	Epoch        = model.Epoch
+	WorkerType   = model.WorkerType
 	WorkerConfig = interface{}
-	MasterID     = model.MasterID
-	WorkerID     = model.WorkerID
 )
 
 const (
@@ -63,14 +61,14 @@ func (config TimeoutConfig) Adjust() TimeoutConfig {
 	return tc
 }
 
-func WorkerStatusChangeRequestTopic(masterID MasterID, workerID WorkerID) p2p.Topic {
+func WorkerStatusChangeRequestTopic(masterID model.MasterID, workerID model.WorkerID) p2p.Topic {
 	return fmt.Sprintf("worker-status-change-req-%s-%s", masterID, workerID)
 }
 
 type StatusChangeRequest struct {
 	SendTime     clock.MonotonicTime    `json:"send-time"`
-	FromMasterID MasterID               `json:"from-master-id"`
-	Epoch        Epoch                  `json:"epoch"`
+	FromMasterID model.MasterID         `json:"from-master-id"`
+	Epoch        model.Epoch            `json:"epoch"`
 	ExpectState  model.WorkerStatusCode `json:"expect-state"`
 }
 

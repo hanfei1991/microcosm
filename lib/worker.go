@@ -89,13 +89,13 @@ type DefaultBaseWorker struct {
 	resourceBroker  broker.Broker
 
 	masterClient *masterClient
-	masterID     MasterID
+	masterID     libModel.MasterID
 
 	workerMetaClient *metadata.WorkerMetadataClient
 	statusSender     *statusutil.Writer
 	messageRouter    *MessageRouter
 
-	id            WorkerID
+	id            libModel.WorkerID
 	timeoutConfig TimeoutConfig
 
 	pool workerpool.AsyncPool
@@ -127,8 +127,8 @@ type workerParams struct {
 func NewBaseWorker(
 	ctx *dcontext.Context,
 	impl WorkerImpl,
-	workerID WorkerID,
-	masterID MasterID,
+	workerID libModel.WorkerID,
+	masterID libModel.MasterID,
 ) BaseWorker {
 	var params workerParams
 	if err := ctx.Deps().Fill(&params); err != nil {
@@ -433,13 +433,13 @@ func (w *DefaultBaseWorker) initMessageHandlers(ctx context.Context) (retErr err
 			zap.String("topic", topic))
 	}
 
-	topic = WorkerStatusChangeRequestTopic(w.masterID, w.id)
+	topic = libModel.WorkerStatusChangeRequestTopic(w.masterID, w.id)
 	ok, err = w.messageHandlerManager.RegisterHandler(
 		ctx,
 		topic,
-		&StatusChangeRequest{},
+		&libModel.StatusChangeRequest{},
 		func(sender p2p.NodeID, value p2p.MessageValue) error {
-			msg, ok := value.(*StatusChangeRequest)
+			msg, ok := value.(*libModel.StatusChangeRequest)
 			if !ok {
 				return derror.ErrInvalidMasterMessage.GenWithStackByArgs(value)
 			}
@@ -465,11 +465,11 @@ func (w *DefaultBaseWorker) onError(err error) {
 
 type masterClient struct {
 	mu          sync.RWMutex
-	masterID    MasterID
+	masterID    libModel.MasterID
 	masterNode  p2p.NodeID
-	masterEpoch Epoch
+	masterEpoch libModel.Epoch
 
-	workerID WorkerID
+	workerID libModel.WorkerID
 
 	messageSender           p2p.MessageSender
 	metaKVClient            metaclient.KVClient
@@ -481,8 +481,8 @@ type masterClient struct {
 }
 
 func newMasterClient(
-	masterID MasterID,
-	workerID WorkerID,
+	masterID libModel.MasterID,
+	workerID libModel.WorkerID,
 	messageRouter p2p.MessageSender,
 	metaKV metaclient.KVClient,
 	initTime clock.MonotonicTime,
@@ -545,7 +545,7 @@ func (m *masterClient) refreshMasterInfo(ctx context.Context, clock clock.Clock)
 	return nil
 }
 
-func (m *masterClient) MasterID() MasterID {
+func (m *masterClient) MasterID() libModel.MasterID {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.masterID
@@ -557,7 +557,7 @@ func (m *masterClient) MasterNode() p2p.NodeID {
 	return m.masterNode
 }
 
-func (m *masterClient) Epoch() Epoch {
+func (m *masterClient) Epoch() libModel.Epoch {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.masterEpoch

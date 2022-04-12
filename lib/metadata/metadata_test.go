@@ -45,7 +45,7 @@ func TestMasterMetadata(t *testing.T) {
 	}
 }
 
-func TestStoreMasterMetadata(t *testing.T) {
+func TestOperateMasterMetadata(t *testing.T) {
 	t.Parallel()
 	var (
 		ctx          = context.Background()
@@ -75,6 +75,12 @@ func TestStoreMasterMetadata(t *testing.T) {
 	err = StoreMasterMeta(ctx, metaKVClient, meta)
 	require.NoError(t, err)
 	require.Equal(t, addr2, loadMeta().Addr)
+
+	err = DeleteMasterMeta(ctx, metaKVClient, meta.ID)
+	require.NoError(t, err)
+	// meta is not found in metastore, load meta will return a new master meta
+	require.Equal(t, "", loadMeta().Addr)
+	require.Equal(t, libModel.MasterStatusUninit, loadMeta().StatusCode)
 }
 
 */

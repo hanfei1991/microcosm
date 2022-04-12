@@ -26,7 +26,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/uuid"
 )
 
-func MockBaseMaster(id MasterID, masterImpl MasterImpl) *DefaultBaseMaster {
+func MockBaseMaster(id libModel.MasterID, masterImpl MasterImpl) *DefaultBaseMaster {
 	ctx := dcontext.Background()
 	dp := deps.NewDeps()
 	err := dp.Provide(func() masterParamListForTest {
@@ -59,8 +59,8 @@ func MockBaseMasterCreateWorker(
 	workerType libModel.WorkerType,
 	config WorkerConfig,
 	cost model.RescUnit,
-	masterID MasterID,
-	workerID WorkerID,
+	masterID libModel.MasterID,
+	workerID libModel.WorkerID,
 	executorID model.ExecutorID,
 ) {
 	master.uuidGen = uuid.NewMock()
@@ -113,8 +113,8 @@ func MockBaseMasterCreateWorkerMetScheduleTaskError(
 	workerType libModel.WorkerType,
 	config WorkerConfig,
 	cost model.RescUnit,
-	masterID MasterID,
-	workerID WorkerID,
+	masterID libModel.MasterID,
+	workerID libModel.WorkerID,
 	executorID model.ExecutorID,
 ) {
 	master.uuidGen = uuid.NewMock()
@@ -137,8 +137,8 @@ func MockBaseMasterCreateWorkerMetScheduleTaskError(
 func MockBaseMasterWorkerHeartbeat(
 	t *testing.T,
 	master *DefaultBaseMaster,
-	masterID MasterID,
-	workerID WorkerID,
+	masterID libModel.MasterID,
+	workerID libModel.WorkerID,
 	executorID p2p.NodeID,
 ) {
 	err := master.messageHandlerManager.(*p2p.MockMessageHandlerManager).InvokeHandler(
@@ -158,8 +158,8 @@ func MockBaseMasterWorkerUpdateStatus(
 	ctx context.Context,
 	t *testing.T,
 	master *DefaultBaseMaster,
-	masterID MasterID,
-	workerID WorkerID,
+	masterID libModel.MasterID,
+	workerID libModel.WorkerID,
 	executorID p2p.NodeID,
 	status *libModel.WorkerStatus,
 ) {

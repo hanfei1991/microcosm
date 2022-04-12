@@ -2,8 +2,8 @@ package master
 
 import (
 	"context"
+	derror "github.com/hanfei1991/microcosm/pkg/errors"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/atomic"
 
 	libModel "github.com/hanfei1991/microcosm/lib/model"
@@ -60,7 +60,7 @@ func (h *MockHandle) ToPB() (*pb.WorkerInfo, error) {
 
 func (h *MockHandle) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error {
 	if h.IsTombstone {
-		log.L().Panic("Unreachable")
+		return derror.ErrSendingMessageToTombstone.GenWithStackByCause(h.WorkerID)
 	}
 
 	h.sendMessageCount.Add(1)

@@ -23,8 +23,8 @@ var (
 )
 
 type WorkerAgent interface {
-	CreateWorker(ctx context.Context, taskID string, workerType libModel.WorkerType, taskCfg *config.TaskCfg) (lib.WorkerID, error)
-	DestroyWorker(ctx context.Context, taskID string, workerID lib.WorkerID) error
+	CreateWorker(ctx context.Context, taskID string, workerType libModel.WorkerType, taskCfg *config.TaskCfg) (libModel.WorkerID, error)
+	DestroyWorker(ctx context.Context, taskID string, workerID libModel.WorkerID) error
 }
 
 type CheckpointAgent interface {
@@ -38,9 +38,9 @@ type WorkerManager struct {
 	workerAgent     WorkerAgent
 	checkpointAgent CheckpointAgent
 
-	// workers record the runtime worker status
+	// workerStatusMap record the runtime worker status
 	// taskID -> WorkerStatus
-	workers sync.Map
+	workerStatusMap sync.Map
 }
 
 // WorkerManager checks and schedules workers.
@@ -62,13 +62,13 @@ func NewWorkerManager(initWorkerStatus []runtime.WorkerStatus, jobStore *metadat
 // UpdateWorkerStatus is called when receive worker status.
 func (wm *WorkerManager) UpdateWorkerStatus(workerStatus runtime.WorkerStatus) {
 	log.L().Debug("update worker status", zap.String("task_id", workerStatus.TaskID), zap.String("worker_id", workerStatus.ID))
-	wm.workers.Store(workerStatus.TaskID, workerStatus)
+	wm.workerStatusMap.Store(workerStatus.TaskID, workerStatus)
 }
 
 // WorkerStatus return the worker status.
 func (wm *WorkerManager) WorkerStatus() map[string]runtime.WorkerStatus {
 	result := make(map[string]runtime.WorkerStatus)
-	wm.workers.Range(func(key, value interface{}) bool {
+	wm.workerStatusMap.Range(func(key, value interface{}) bool {
 		result[key.(string)] = value.(runtime.WorkerStatus)
 		return true
 	})
@@ -104,11 +104,11 @@ func (wm *WorkerManager) TickImpl(ctx context.Context) error {
 
 // remove offline worker status, usually happened when worker is offline.
 func (wm *WorkerManager) removeOfflineWorkers() {
-	wm.workers.Range(func(key, value interface{}) bool {
+	wm.workerStatusMap.Range(func(key, value interface{}) bool {
 		worker := value.(runtime.WorkerStatus)
 		if worker.IsOffline() {
 			log.L().Info("remove offline worker status", zap.String("task_id", worker.TaskID))
-			wm.workers.Delete(key)
+			wm.workerStatusMap.Delete(key)
 		}
 		return true
 	})
@@ -117,7 +117,7 @@ func (wm *WorkerManager) removeOfflineWorkers() {
 // destroy all workers, usually happened when delete jobs.
 func (wm *WorkerManager) onJobNotExist(ctx context.Context) error {
 	var recordError error
-	wm.workers.Range(func(key, value interface{}) bool {
+	wm.workerStatusMap.Range(func(key, value interface{}) bool {
 		log.L().Info("destroy worker", zap.String("task_id", key.(string)), zap.String("worker_id", value.(runtime.WorkerStatus).ID))
 		if err := wm.destroyWorker(ctx, key.(string), value.(runtime.WorkerStatus).ID); err != nil {
 			recordError = err
@@ -130,7 +130,7 @@ func (wm *WorkerManager) onJobNotExist(ctx context.Context) error {
 // destroy unneeded workers, usually happened when update-job delete some tasks.
 func (wm *WorkerManager) destroyUnneededWorkers(ctx context.Context, job *metadata.Job) error {
 	var recordError error
-	wm.workers.Range(func(key, value interface{}) bool {
+	wm.workerStatusMap.Range(func(key, value interface{}) bool {
 		taskID := key.(string)
 		if _, ok := job.Tasks[taskID]; !ok {
 			log.L().Info("destroy unneeded worker", zap.String("task_id", taskID), zap.String("worker_id", value.(runtime.WorkerStatus).ID))
@@ -158,7 +158,7 @@ func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metad
 
 	// check and schedule workers
 	for taskID, persistentTask := range job.Tasks {
-		worker, ok := wm.workers.Load(taskID)
+		worker, ok := wm.workerStatusMap.Load(taskID)
 		if ok {
 			runningWorker = worker.(runtime.WorkerStatus)
 			nextUnit = getNextUnit(persistentTask, runningWorker)
@@ -251,7 +251,7 @@ func (wm *WorkerManager) createWorker(ctx context.Context, taskID string, unit l
 	return err
 }
 
-func (wm *WorkerManager) destroyWorker(ctx context.Context, taskID string, workerID lib.WorkerID) error {
+func (wm *WorkerManager) destroyWorker(ctx context.Context, taskID string, workerID libModel.WorkerID) error {
 	if err := wm.workerAgent.DestroyWorker(ctx, taskID, workerID); err != nil {
 		log.L().Error("failed to destroy worker", zap.String("task_id", taskID), zap.String("worker_id", workerID), zap.Error(err))
 		return err
@@ -262,6 +262,16 @@ func (wm *WorkerManager) destroyWorker(ctx context.Context, taskID string, worke
 	//	2.	remove worker status even if there is error.
 	//		When destroy fails, we destroy it again until the next time we receive worker online status, so the destroy interval will be longer.
 	//	We choose the first mechanism now.
-	wm.workers.Delete(taskID)
+	wm.workerStatusMap.Delete(taskID)
 	return nil
+}
+
+func (wm *WorkerManager) removeWorkerStatusByWorkerID(workerID libModel.WorkerID) {
+	wm.workerStatusMap.Range(func(key, value interface{}) bool {
+		if value.(runtime.WorkerStatus).ID == workerID {
+			wm.workerStatusMap.Delete(key)
+			return false
+		}
+		return true
+	})
 }

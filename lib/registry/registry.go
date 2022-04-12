@@ -21,9 +21,9 @@ type Registry interface {
 	RegisterWorkerType(tp libModel.WorkerType, factory WorkerFactory) (ok bool)
 	CreateWorker(
 		ctx *dcontext.Context,
-		tp libModel.WorkerType,
-		workerID lib.WorkerID,
-		masterID lib.MasterID,
+		tp lib.WorkerType,
+		workerID libModel.WorkerID,
+		masterID libModel.MasterID,
 		config []byte,
 	) (lib.Worker, error)
 }
@@ -59,9 +59,9 @@ func (r *registryImpl) RegisterWorkerType(tp libModel.WorkerType, factory Worker
 
 func (r *registryImpl) CreateWorker(
 	ctx *dcontext.Context,
-	tp libModel.WorkerType,
-	workerID lib.WorkerID,
-	masterID lib.MasterID,
+	tp lib.WorkerType,
+	workerID libModel.WorkerID,
+	masterID libModel.MasterID,
 	configBytes []byte,
 ) (lib.Worker, error) {
 	factory, ok := r.getWorkerFactory(tp)

@@ -20,13 +20,13 @@ type BaseJobMaster interface {
 	Close(ctx context.Context) error
 	OnError(err error)
 	MetaKVClient() metaclient.KVClient
-	GetWorkers() map[WorkerID]WorkerHandle
-	CreateWorker(workerType libModel.WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error)
+	GetWorkers() map[libModel.WorkerID]WorkerHandle
+	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (libModel.WorkerID, error)
 	Workload() model.RescUnit
-	JobMasterID() MasterID
+	JobMasterID() libModel.MasterID
 	ID() worker.RunnableID
 	UpdateJobStatus(ctx context.Context, status libModel.WorkerStatus) error
-	CurrentEpoch() Epoch
+	CurrentEpoch() libModel.Epoch
 
 	// Exit should be called when job master (in user logic) wants to exit
 	// - If err is nil, it means job master exits normally
@@ -77,8 +77,8 @@ type JobMasterImpl interface {
 func NewBaseJobMaster(
 	ctx *dcontext.Context,
 	jobMasterImpl JobMasterImpl,
-	masterID MasterID,
-	workerID WorkerID,
+	masterID libModel.MasterID,
+	workerID libModel.WorkerID,
 ) BaseJobMaster {
 	// master-worker pair: job manager <-> job master(`baseWorker` following)
 	// master-worker pair: job master(`baseMaster` following) <-> real workers
@@ -142,11 +142,11 @@ func (d *DefaultBaseJobMaster) Poll(ctx context.Context) error {
 	return nil
 }
 
-func (d *DefaultBaseJobMaster) MasterID() MasterID {
+func (d *DefaultBaseJobMaster) MasterID() libModel.MasterID {
 	return d.master.MasterID()
 }
 
-func (d *DefaultBaseJobMaster) GetWorkers() map[WorkerID]WorkerHandle {
+func (d *DefaultBaseJobMaster) GetWorkers() map[libModel.WorkerID]WorkerHandle {
 	return d.master.GetWorkers()
 }
 
@@ -165,7 +165,7 @@ func (d *DefaultBaseJobMaster) OnError(err error) {
 	d.master.OnError(err)
 }
 
-func (d *DefaultBaseJobMaster) CreateWorker(workerType libModel.WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error) {
+func (d *DefaultBaseJobMaster) CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (libModel.WorkerID, error) {
 	return d.master.CreateWorker(workerType, config, cost)
 }
 
@@ -181,7 +181,7 @@ func (d *DefaultBaseJobMaster) ID() worker.RunnableID {
 	return d.worker.ID()
 }
 
-func (d *DefaultBaseJobMaster) JobMasterID() MasterID {
+func (d *DefaultBaseJobMaster) JobMasterID() libModel.MasterID {
 	return d.master.MasterID()
 }
 
@@ -189,7 +189,7 @@ func (d *DefaultBaseJobMaster) UpdateJobStatus(ctx context.Context, status libMo
 	return d.worker.UpdateStatus(ctx, status)
 }
 
-func (d *DefaultBaseJobMaster) CurrentEpoch() Epoch {
+func (d *DefaultBaseJobMaster) CurrentEpoch() libModel.Epoch {
 	return d.master.currentEpoch.Load()
 }
 

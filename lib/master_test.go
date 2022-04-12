@@ -25,7 +25,7 @@ const (
 	executorNodeID1       = "node-exec-1"
 	executorNodeID3       = "node-exec-3"
 	workerTypePlaceholder = 999
-	workerID1             = WorkerID("worker-1")
+	workerID1             = libModel.WorkerID("worker-1")
 )
 
 type dummyConfig struct {

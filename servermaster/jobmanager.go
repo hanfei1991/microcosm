@@ -56,8 +56,8 @@ func (jm *JobManagerImplV2) PauseJob(ctx context.Context, req *pb.PauseJobReques
 			Code: pb.ErrorCode_UnKnownJob,
 		}}
 	}
-	topic := lib.WorkerStatusChangeRequestTopic(jm.BaseMaster.MasterID(), job.WorkerHandle.ID())
-	msg := &lib.StatusChangeRequest{
+	topic := libModel.WorkerStatusChangeRequestTopic(jm.BaseMaster.MasterID(), job.WorkerHandle.ID())
+	msg := &libModel.StatusChangeRequest{
 		SendTime:     jm.clocker.Mono(),
 		FromMasterID: jm.BaseMaster.MasterID(),
 		Epoch:        jm.BaseMaster.MasterMeta().Epoch,
@@ -116,7 +116,7 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 	log.L().Logger.Info("submit job", zap.String("config", string(req.Config)))
 	resp := &pb.SubmitJobResponse{}
 	var (
-		id  lib.WorkerID
+		id  libModel.WorkerID
 		err error
 	)
 
@@ -160,6 +160,12 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 	id, err = jm.BaseMaster.CreateWorker(
 		meta.Tp, meta, defaultJobMasterCost)
 	if err != nil {
+		err2 := metadata.DeleteMasterMeta(ctx, jm.BaseMaster.MetaKVClient(), meta.ID)
+		if err2 != nil {
+			// TODO: add more GC mechanism if master meta is failed to delete
+			log.L().Error("failed to delete master meta", zap.Error(err2))
+		}
+
 		log.L().Error("create job master met error", zap.Error(err))
 		resp.Err = derrors.ToPBError(err)
 		return resp
@@ -173,7 +179,7 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 // NewJobManagerImplV2 creates a new JobManagerImplV2 instance
 func NewJobManagerImplV2(
 	dctx *dcontext.Context,
-	id lib.MasterID,
+	id libModel.MasterID,
 ) (*JobManagerImplV2, error) {
 	masterMetaClient, err := dctx.Deps().Construct(func(metaKV metaclient.KVClient) (*metadata.MasterMetadataClient, error) {
 		return metadata.NewMasterMetadataClient(id, metaKV), nil
