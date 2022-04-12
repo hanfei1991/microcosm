@@ -5,8 +5,6 @@ import (
 	"strings"
 	"time"
 
-	libModel "github.com/hanfei1991/microcosm/lib/model"
-
 	"github.com/hanfei1991/microcosm/pkg/deps"
 	extkv "github.com/hanfei1991/microcosm/pkg/meta/extension"
 	"github.com/hanfei1991/microcosm/pkg/meta/kvclient"
@@ -30,6 +28,7 @@ import (
 	"github.com/hanfei1991/microcosm/executor/runtime"
 	"github.com/hanfei1991/microcosm/executor/worker"
 	"github.com/hanfei1991/microcosm/lib"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/registry"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"

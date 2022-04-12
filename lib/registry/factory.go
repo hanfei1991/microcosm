@@ -4,11 +4,10 @@ import (
 	"encoding/json"
 	"reflect"
 
-	libModel "github.com/hanfei1991/microcosm/lib/model"
-
 	"github.com/pingcap/errors"
 
 	"github.com/hanfei1991/microcosm/lib"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 )
 

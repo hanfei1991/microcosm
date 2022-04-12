@@ -3,9 +3,8 @@ package servermaster
 import (
 	"sync"
 
-	libModel "github.com/hanfei1991/microcosm/lib/model"
-
 	"github.com/hanfei1991/microcosm/lib"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
