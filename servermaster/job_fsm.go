@@ -4,15 +4,17 @@ import (
 	"sync"
 
 	"github.com/hanfei1991/microcosm/lib"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/errors"
+
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 )
 
 type jobHolder struct {
 	lib.WorkerHandle
-	*lib.MasterMetaKVData
+	*libModel.MasterMetaKVData
 	// True means the job is loaded from metastore during jobmanager failover.
 	// Otherwise it is added by SubmitJob.
 	addFromFailover bool
@@ -65,9 +67,9 @@ type JobFsm struct {
 	JobStats
 
 	jobsMu      sync.RWMutex
-	pendingJobs map[lib.MasterID]*lib.MasterMetaKVData
-	waitAckJobs map[lib.MasterID]*jobHolder
-	onlineJobs  map[lib.MasterID]*jobHolder
+	pendingJobs map[libModel.MasterID]*libModel.MasterMetaKVData
+	waitAckJobs map[libModel.MasterID]*jobHolder
+	onlineJobs  map[libModel.MasterID]*jobHolder
 }
 
 // JobStats defines a statistics interface for JobFsm
@@ -77,19 +79,19 @@ type JobStats interface {
 
 func NewJobFsm() *JobFsm {
 	return &JobFsm{
-		pendingJobs: make(map[lib.MasterID]*lib.MasterMetaKVData),
-		waitAckJobs: make(map[lib.MasterID]*jobHolder),
-		onlineJobs:  make(map[lib.MasterID]*jobHolder),
+		pendingJobs: make(map[libModel.MasterID]*libModel.MasterMetaKVData),
+		waitAckJobs: make(map[libModel.MasterID]*jobHolder),
+		onlineJobs:  make(map[libModel.MasterID]*jobHolder),
 	}
 }
 
-func (fsm *JobFsm) QueryOnlineJob(jobID lib.MasterID) *jobHolder {
+func (fsm *JobFsm) QueryOnlineJob(jobID libModel.MasterID) *jobHolder {
 	fsm.jobsMu.RLock()
 	defer fsm.jobsMu.RUnlock()
 	return fsm.onlineJobs[jobID]
 }
 
-func (fsm *JobFsm) QueryJob(jobID lib.MasterID) *pb.QueryJobResponse {
+func (fsm *JobFsm) QueryJob(jobID libModel.MasterID) *pb.QueryJobResponse {
 	checkPendingJob := func() *pb.QueryJobResponse {
 		fsm.jobsMu.Lock()
 		defer fsm.jobsMu.Unlock()
@@ -161,7 +163,7 @@ func (fsm *JobFsm) QueryJob(jobID lib.MasterID) *pb.QueryJobResponse {
 	return checkOnlineJob()
 }
 
-func (fsm *JobFsm) JobDispatched(job *lib.MasterMetaKVData, addFromFailover bool) {
+func (fsm *JobFsm) JobDispatched(job *libModel.MasterMetaKVData, addFromFailover bool) {
 	fsm.jobsMu.Lock()
 	defer fsm.jobsMu.Unlock()
 	fsm.waitAckJobs[job.ID] = &jobHolder{
@@ -170,7 +172,7 @@ func (fsm *JobFsm) JobDispatched(job *lib.MasterMetaKVData, addFromFailover bool
 	}
 }
 
-func (fsm *JobFsm) IterPendingJobs(dispatchJobFn func(job *lib.MasterMetaKVData) (string, error)) error {
+func (fsm *JobFsm) IterPendingJobs(dispatchJobFn func(job *libModel.MasterMetaKVData) (string, error)) error {
 	fsm.jobsMu.Lock()
 	defer fsm.jobsMu.Unlock()
 
@@ -190,7 +192,7 @@ func (fsm *JobFsm) IterPendingJobs(dispatchJobFn func(job *lib.MasterMetaKVData)
 	return nil
 }
 
-func (fsm *JobFsm) IterWaitAckJobs(dispatchJobFn func(job *lib.MasterMetaKVData) (string, error)) error {
+func (fsm *JobFsm) IterWaitAckJobs(dispatchJobFn func(job *libModel.MasterMetaKVData) (string, error)) error {
 	fsm.jobsMu.Lock()
 	defer fsm.jobsMu.Unlock()
 

@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/hanfei1991/microcosm/lib/metadata"
+
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
@@ -25,7 +27,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/uuid"
 )
 
-func MockBaseMaster(id MasterID, masterImpl MasterImpl) *DefaultBaseMaster {
+func MockBaseMaster(id libModel.MasterID, masterImpl MasterImpl) *DefaultBaseMaster {
 	ctx := dcontext.Background()
 	dp := deps.NewDeps()
 	err := dp.Provide(func() masterParamListForTest {
@@ -58,8 +60,8 @@ func MockBaseMasterCreateWorker(
 	workerType WorkerType,
 	config WorkerConfig,
 	cost model.RescUnit,
-	masterID MasterID,
-	workerID WorkerID,
+	masterID libModel.MasterID,
+	workerID libModel.WorkerID,
 	executorID model.ExecutorID,
 ) {
 	master.uuidGen = uuid.NewMock()
@@ -112,8 +114,8 @@ func MockBaseMasterCreateWorkerMetScheduleTaskError(
 	workerType WorkerType,
 	config WorkerConfig,
 	cost model.RescUnit,
-	masterID MasterID,
-	workerID WorkerID,
+	masterID libModel.MasterID,
+	workerID libModel.WorkerID,
 	executorID model.ExecutorID,
 ) {
 	master.uuidGen = uuid.NewMock()
@@ -136,15 +138,15 @@ func MockBaseMasterCreateWorkerMetScheduleTaskError(
 func MockBaseMasterWorkerHeartbeat(
 	t *testing.T,
 	master *DefaultBaseMaster,
-	masterID MasterID,
-	workerID WorkerID,
+	masterID libModel.MasterID,
+	workerID libModel.WorkerID,
 	executorID p2p.NodeID,
 ) {
 	err := master.messageHandlerManager.(*p2p.MockMessageHandlerManager).InvokeHandler(
 		t,
-		HeartbeatPingTopic(masterID),
+		libModel.HeartbeatPingTopic(masterID),
 		executorID,
-		&HeartbeatPingMessage{
+		&libModel.HeartbeatPingMessage{
 			SendTime:     clock.MonoNow(),
 			FromWorkerID: workerID,
 			Epoch:        master.currentEpoch.Load(),
@@ -157,12 +159,12 @@ func MockBaseMasterWorkerUpdateStatus(
 	ctx context.Context,
 	t *testing.T,
 	master *DefaultBaseMaster,
-	masterID MasterID,
-	workerID WorkerID,
+	masterID libModel.MasterID,
+	workerID libModel.WorkerID,
 	executorID p2p.NodeID,
 	status *libModel.WorkerStatus,
 ) {
-	workerMetaClient := NewWorkerMetadataClient(masterID, master.metaKVClient)
+	workerMetaClient := metadata.NewWorkerMetadataClient(masterID, master.metaKVClient)
 	err := workerMetaClient.Store(ctx, workerID, status)
 	require.NoError(t, err)
 

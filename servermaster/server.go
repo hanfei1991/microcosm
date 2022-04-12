@@ -8,9 +8,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hanfei1991/microcosm/lib/metadata"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
+
 	"github.com/google/uuid"
-	"github.com/hanfei1991/microcosm/pkg/externalresource/manager"
-	"github.com/hanfei1991/microcosm/pkg/rpcutil"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	p2pProtocol "github.com/pingcap/tiflow/proto/p2p"
@@ -34,10 +35,12 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/deps"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/etcdutils"
+	"github.com/hanfei1991/microcosm/pkg/externalresource/manager"
 	extKV "github.com/hanfei1991/microcosm/pkg/meta/extension"
 	"github.com/hanfei1991/microcosm/pkg/meta/kvclient"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
+	"github.com/hanfei1991/microcosm/pkg/rpcutil"
 	"github.com/hanfei1991/microcosm/pkg/serverutils"
 	"github.com/hanfei1991/microcosm/pkg/tenant"
 	"github.com/hanfei1991/microcosm/servermaster/cluster"
@@ -612,8 +615,8 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		return err
 	}
 
-	masterMeta := &lib.MasterMetaKVData{
-		ID: lib.JobManagerUUID,
+	masterMeta := &libModel.MasterMetaKVData{
+		ID: metadata.JobManagerUUID,
 		Tp: lib.JobManager,
 	}
 	masterMetaBytes, err := masterMeta.Marshal()
@@ -660,7 +663,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	}
 
 	dctx = dctx.WithDeps(dp)
-	s.jobManager, err = NewJobManagerImplV2(dctx, lib.JobManagerUUID)
+	s.jobManager, err = NewJobManagerImplV2(dctx, metadata.JobManagerUUID)
 	if err != nil {
 		return
 	}
