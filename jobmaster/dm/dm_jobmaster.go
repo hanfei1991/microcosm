@@ -25,7 +25,7 @@ import (
 type JobMaster struct {
 	lib.BaseJobMaster
 
-	workerID lib.WorkerID
+	workerID libModel.WorkerID
 	jobCfg   *config.JobCfg
 	wg       sync.WaitGroup
 	closeCh  chan struct{}
@@ -38,14 +38,14 @@ type JobMaster struct {
 }
 
 func RegisterWorker() {
-	constructor := func(ctx *dcontext.Context, id lib.WorkerID, masterID lib.MasterID, config lib.WorkerConfig) lib.WorkerImpl {
+	constructor := func(ctx *dcontext.Context, id libModel.WorkerID, masterID libModel.MasterID, config lib.WorkerConfig) lib.WorkerImpl {
 		return NewDMJobMaster(ctx, id, masterID, config)
 	}
 	factory := registry.NewSimpleWorkerFactory(constructor, &config.JobCfg{})
 	registry.GlobalWorkerRegistry().MustRegisterWorkerType(lib.DMJobMaster, factory)
 }
 
-func NewDMJobMaster(ctx *dcontext.Context, workerID lib.WorkerID, masterID lib.MasterID, conf lib.WorkerConfig) *JobMaster {
+func NewDMJobMaster(ctx *dcontext.Context, workerID libModel.WorkerID, masterID libModel.MasterID, conf lib.WorkerConfig) *JobMaster {
 	log.L().Info("new dm jobmaster", zap.String("id", workerID))
 	jm := &JobMaster{
 		workerID: workerID,

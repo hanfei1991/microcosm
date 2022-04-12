@@ -13,6 +13,7 @@ import (
 	"github.com/hanfei1991/microcosm/jobmaster/dm/metadata"
 	"github.com/hanfei1991/microcosm/jobmaster/dm/runtime"
 	"github.com/hanfei1991/microcosm/lib"
+	libMetadata "github.com/hanfei1991/microcosm/lib/metadata"
 	"github.com/hanfei1991/microcosm/lib/registry"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
@@ -20,6 +21,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/deps"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
 	extkv "github.com/hanfei1991/microcosm/pkg/meta/extension"
+
 	"go.uber.org/dig"
 
 	libModel "github.com/hanfei1991/microcosm/lib/model"
@@ -86,7 +88,7 @@ func (t *testDMJobmasterSuite) TestRunDMJobMaster() {
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	cfgBytes, err := json.Marshal(jobCfg)
 	require.NoError(t.T(), err)
-	jobmaster, err := registry.GlobalWorkerRegistry().CreateWorker(dctx, lib.DMJobMaster, "dm-jobmaster", lib.JobManagerUUID, cfgBytes)
+	jobmaster, err := registry.GlobalWorkerRegistry().CreateWorker(dctx, lib.DMJobMaster, "dm-jobmaster", libMetadata.JobManagerUUID, cfgBytes)
 	require.NoError(t.T(), err)
 
 	// Init
@@ -100,7 +102,7 @@ func (t *testDMJobmasterSuite) TestRunDMJobMaster() {
 	}))
 	dctx = dctx.WithDeps(dp)
 	require.NoError(t.T(), jobmaster.Close(context.Background()))
-	jobmaster, err = registry.GlobalWorkerRegistry().CreateWorker(dctx, lib.DMJobMaster, "dm-jobmaster", lib.JobManagerUUID, cfgBytes)
+	jobmaster, err = registry.GlobalWorkerRegistry().CreateWorker(dctx, lib.DMJobMaster, "dm-jobmaster", libMetadata.JobManagerUUID, cfgBytes)
 	require.NoError(t.T(), err)
 	require.NoError(t.T(), jobmaster.Init(context.Background()))
 
@@ -254,8 +256,8 @@ type MockBaseJobmaster struct {
 	metaKVClient metaclient.KVClient
 }
 
-func (m *MockBaseJobmaster) JobMasterID() lib.MasterID {
-	return lib.JobManagerUUID
+func (m *MockBaseJobmaster) JobMasterID() libModel.MasterID {
+	return libMetadata.JobManagerUUID
 }
 
 func (m *MockBaseJobmaster) GetWorkers() map[string]lib.WorkerHandle {
@@ -272,11 +274,11 @@ func (m *MockBaseJobmaster) MetaKVClient() metaclient.KVClient {
 	return args.Get(0).(metaclient.KVClient)
 }
 
-func (m *MockBaseJobmaster) CreateWorker(workerType lib.WorkerType, config lib.WorkerConfig, cost model.RescUnit) (lib.WorkerID, error) {
+func (m *MockBaseJobmaster) CreateWorker(workerType lib.WorkerType, config lib.WorkerConfig, cost model.RescUnit) (libModel.WorkerID, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	args := m.Called()
-	return args.Get(0).(lib.WorkerID), args.Error(1)
+	return args.Get(0).(libModel.WorkerID), args.Error(1)
 }
 
 func (m *MockBaseJobmaster) CurrentEpoch() int64 {
