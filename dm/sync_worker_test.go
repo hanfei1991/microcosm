@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/hanfei1991/microcosm/lib"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/registry"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 )
@@ -71,11 +72,11 @@ func TestSyncWorker(t *testing.T) {
 	worker := workerWrapped.(*syncWorker)
 	worker.BaseWorker = lib.MockBaseWorker(workerID, masterID, worker)
 
-	putMasterMeta(context.Background(), t, worker.MetaKVClient(), &lib.MasterMetaKVData{
+	putMasterMeta(context.Background(), t, worker.MetaKVClient(), &libModel.MasterMetaKVData{
 		ID:         masterID,
 		NodeID:     nodeID,
 		Epoch:      1,
-		StatusCode: lib.MasterStatusInit,
+		StatusCode: libModel.MasterStatusInit,
 	})
 
 	err = worker.Init(ctx)

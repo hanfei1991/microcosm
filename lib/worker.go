@@ -12,6 +12,7 @@ import (
 	"go.uber.org/zap"
 
 	runtime "github.com/hanfei1991/microcosm/executor/worker"
+	"github.com/hanfei1991/microcosm/lib/metadata"
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/statusutil"
 	"github.com/hanfei1991/microcosm/model"
@@ -88,13 +89,13 @@ type DefaultBaseWorker struct {
 	resourceBroker  broker.Broker
 
 	masterClient *masterClient
-	masterID     MasterID
+	masterID     libModel.MasterID
 
-	workerMetaClient *WorkerMetadataClient
+	workerMetaClient *metadata.WorkerMetadataClient
 	statusSender     *statusutil.Writer
 	messageRouter    *MessageRouter
 
-	id            WorkerID
+	id            libModel.WorkerID
 	timeoutConfig TimeoutConfig
 
 	pool workerpool.AsyncPool
@@ -126,8 +127,8 @@ type workerParams struct {
 func NewBaseWorker(
 	ctx *dcontext.Context,
 	impl WorkerImpl,
-	workerID WorkerID,
-	masterID MasterID,
+	workerID libModel.WorkerID,
+	masterID libModel.MasterID,
 ) BaseWorker {
 	var params workerParams
 	if err := ctx.Deps().Fill(&params); err != nil {
@@ -205,7 +206,7 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) error {
 			}))
 		})
 
-	w.workerMetaClient = NewWorkerMetadataClient(w.masterID, w.metaKVClient)
+	w.workerMetaClient = metadata.NewWorkerMetadataClient(w.masterID, w.metaKVClient)
 
 	w.statusSender = statusutil.NewWriter(
 		w.metaKVClient, w.messageSender, w.masterClient, w.id)
@@ -402,14 +403,23 @@ func (w *DefaultBaseWorker) runWatchDog(ctx context.Context) error {
 	}
 }
 
-func (w *DefaultBaseWorker) initMessageHandlers(ctx context.Context) error {
-	topic := HeartbeatPongTopic(w.masterClient.MasterID(), w.id)
+func (w *DefaultBaseWorker) initMessageHandlers(ctx context.Context) (retErr error) {
+	defer func() {
+		if retErr != nil {
+			if err := w.messageHandlerManager.Clean(context.Background()); err != nil {
+				log.L().Warn("Failed to clean up message handlers",
+					zap.String("master-id", w.masterID),
+					zap.String("worker-id", w.id))
+			}
+		}
+	}()
+	topic := libModel.HeartbeatPongTopic(w.masterClient.MasterID(), w.id)
 	ok, err := w.messageHandlerManager.RegisterHandler(
 		ctx,
 		topic,
-		&HeartbeatPongMessage{},
+		&libModel.HeartbeatPongMessage{},
 		func(sender p2p.NodeID, value p2p.MessageValue) error {
-			msg := value.(*HeartbeatPongMessage)
+			msg := value.(*libModel.HeartbeatPongMessage)
 			log.L().Debug("heartbeat pong received",
 				zap.Any("msg", msg))
 			w.masterClient.HandleHeartbeat(sender, msg)
@@ -423,13 +433,13 @@ func (w *DefaultBaseWorker) initMessageHandlers(ctx context.Context) error {
 			zap.String("topic", topic))
 	}
 
-	topic = WorkerStatusChangeRequestTopic(w.masterID, w.id)
+	topic = libModel.WorkerStatusChangeRequestTopic(w.masterID, w.id)
 	ok, err = w.messageHandlerManager.RegisterHandler(
 		ctx,
 		topic,
-		&StatusChangeRequest{},
+		&libModel.StatusChangeRequest{},
 		func(sender p2p.NodeID, value p2p.MessageValue) error {
-			msg, ok := value.(*StatusChangeRequest)
+			msg, ok := value.(*libModel.StatusChangeRequest)
 			if !ok {
 				return derror.ErrInvalidMasterMessage.GenWithStackByArgs(value)
 			}
@@ -455,11 +465,11 @@ func (w *DefaultBaseWorker) onError(err error) {
 
 type masterClient struct {
 	mu          sync.RWMutex
-	masterID    MasterID
+	masterID    libModel.MasterID
 	masterNode  p2p.NodeID
-	masterEpoch Epoch
+	masterEpoch libModel.Epoch
 
-	workerID WorkerID
+	workerID libModel.WorkerID
 
 	messageSender           p2p.MessageSender
 	metaKVClient            metaclient.KVClient
@@ -471,8 +481,8 @@ type masterClient struct {
 }
 
 func newMasterClient(
-	masterID MasterID,
-	workerID WorkerID,
+	masterID libModel.MasterID,
+	workerID libModel.WorkerID,
 	messageRouter p2p.MessageSender,
 	metaKV metaclient.KVClient,
 	initTime clock.MonotonicTime,
@@ -490,7 +500,7 @@ func newMasterClient(
 }
 
 func (m *masterClient) InitMasterInfoFromMeta(ctx context.Context) error {
-	metaClient := NewMasterMetadataClient(m.masterID, m.metaKVClient)
+	metaClient := metadata.NewMasterMetadataClient(m.masterID, m.metaKVClient)
 	masterMeta, err := metaClient.Load(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -509,7 +519,7 @@ func (m *masterClient) MasterNodeID() p2p.NodeID {
 }
 
 func (m *masterClient) refreshMasterInfo(ctx context.Context, clock clock.Clock) error {
-	metaClient := NewMasterMetadataClient(m.masterID, m.metaKVClient)
+	metaClient := metadata.NewMasterMetadataClient(m.masterID, m.metaKVClient)
 	masterMeta, err := metaClient.Load(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -535,7 +545,7 @@ func (m *masterClient) refreshMasterInfo(ctx context.Context, clock clock.Clock)
 	return nil
 }
 
-func (m *masterClient) MasterID() MasterID {
+func (m *masterClient) MasterID() libModel.MasterID {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.masterID
@@ -547,13 +557,13 @@ func (m *masterClient) MasterNode() p2p.NodeID {
 	return m.masterNode
 }
 
-func (m *masterClient) Epoch() Epoch {
+func (m *masterClient) Epoch() libModel.Epoch {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.masterEpoch
 }
 
-func (m *masterClient) HandleHeartbeat(sender p2p.NodeID, msg *HeartbeatPongMessage) {
+func (m *masterClient) HandleHeartbeat(sender p2p.NodeID, msg *libModel.HeartbeatPongMessage) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -605,14 +615,14 @@ func (m *masterClient) SendHeartBeat(ctx context.Context, clock clock.Clock) err
 	// the timestamp to be a local monotonic timestamp, which is not exposed by the
 	// standard library `time`.
 	sendTime := clock.Mono()
-	heartbeatMsg := &HeartbeatPingMessage{
+	heartbeatMsg := &libModel.HeartbeatPingMessage{
 		SendTime:     sendTime,
 		FromWorkerID: m.workerID,
 		Epoch:        m.masterEpoch,
 	}
 
 	log.L().Debug("sending heartbeat", zap.String("worker", m.workerID))
-	ok, err := m.messageSender.SendToNode(ctx, m.masterNode, HeartbeatPingTopic(m.masterID), heartbeatMsg)
+	ok, err := m.messageSender.SendToNode(ctx, m.masterNode, libModel.HeartbeatPingTopic(m.masterID), heartbeatMsg)
 	if err != nil {
 		return errors.Trace(err)
 	}

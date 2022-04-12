@@ -1,34 +1,16 @@
 package lib
 
 import (
-	"encoding/json"
-	"fmt"
 	"time"
 
-	"github.com/pingcap/errors"
-
 	"github.com/hanfei1991/microcosm/lib/model"
-	"github.com/hanfei1991/microcosm/pkg/clock"
-	"github.com/hanfei1991/microcosm/pkg/p2p"
+
+	"github.com/pingcap/errors"
 )
 
 type (
-	WorkerType int64
-
-	MasterStatusCode int32
-
-	Epoch        = int64
+	WorkerType   = model.WorkerType
 	WorkerConfig = interface{}
-	MasterID     = string
-	WorkerID     = string
-)
-
-// Job master statuses
-const (
-	MasterStatusUninit = MasterStatusCode(iota + 1)
-	MasterStatusInit
-	MasterStatusFinished
-	MasterStatusStopped
 )
 
 const (
@@ -73,69 +55,6 @@ func (config TimeoutConfig) Adjust() TimeoutConfig {
 		tc.workerTimeoutDuration = 2*tc.workerHeartbeatInterval + time.Second*3
 	}
 	return tc
-}
-
-func HeartbeatPingTopic(masterID MasterID) p2p.Topic {
-	return fmt.Sprintf("heartbeat-ping-%s", masterID)
-}
-
-func HeartbeatPongTopic(masterID MasterID, workerID WorkerID) p2p.Topic {
-	// TODO do we need hex-encoding here?
-	return fmt.Sprintf("heartbeat-pong-%s-%s", masterID, workerID)
-}
-
-func WorkerStatusChangeRequestTopic(masterID MasterID, workerID WorkerID) p2p.Topic {
-	return fmt.Sprintf("worker-status-change-req-%s-%s", masterID, workerID)
-}
-
-type HeartbeatPingMessage struct {
-	SendTime     clock.MonotonicTime `json:"send-time"`
-	FromWorkerID WorkerID            `json:"from-worker-id"`
-	Epoch        Epoch               `json:"epoch"`
-}
-
-type HeartbeatPongMessage struct {
-	SendTime   clock.MonotonicTime `json:"send-time"`
-	ReplyTime  time.Time           `json:"reply-time"`
-	ToWorkerID WorkerID            `json:"to-worker-id"`
-	Epoch      Epoch               `json:"epoch"`
-}
-
-type StatusChangeRequest struct {
-	SendTime     clock.MonotonicTime    `json:"send-time"`
-	FromMasterID MasterID               `json:"from-master-id"`
-	Epoch        Epoch                  `json:"epoch"`
-	ExpectState  model.WorkerStatusCode `json:"expect-state"`
-}
-
-type (
-	MasterMetaKVData struct {
-		ID         MasterID         `json:"id"`
-		Addr       string           `json:"addr"`
-		NodeID     p2p.NodeID       `json:"node-id"`
-		Epoch      Epoch            `json:"epoch"`
-		StatusCode MasterStatusCode `json:"status"`
-		Tp         WorkerType       `json:"type"`
-
-		// Config holds business-specific data
-		Config []byte `json:"config"`
-		// TODO: add master status and checkpoint data
-	}
-)
-
-func (m *MasterMetaKVData) Marshal() ([]byte, error) {
-	return json.Marshal(m)
-}
-
-func (m *MasterMetaKVData) Unmarshal(data []byte) error {
-	return json.Unmarshal(data, m)
-}
-
-type WorkerMetaKVData struct {
-	MasterID   Master                 `json:"id"`
-	NodeID     p2p.NodeID             `json:"node-id"`
-	StatusCode model.WorkerStatusCode `json:"status-code"`
-	Message    string                 `json:"message"`
 }
 
 type MasterFailoverReasonCode int32
