@@ -9,6 +9,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/etcdutils"
+	"github.com/hanfei1991/microcosm/pkg/externalresource/manager"
 	perrors "github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.etcd.io/etcd/api/v3/mvccpb"
@@ -118,6 +119,7 @@ func (s *Server) campaign(ctx context.Context, timeout time.Duration) error {
 	return nil
 }
 
+// TODO: we can use UpdateClients, don't need to close and re-create it.
 func (s *Server) createLeaderClient(ctx context.Context, addrs []string) {
 	s.closeLeaderClient()
 
@@ -130,21 +132,19 @@ func (s *Server) createLeaderClient(ctx context.Context, addrs []string) {
 		log.L().Error("create server master client failed", zap.Strings("addrs", addrs), zap.Error(err))
 		return
 	}
-	s.leaderClient.Lock()
-	s.leaderClient.cli = cli
-	s.leaderClient.Unlock()
+	s.masterCli.Set(cli.FailoverRPCClients)
+
+	cli2, err := manager.NewResourceClient(ctx, endpoints)
+	if err != nil {
+		log.L().Error("create resource client failed", zap.Strings("addrs", addrs), zap.Error(err))
+		return
+	}
+	s.resourceCli.Set(cli2)
 }
 
 func (s *Server) closeLeaderClient() {
-	s.leaderClient.Lock()
-	defer s.leaderClient.Unlock()
-	if s.leaderClient.cli != nil {
-		err := s.leaderClient.cli.Close()
-		if err != nil {
-			log.L().Warn("close leader client met error", zap.Error(err))
-		}
-		s.leaderClient.cli = nil
-	}
+	s.masterCli.Close()
+	s.resourceCli.Close()
 }
 
 func (s *Server) isEtcdLeader() bool {

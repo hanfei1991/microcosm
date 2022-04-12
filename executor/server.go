@@ -28,6 +28,7 @@ import (
 	"github.com/hanfei1991/microcosm/executor/runtime"
 	"github.com/hanfei1991/microcosm/executor/worker"
 	"github.com/hanfei1991/microcosm/lib"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/registry"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
@@ -142,7 +143,7 @@ func (s *Server) ResumeBatchTasks(ctx context.Context, req *pb.PauseBatchTasksRe
 	return &pb.PauseBatchTasksResponse{}, nil
 }
 
-func (s *Server) buildDeps(wid lib.WorkerID) (*deps.Deps, error) {
+func (s *Server) buildDeps(wid libModel.WorkerID) (*deps.Deps, error) {
 	deps := deps.NewDeps()
 	err := deps.Provide(func() p2p.MessageHandlerManager {
 		return s.msgServer.MakeHandlerManager()
@@ -230,7 +231,7 @@ func (s *Server) DispatchTask(ctx context.Context, req *pb.DispatchTaskRequest) 
 	dctx.Environ.NodeID = p2p.NodeID(s.info.ID)
 	dctx.Environ.Addr = s.info.Addr
 
-	masterMeta := &lib.MasterMetaKVData{
+	masterMeta := &libModel.MasterMetaKVData{
 		// GetWorkerId here returns id of current unit
 		ID:     req.GetWorkerId(),
 		Tp:     lib.WorkerType(req.GetTaskTypeId()),
