@@ -1,10 +1,10 @@
 package dm
 
 import (
-	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/pingcap/tiflow/dm/dm/config"
 
 	"github.com/hanfei1991/microcosm/lib"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/registry"
 	"github.com/hanfei1991/microcosm/pkg/context"
 )

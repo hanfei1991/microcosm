@@ -3,11 +3,10 @@ package metadata
 import (
 	"context"
 
-	libModel "github.com/hanfei1991/microcosm/lib/model"
-
 	"github.com/pingcap/errors"
 
 	"github.com/hanfei1991/microcosm/jobmaster/dm/config"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 )
