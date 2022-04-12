@@ -89,7 +89,7 @@ type BaseMaster interface {
 	Close(ctx context.Context) error
 	OnError(err error)
 	// CreateWorker registers worker handler and dispatches worker to executor
-	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error)
+	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit, options ...CreateWorkerOptionFn) (WorkerID, error)
 }
 
 type DefaultBaseMaster struct {
@@ -539,11 +539,34 @@ func (m *DefaultBaseMaster) prepareWorkerConfig(
 	return
 }
 
-func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error) {
+type createWorkerOptions struct {
+	MustOnAnotherNode bool
+}
+
+type CreateWorkerOptionFn func(*createWorkerOptions)
+
+func MustOnAnotherNode() CreateWorkerOptionFn {
+	return func(o *createWorkerOptions) {
+		o.MustOnAnotherNode = true
+	}
+}
+
+func (m *DefaultBaseMaster) CreateWorker(
+	workerType WorkerType,
+	config WorkerConfig,
+	cost model.RescUnit,
+	options ...CreateWorkerOptionFn,
+) (WorkerID, error) {
+	o := &createWorkerOptions{}
+	for _, f := range options {
+		f(o)
+	}
+
 	log.L().Info("CreateWorker",
 		zap.Int64("worker-type", int64(workerType)),
 		zap.Any("worker-config", config),
-		zap.String("master-id", m.id))
+		zap.String("master-id", m.id),
+		zap.Any("options", o))
 
 	quotaCtx, cancel := context.WithTimeout(context.Background(), createWorkerWaitQuotaTimeout)
 	defer cancel()
@@ -571,29 +594,42 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 			workerID, libModel.WorkerStatus{Code: libModel.WorkerStatusError}, nil)
 		requestCtx, cancel := context.WithTimeout(context.Background(), createWorkerTimeout)
 		defer cancel()
-		// This following API should be refined.
-		resp, err := m.serverMasterClient.ScheduleTask(requestCtx, &pb.TaskSchedulerRequest{Tasks: []*pb.ScheduleTask{{
-			Task: &pb.TaskRequest{
-				Id: 0,
-			},
-			Cost: int64(cost),
-		}}},
-			// TODO (zixiong) make the timeout configurable
-			time.Second*10)
-		if err != nil {
-			err1 := m.Impl.OnWorkerDispatched(dispatchFailedDummyHandler, errors.Trace(err))
-			if err1 != nil {
-				m.OnError(errors.Trace(err1))
-			}
-			return
-		}
-		schedule := resp.GetSchedule()
-		if len(schedule) != 1 {
-			log.L().Panic("unexpected schedule result", zap.Any("schedule", schedule))
-		}
-		executorID := model.ExecutorID(schedule[0].ExecutorId)
 
-		err = m.executorClientManager.AddExecutor(executorID, schedule[0].Addr)
+		var (
+			executorID model.ExecutorID
+			addr       string
+		)
+
+		// when MustOnAnotherNode is true, we simply retry request until success or context timeout
+		for {
+			// This following API should be refined.
+			resp, err := m.serverMasterClient.ScheduleTask(requestCtx, &pb.TaskSchedulerRequest{Tasks: []*pb.ScheduleTask{{
+				Task: &pb.TaskRequest{
+					Id: 0,
+				},
+				Cost: int64(cost),
+			}}},
+				// TODO (zixiong) make the timeout configurable
+				time.Second*10)
+			if err != nil {
+				err1 := m.Impl.OnWorkerDispatched(dispatchFailedDummyHandler, errors.Trace(err))
+				if err1 != nil {
+					m.OnError(errors.Trace(err1))
+				}
+				return
+			}
+			schedule := resp.GetSchedule()
+			if len(schedule) != 1 {
+				log.L().Panic("unexpected schedule result", zap.Any("schedule", schedule))
+			}
+			executorID = model.ExecutorID(schedule[0].ExecutorId)
+			addr = schedule[0].Addr
+			if !o.MustOnAnotherNode || executorID != model.ExecutorID(m.nodeID) {
+				break
+			}
+		}
+
+		err = m.executorClientManager.AddExecutor(executorID, addr)
 		if err != nil {
 			err1 := m.Impl.OnWorkerDispatched(dispatchFailedDummyHandler, errors.Trace(err))
 			if err1 != nil {

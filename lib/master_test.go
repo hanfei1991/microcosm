@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanfei1991/microcosm/client"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
@@ -253,6 +254,50 @@ func TestMasterCreateWorkerMetError(t *testing.T) {
 	<-master.dispatchedWorkers
 	err = <-master.dispatchedResult
 	require.Regexp(t, ".*ErrClusterResourceNotEnough.*", err)
+}
+
+func TestMasterCreateWorkerMustOnAnotherNode(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
+	master := NewMockMasterImpl("", masterName)
+	master.timeoutConfig.masterHeartbeatCheckLoopInterval = time.Millisecond * 10
+	master.uuidGen = uuid.NewMock()
+	prepareMeta(ctx, t, master.metaKVClient)
+
+	master.On("InitImpl", mock.Anything).Return(nil)
+	err := master.Init(ctx)
+	require.NoError(t, err)
+
+	// master is on executor with empty ID, so MustOnAnotherNode will cause another request
+	MockServerMasterScheduleTask(
+		t,
+		master.DefaultBaseMaster,
+		100,
+		"")
+
+	MockBaseMasterCreateWorker(
+		t,
+		master.DefaultBaseMaster,
+		workerTypePlaceholder,
+		&dummyConfig{param: 1},
+		100,
+		masterName,
+		workerID1,
+		executorNodeID1)
+
+	workerID, err := master.CreateWorker(workerTypePlaceholder, &dummyConfig{param: 1}, 100, MustOnAnotherNode())
+	require.NoError(t, err)
+	require.Equal(t, workerID1, workerID)
+
+	master.On("OnWorkerDispatched", mock.AnythingOfType("*lib.workerHandleImpl"), nil).Return(nil)
+	<-master.dispatchedWorkers
+	err = <-master.dispatchedResult
+	require.NoError(t, err)
+
+	master.DefaultBaseMaster.serverMasterClient.(*client.MockServerMasterClient).Mock.AssertExpectations(t)
 }
 
 func TestPrepareWorkerConfig(t *testing.T) {

@@ -100,3 +100,62 @@ func TestDMSubtask(t *testing.T) {
 	// check auto resume
 	waitRow("c = 3")
 }
+
+func TestDMIncrementalSubtask(t *testing.T) {
+	ctx := context.Background()
+	masterClient, err := client.NewMasterClient(ctx, []string{"127.0.0.1:10240"})
+	require.NoError(t, err)
+
+	mysqlCfg := util.DBConfig{
+		Host:     "127.0.0.1",
+		Port:     3306,
+		User:     "root",
+		Password: "123456",
+	}
+	tidbCfg := util.DBConfig{
+		Host:     "127.0.0.1",
+		Port:     4000,
+		User:     "root",
+		Password: "",
+	}
+
+	mysql, err := util.CreateDB(mysqlCfg)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, util.CloseDB(mysql))
+	}()
+	tidb, err := util.CreateDB(tidbCfg)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, util.CloseDB(tidb))
+	}()
+
+	// clean up
+	_, err = tidb.Exec("drop database if exists dmmeta")
+	require.NoError(t, err)
+	_, err = tidb.Exec("drop database if exists test")
+	require.NoError(t, err)
+	_, err = mysql.Exec("drop database if exists test")
+	require.NoError(t, err)
+	_, err = mysql.Exec("reset master")
+	require.NoError(t, err)
+
+	dmSubtask, err := ioutil.ReadFile("./dm-subtask-incr.toml")
+	require.NoError(t, err)
+	resp, err := masterClient.SubmitJob(ctx, &pb.SubmitJobRequest{
+		Tp:     pb.JobType_DM,
+		Config: dmSubtask,
+	})
+	require.NoError(t, err)
+	require.Nil(t, resp.Err)
+
+	// incremental phase
+	_, err = mysql.Exec("create database test")
+	require.NoError(t, err)
+	_, err = mysql.Exec("create table test.t1(c int primary key)")
+	require.NoError(t, err)
+
+	// write something and manually restart container
+	// docker-compose -f ./1m3e.yaml restart server-executor-2
+	time.Sleep(time.Hour)
+}

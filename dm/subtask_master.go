@@ -3,6 +3,7 @@ package dm
 import (
 	"context"
 
+	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/unit"
@@ -92,7 +93,7 @@ func (s *SubTaskMaster) InitImpl(ctx context.Context) error {
 	}
 	log.L().Info("workerSequence", zap.Any("workerSeq", s.workerSeq))
 	var err error
-	s.currWorkerID, err = s.CreateWorker(s.workerSeq[0], s.cfg, 0)
+	s.currWorkerID, err = s.CreateWorker(s.workerSeq[0], s.cfg, 0, lib.MustOnAnotherNode())
 	return errors.Trace(err)
 }
 
@@ -125,7 +126,7 @@ func (s *SubTaskMaster) Tick(ctx context.Context) error {
 			s.workerSeq = s.workerSeq[1:]
 			if len(s.workerSeq) > 0 {
 				var err error
-				s.currWorkerID, err = s.CreateWorker(s.workerSeq[0], s.cfg, 0)
+				s.currWorkerID, err = s.CreateWorker(s.workerSeq[0], s.cfg, 0, lib.MustOnAnotherNode())
 				if err != nil {
 					return errors.Trace(err)
 				}
@@ -156,8 +157,14 @@ func (s *SubTaskMaster) OnWorkerOnline(worker lib.WorkerHandle) error {
 }
 
 func (s *SubTaskMaster) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
-	log.L().Info("on worker offline")
-	return nil
+	log.L().Info("on worker offline", zap.Any("worker handle", worker.ID()),
+		zap.Error(reason))
+	if derror.ErrWorkerFinish.Equal(reason) {
+		return nil
+	}
+	var err error
+	s.currWorkerID, err = s.CreateWorker(s.workerSeq[0], s.cfg, 0, lib.MustOnAnotherNode())
+	return errors.Trace(err)
 }
 
 func (s *SubTaskMaster) OnWorkerMessage(worker lib.WorkerHandle, topic p2p.Topic, message interface{}) error {

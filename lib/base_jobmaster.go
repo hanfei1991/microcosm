@@ -21,7 +21,7 @@ type BaseJobMaster interface {
 	OnError(err error)
 	MetaKVClient() metaclient.KVClient
 	GetWorkers() map[WorkerID]WorkerHandle
-	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error)
+	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit, options ...CreateWorkerOptionFn) (WorkerID, error)
 	Workload() model.RescUnit
 	JobMasterID() MasterID
 	ID() worker.RunnableID
@@ -165,8 +165,8 @@ func (d *DefaultBaseJobMaster) OnError(err error) {
 	d.master.OnError(err)
 }
 
-func (d *DefaultBaseJobMaster) CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error) {
-	return d.master.CreateWorker(workerType, config, cost)
+func (d *DefaultBaseJobMaster) CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit, options ...CreateWorkerOptionFn) (WorkerID, error) {
+	return d.master.CreateWorker(workerType, config, cost, options...)
 }
 
 func (d *DefaultBaseJobMaster) UpdateStatus(ctx context.Context, status libModel.WorkerStatus) error {
