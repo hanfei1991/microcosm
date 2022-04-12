@@ -156,6 +156,7 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 	if err != nil {
 		err2 := lib.DeleteMasterMeta(ctx, jm.BaseMaster.MetaKVClient(), meta.ID)
 		if err2 != nil {
+			// TODO: add more GC mechanism if master meta is failed to delete
 			log.L().Error("failed to delete master meta", zap.Error(err2))
 		}
 
