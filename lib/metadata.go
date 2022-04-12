@@ -208,7 +208,7 @@ func StoreMasterMeta(
 func DeleteMasterMeta(
 	ctx context.Context,
 	metaKVClient metaclient.KVClient,
-	masterID MasterID,
+	masterID libModel.MasterID,
 ) error {
 	metaClient := NewMasterMetadataClient(masterID, metaKVClient)
 	return metaClient.Delete(ctx)

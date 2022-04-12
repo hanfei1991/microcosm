@@ -54,7 +54,7 @@ func TestOperateMasterMetadata(t *testing.T) {
 			ID:         "master-1",
 			Tp:         FakeJobMaster,
 			Addr:       addr1,
-			StatusCode: MasterStatusInit,
+			StatusCode: libModel.MasterStatusInit,
 		}
 	)
 	loadMeta := func() *MasterMetaKVData {
@@ -79,7 +79,7 @@ func TestOperateMasterMetadata(t *testing.T) {
 	require.NoError(t, err)
 	// meta is not found in metastore, load meta will return a new master meta
 	require.Equal(t, "", loadMeta().Addr)
-	require.Equal(t, MasterStatusUninit, loadMeta().StatusCode)
+	require.Equal(t, libModel.MasterStatusUninit, loadMeta().StatusCode)
 }
 
 func TestLoadAllWorkers(t *testing.T) {

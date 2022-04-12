@@ -5,9 +5,8 @@ import (
 	"testing"
 	"time"
 
-	libModel "github.com/hanfei1991/microcosm/lib/model"
-
 	"github.com/hanfei1991/microcosm/lib"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/clock"
@@ -62,7 +61,7 @@ type mockBaseMasterCreateWorkerFailed struct {
 
 func (m *mockBaseMasterCreateWorkerFailed) CreateWorker(
 	workerType lib.WorkerType, config lib.WorkerConfig, cost model.RescUnit,
-) (lib.WorkerID, error) {
+) (libModel.WorkerID, error) {
 	return "", errors.ErrMasterConcurrencyExceeded.FastGenByArgs()
 }
 
