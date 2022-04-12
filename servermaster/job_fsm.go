@@ -3,6 +3,8 @@ package servermaster
 import (
 	"sync"
 
+	libModel "github.com/hanfei1991/microcosm/lib/model"
+
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/errors"
@@ -65,9 +67,9 @@ type JobFsm struct {
 	JobStats
 
 	jobsMu      sync.RWMutex
-	pendingJobs map[lib.MasterID]*lib.MasterMetaKVData
-	waitAckJobs map[lib.MasterID]*jobHolder
-	onlineJobs  map[lib.MasterID]*jobHolder
+	pendingJobs map[libModel.MasterID]*lib.MasterMetaKVData
+	waitAckJobs map[libModel.MasterID]*jobHolder
+	onlineJobs  map[libModel.MasterID]*jobHolder
 }
 
 // JobStats defines a statistics interface for JobFsm
@@ -77,19 +79,19 @@ type JobStats interface {
 
 func NewJobFsm() *JobFsm {
 	return &JobFsm{
-		pendingJobs: make(map[lib.MasterID]*lib.MasterMetaKVData),
-		waitAckJobs: make(map[lib.MasterID]*jobHolder),
-		onlineJobs:  make(map[lib.MasterID]*jobHolder),
+		pendingJobs: make(map[libModel.MasterID]*lib.MasterMetaKVData),
+		waitAckJobs: make(map[libModel.MasterID]*jobHolder),
+		onlineJobs:  make(map[libModel.MasterID]*jobHolder),
 	}
 }
 
-func (fsm *JobFsm) QueryOnlineJob(jobID lib.MasterID) *jobHolder {
+func (fsm *JobFsm) QueryOnlineJob(jobID libModel.MasterID) *jobHolder {
 	fsm.jobsMu.RLock()
 	defer fsm.jobsMu.RUnlock()
 	return fsm.onlineJobs[jobID]
 }
 
-func (fsm *JobFsm) QueryJob(jobID lib.MasterID) *pb.QueryJobResponse {
+func (fsm *JobFsm) QueryJob(jobID libModel.MasterID) *pb.QueryJobResponse {
 	checkPendingJob := func() *pb.QueryJobResponse {
 		fsm.jobsMu.Lock()
 		defer fsm.jobsMu.Unlock()

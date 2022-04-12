@@ -106,7 +106,7 @@ func TestLoadAllWorkers(t *testing.T) {
 
 	workerStatuses, err := workerMetaClient.LoadAllWorkers(context.Background())
 	require.NoError(t, err)
-	require.Equal(t, map[WorkerID]*libModel.WorkerStatus{
+	require.Equal(t, map[libModel.WorkerID]*libModel.WorkerStatus{
 		"worker-1": {
 			Code:         libModel.WorkerStatusInit,
 			ErrorMessage: "test-1",

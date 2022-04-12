@@ -5,6 +5,8 @@ import (
 	"strings"
 	"time"
 
+	libModel "github.com/hanfei1991/microcosm/lib/model"
+
 	"github.com/hanfei1991/microcosm/pkg/deps"
 	extkv "github.com/hanfei1991/microcosm/pkg/meta/extension"
 	"github.com/hanfei1991/microcosm/pkg/meta/kvclient"
@@ -142,7 +144,7 @@ func (s *Server) ResumeBatchTasks(ctx context.Context, req *pb.PauseBatchTasksRe
 	return &pb.PauseBatchTasksResponse{}, nil
 }
 
-func (s *Server) buildDeps(wid lib.WorkerID) (*deps.Deps, error) {
+func (s *Server) buildDeps(wid libModel.WorkerID) (*deps.Deps, error) {
 	deps := deps.NewDeps()
 	err := deps.Provide(func() p2p.MessageHandlerManager {
 		return s.msgServer.MakeHandlerManager()

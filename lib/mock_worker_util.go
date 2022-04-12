@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	libModel "github.com/hanfei1991/microcosm/lib/model"
+
 	"github.com/stretchr/testify/require"
 
 	"github.com/hanfei1991/microcosm/lib/statusutil"
@@ -23,8 +25,8 @@ type BaseWorkerForTesting struct {
 }
 
 func MockBaseWorker(
-	workerID WorkerID,
-	masterID MasterID,
+	workerID libModel.WorkerID,
+	masterID libModel.MasterID,
 	workerImpl WorkerImpl,
 ) *BaseWorkerForTesting {
 	ctx := dcontext.Background()

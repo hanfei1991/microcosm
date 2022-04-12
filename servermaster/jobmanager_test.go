@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	libModel "github.com/hanfei1991/microcosm/lib/model"
+
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/clock"
@@ -103,7 +105,7 @@ func TestJobManagerQueryJob(t *testing.T) {
 			&lib.MasterMetaKVData{
 				ID:         "master-1",
 				Tp:         lib.FakeJobMaster,
-				StatusCode: lib.MasterStatusFinished,
+				StatusCode: libModel.MasterStatusFinished,
 			},
 			pb.QueryJobResponse_finished,
 		},
@@ -111,7 +113,7 @@ func TestJobManagerQueryJob(t *testing.T) {
 			&lib.MasterMetaKVData{
 				ID:         "master-2",
 				Tp:         lib.FakeJobMaster,
-				StatusCode: lib.MasterStatusStopped,
+				StatusCode: libModel.MasterStatusStopped,
 			},
 			pb.QueryJobResponse_stopped,
 		},
