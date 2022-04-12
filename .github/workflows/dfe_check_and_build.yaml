@@ -86,5 +86,5 @@ jobs:
         uses: codecov/codecov-action@v2
         with:
           fail_ci_if_error: true
-          files: ./tmp/dataflow_engine_test/cov.unit.out
+          files: /tmp/dataflow_engine_test/cov.unit.out
           verbose: true
