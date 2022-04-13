@@ -1,15 +1,12 @@
 package lib
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/pingcap/errors"
 
 	"github.com/hanfei1991/microcosm/lib/master"
 	"github.com/hanfei1991/microcosm/lib/model"
-	"github.com/hanfei1991/microcosm/pkg/clock"
-	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
 type (
@@ -59,24 +56,6 @@ func (config TimeoutConfig) Adjust() TimeoutConfig {
 		tc.workerTimeoutDuration = 2*tc.workerHeartbeatInterval + time.Second*3
 	}
 	return tc
-}
-
-func WorkerStatusChangeRequestTopic(masterID model.MasterID, workerID model.WorkerID) p2p.Topic {
-	return fmt.Sprintf("worker-status-change-req-%s-%s", masterID, workerID)
-}
-
-type StatusChangeRequest struct {
-	SendTime     clock.MonotonicTime    `json:"send-time"`
-	FromMasterID model.MasterID         `json:"from-master-id"`
-	Epoch        model.Epoch            `json:"epoch"`
-	ExpectState  model.WorkerStatusCode `json:"expect-state"`
-}
-
-type WorkerMetaKVData struct {
-	MasterID   Master                 `json:"id"`
-	NodeID     p2p.NodeID             `json:"node-id"`
-	StatusCode model.WorkerStatusCode `json:"status-code"`
-	Message    string                 `json:"message"`
 }
 
 type MasterFailoverReasonCode int32

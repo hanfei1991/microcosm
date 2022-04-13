@@ -10,8 +10,12 @@ import (
 	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
 )
 
-// Comment out these tests for now. TOO MUCH coupling.
-/*
+// These constants are only used for unit testing.
+const (
+	jobManager = libModel.WorkerType(iota + 1)
+	fakeJobMaster
+)
+
 func TestMasterMetadata(t *testing.T) {
 	t.Parallel()
 
@@ -20,15 +24,15 @@ func TestMasterMetadata(t *testing.T) {
 	meta := []*libModel.MasterMetaKVData{
 		{
 			ID: JobManagerUUID,
-			Tp: lib.JobManager,
+			Tp: jobManager,
 		},
 		{
 			ID: "master-1",
-			Tp: lib.FakeJobMaster,
+			Tp: fakeJobMaster,
 		},
 		{
 			ID: "master-2",
-			Tp: lib.FakeJobMaster,
+			Tp: fakeJobMaster,
 		},
 	}
 	for _, data := range meta {
@@ -40,9 +44,18 @@ func TestMasterMetadata(t *testing.T) {
 	masters, err := cli.LoadAllMasters(ctx)
 	require.Nil(t, err)
 	require.Len(t, masters, 3)
-	for _, master := range masters {
-		require.Equal(t, lib.FakeJobMaster, master.Tp)
-	}
+	require.Contains(t, masters, &libModel.MasterMetaKVData{
+		ID: JobManagerUUID,
+		Tp: jobManager,
+	})
+	require.Contains(t, masters, &libModel.MasterMetaKVData{
+		ID: "master-1",
+		Tp: fakeJobMaster,
+	})
+	require.Contains(t, masters, &libModel.MasterMetaKVData{
+		ID: "master-2",
+		Tp: fakeJobMaster,
+	})
 }
 
 func TestOperateMasterMetadata(t *testing.T) {
@@ -53,9 +66,10 @@ func TestOperateMasterMetadata(t *testing.T) {
 		addr1        = "127.0.0.1:10000"
 		addr2        = "127.0.0.1:10001"
 		meta         = &libModel.MasterMetaKVData{
-			ID:   "master-1",
-			Tp:   lib.FakeJobMaster,
-			Addr: addr1,
+			ID:         "master-1",
+			Tp:         fakeJobMaster,
+			Addr:       addr1,
+			StatusCode: libModel.MasterStatusInit,
 		}
 	)
 	loadMeta := func() *libModel.MasterMetaKVData {
@@ -82,8 +96,6 @@ func TestOperateMasterMetadata(t *testing.T) {
 	require.Equal(t, "", loadMeta().Addr)
 	require.Equal(t, libModel.MasterStatusUninit, loadMeta().StatusCode)
 }
-
-*/
 
 func TestLoadAllWorkers(t *testing.T) {
 	t.Parallel()

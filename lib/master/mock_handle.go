@@ -2,6 +2,7 @@ package master
 
 import (
 	"context"
+
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 
 	"go.uber.org/atomic"
