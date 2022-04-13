@@ -196,14 +196,6 @@ func (s *Server) buildDeps() (*deps.Deps, error) {
 		return nil, err
 	}
 
-	err = deps.Provide(func() broker.Broker {
-		// TODO: use correct broker.Broker
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-
 	return deps, nil
 }
 
