@@ -96,10 +96,7 @@ func (h *runningHandleImpl) SendMessage(
 		err = h.manager.messageSender.SendToNodeB(ctx, p2p.NodeID(h.executorID), topic, message)
 	}
 
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
 
 type tombstoneHandleImpl struct {
@@ -136,5 +133,12 @@ func (h *tombstoneHandleImpl) ToPB() (*pb.WorkerInfo, error) {
 }
 
 func (h *tombstoneHandleImpl) CleanTombstone(ctx context.Context) error {
-	panic("implement me")
+	ok, err := h.manager.workerMetaClient.Remove(ctx, h.workerID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		log.L().Info("Tombstone already cleaned", zap.String("worker-id", h.workerID))
+	}
+	return nil
 }

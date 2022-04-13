@@ -63,6 +63,9 @@ func (e *workerEntry) MarkAsTombstone() {
 }
 
 func (e *workerEntry) IsTombstone() bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
 	return e.isTombstone
 }
 
