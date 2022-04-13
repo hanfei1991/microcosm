@@ -324,6 +324,10 @@ func (s *Server) startForTest(ctx context.Context) (err error) {
 		s.sch.Run(ctx, 10)
 	}()
 
+	err = s.initClients(ctx)
+	if err != nil {
+		return err
+	}
 	err = s.selfRegister(ctx)
 	if err != nil {
 		return err
@@ -376,7 +380,11 @@ func (s *Server) Run(ctx context.Context) error {
 		return s.workerRtm.Run(ctx)
 	})
 
-	err := s.selfRegister(ctx)
+	err := s.initClients(ctx)
+	if err != nil {
+		return err
+	}
+	err = s.selfRegister(ctx)
 	if err != nil {
 		return err
 	}
@@ -566,7 +574,10 @@ func (s *Server) initClients(ctx context.Context) (err error) {
 		resourceCliDialer,
 	)
 	if err != nil {
-		return err
+		if test.GetGlobalTestFlag() {
+			log.L().Info("ignore error when in unit tests")
+		}
+		return nil
 	}
 	log.L().Logger.Info("resource client init successful")
 	return nil
