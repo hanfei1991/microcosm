@@ -218,6 +218,8 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	mockBaseJobmaster.On("GetWorkers").Return(map[string]lib.WorkerHandle{worker4: workerHandle1, worker3: workerHandle2}).Once()
 	workerHandle1.On("Status").Return(&libModel.WorkerStatus{ExtBytes: bytes1}).Once()
 	workerHandle2.On("Status").Return(&libModel.WorkerStatus{ExtBytes: bytes2}).Once()
+	workerHandle1.On("IsTombStone").Return(false).Once()
+	workerHandle2.On("IsTombStone").Return(false).Once()
 	jm.OnMasterRecovered(context.Background())
 	require.NoError(t.T(), jm.Tick(context.Background()))
 	// placeholder

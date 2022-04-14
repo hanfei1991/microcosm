@@ -62,7 +62,7 @@ func NewDMJobMaster(ctx *dcontext.Context, workerID libModel.WorkerID, masterID 
 	return jm
 }
 
-func (jm *JobMaster) createComponments() error {
+func (jm *JobMaster) createComponents() error {
 	taskStatus, workerStatus, workerHandles, err := jm.getInitStatus()
 	if err != nil {
 		return err
@@ -76,7 +76,7 @@ func (jm *JobMaster) createComponments() error {
 
 func (jm *JobMaster) InitImpl(ctx context.Context) error {
 	log.L().Info("initializing the dm jobmaster", zap.String("id", jm.workerID), zap.String("jobmaster id", jm.JobMasterID()))
-	if err := jm.createComponments(); err != nil {
+	if err := jm.createComponents(); err != nil {
 		return err
 	}
 	if err := jm.registerMessageHandler(ctx); err != nil {
@@ -93,7 +93,7 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 
 func (jm *JobMaster) OnMasterRecovered(ctx context.Context) error {
 	log.L().Info("recovering the dm jobmaster", zap.String("id :", jm.workerID))
-	return jm.createComponments()
+	return jm.createComponents()
 }
 
 func (jm *JobMaster) OnWorkerDispatched(worker lib.WorkerHandle, result error) error {
@@ -228,11 +228,16 @@ func (jm *JobMaster) registerMessageHandler(ctx context.Context) error {
 }
 
 func (jm *JobMaster) getInitStatus() ([]runtime.TaskStatus, []runtime.WorkerStatus, map[string]SendHandle, error) {
+	// NOTE: GetWorkers should return all online workers,
+	// and no further OnWorkerOnline will be received if JobMaster doesn't CreateWorker.
 	workerHandles := jm.GetWorkers()
 	taskStatusList := make([]runtime.TaskStatus, 0, len(workerHandles))
 	workerStatusList := make([]runtime.WorkerStatus, 0, len(workerHandles))
 	sendHandleMap := make(map[string]SendHandle, len(workerHandles))
 	for _, workerHandle := range workerHandles {
+		if workerHandle.IsTombStone() {
+			continue
+		}
 		taskStatus, err := runtime.UnmarshalTaskStatus(workerHandle.Status().ExtBytes)
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
