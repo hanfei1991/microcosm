@@ -44,6 +44,9 @@ type WorkerManager struct {
 	eventQueue chan *masterEvent
 	closeCh    chan struct{}
 	errCh      chan error
+	// allWorkersReady is **closed** when a heartbeat has been received
+	// from all workers recorded in meta.
+	allWorkersReady chan struct{}
 
 	clock clock.Clock
 
@@ -56,6 +59,7 @@ type workerManagerState int32
 
 const (
 	workerManagerReady = workerManagerState(iota + 1)
+	workerManagerLoadingMeta
 	workerManagerWaitingHeartbeat
 )
 
@@ -74,7 +78,7 @@ func NewWorkerManager(
 ) *WorkerManager {
 	state := workerManagerReady
 	if !isInit {
-		state = workerManagerWaitingHeartbeat
+		state = workerManagerLoadingMeta
 	}
 
 	ret := &WorkerManager{
@@ -92,9 +96,10 @@ func NewWorkerManager(
 		onWorkerStatusUpdated: onWorkerStatusUpdated,
 		onWorkerDispatched:    onWorkerDispatched,
 
-		eventQueue: make(chan *masterEvent, 1024),
-		closeCh:    make(chan struct{}),
-		errCh:      make(chan error, 1),
+		eventQueue:      make(chan *masterEvent, 1024),
+		closeCh:         make(chan struct{}),
+		errCh:           make(chan error, 1),
+		allWorkersReady: make(chan struct{}),
 
 		clock:    clock,
 		timeouts: timeoutConfig,
@@ -128,35 +133,50 @@ func (m *WorkerManager) Close() {
 // InitAfterRecover should be called after the master has failed over.
 // This method will block until a timeout period for heartbeats has passed.
 func (m *WorkerManager) InitAfterRecover(ctx context.Context) error {
-	timeoutInterval := m.timeouts.WorkerTimeoutDuration + m.timeouts.WorkerTimeoutGracefulDuration
-	timer := m.clock.Timer(timeoutInterval)
-	defer timer.Stop()
-
-	select {
-	case <-ctx.Done():
-		return errors.Trace(ctx.Err())
-	case <-timer.C:
-		// Wait for the worker timeout to expire, so
-		// that we maintain all the workers that are alive.
+	m.mu.Lock()
+	if m.state != workerManagerLoadingMeta {
+		// InitAfterRecover should only be called if
+		// NewWorkerManager has been called with isInit as false.
+		log.L().Panic("Unreachable", zap.String("master-id", m.masterID))
 	}
 
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	// Unlock here because loading meta involves I/O, which can be long.
+	m.mu.Unlock()
 
 	allPersistedWorkers, err := m.workerMetaClient.LoadAllWorkers(ctx)
 	if err != nil {
 		return err
 	}
 
+	m.mu.Lock()
 	for workerID, status := range allPersistedWorkers {
-		if entry, exists := m.workerEntries[workerID]; !exists {
-			// For those workers we have lost contact with, we insert
-			// a tombstone.
-			m.workerEntries[workerID] = newTombstoneWorkerEntry(workerID, status)
-		} else {
-			// Put the current persisted status in the workerEntry.
-			entry.InitStatus(status)
+		entry := newWaitingWorkerEntry(workerID, status)
+		m.workerEntries[workerID] = entry
+	}
+	m.state = workerManagerWaitingHeartbeat
+	m.mu.Unlock()
+
+	timeoutInterval := m.timeouts.WorkerTimeoutDuration + m.timeouts.WorkerTimeoutGracefulDuration
+
+	timer := m.clock.Timer(timeoutInterval)
+	defer timer.Stop()
+
+	startTime := m.clock.Now()
+	select {
+	case <-ctx.Done():
+		return errors.Trace(ctx.Err())
+	case <-m.allWorkersReady:
+		log.L().Info("All workers have sent heartbeats after master failover. Resuming right now.",
+			zap.Duration("duration", m.clock.Since(startTime)))
+	case <-timer.C:
+		// Wait for the worker timeout to expire
+		m.mu.Lock()
+		for _, entry := range m.workerEntries {
+			if entry.State() == workerEntryWait {
+				entry.MarkAsTombstone()
+			}
 		}
+		m.mu.Unlock()
 	}
 
 	m.state = workerManagerReady
@@ -167,41 +187,53 @@ func (m *WorkerManager) HandleHeartbeat(msg *libModel.HeartbeatPingMessage, from
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	if m.state == workerManagerLoadingMeta {
+		return nil
+	}
+
 	if !m.checkMasterEpochMatch(msg.Epoch) {
 		return nil
 	}
 
 	entry, exists := m.workerEntries[msg.FromWorkerID]
 	if !exists {
-		if m.state != workerManagerWaitingHeartbeat {
-			log.L().Info("Message from stale worker dropped",
-				zap.String("master-id", m.masterID),
-				zap.Any("message", msg),
-				zap.String("from-node", fromNode))
-			return nil
-		}
-
-		// We are expecting heartbeats now
-		entry = newWorkerEntry(
-			msg.FromWorkerID,
-			model.ExecutorID(fromNode),
-			m.nextExpireTime(),
-			false,
-			nil)
-		m.workerEntries[msg.FromWorkerID] = entry
-
-		log.L().Info("Worker discovered", zap.String("master-id", m.masterID),
-			zap.Any("worker-entry", entry))
-
-		entry.heartbeatCount.Store(1)
-		// We do not call onWorkerOnlined because the master is still waiting to be contacted.
+		log.L().Info("Message from stale worker dropped",
+			zap.String("master-id", m.masterID),
+			zap.Any("message", msg),
+			zap.String("from-node", fromNode))
 		return nil
 	}
 
-	entry.SetExpireTime(m.nextExpireTime())
+	if m.state == workerManagerWaitingHeartbeat {
+		if entry.State() != workerEntryWait {
+			log.L().Panic("Unexpected worker entry state",
+				zap.Any("entry", entry))
+		}
 
-	newHeartbeatCount := entry.heartbeatCount.Add(1)
-	if newHeartbeatCount == 1 {
+		log.L().Info("Worker discovered", zap.String("master-id", m.masterID),
+			zap.Any("worker-entry", entry))
+		entry.MarkAsOnline(model.ExecutorID(fromNode), m.nextExpireTime())
+
+		allReady := true
+		for _, e := range m.workerEntries {
+			if e.State() == workerEntryWait {
+				allReady = false
+				break
+			}
+		}
+		if allReady {
+			close(m.allWorkersReady)
+			log.L().Info("All workers have sent heartbeats, sending signal to resume the master",
+				zap.String("master-id", m.masterID))
+		}
+	} else {
+		if entry.State() != workerEntryCreated {
+			log.L().Panic("Unexpected worker entry state",
+				zap.Any("entry", entry))
+		}
+
+		entry.MarkAsOnline(model.ExecutorID(fromNode), m.nextExpireTime())
+
 		err := m.enqueueEvent(&masterEvent{
 			Tp:       workerOnlineEvent,
 			WorkerID: msg.FromWorkerID,
@@ -272,7 +304,7 @@ func (m *WorkerManager) OnCreatingWorker(workerID libModel.WorkerID, executorID 
 		workerID,
 		executorID,
 		m.nextExpireTime(),
-		false,
+		workerEntryCreated,
 		&libModel.WorkerStatus{
 			Code: libModel.WorkerStatusCreated,
 		})
@@ -389,13 +421,14 @@ func (m *WorkerManager) runBackgroundChecker() error {
 
 		m.mu.Lock()
 		for workerID, entry := range m.workerEntries {
-			if entry.isOffline.Load() {
+			state := entry.State()
+			if state == workerEntryOffline || state == workerEntryTombstone {
 				// Prevent repeated delivery of the workerOffline event.
 				continue
 			}
+
 			if entry.ExpireTime().After(m.clock.Now()) {
 				// Not timed out
-
 				if reader := entry.StatusReader(); reader != nil {
 					if _, ok := reader.Receive(); ok {
 						err := m.enqueueEvent(&masterEvent{
@@ -418,7 +451,7 @@ func (m *WorkerManager) runBackgroundChecker() error {
 			}
 
 			// The worker has timed out.
-			entry.isOffline.Store(true)
+			entry.MarkAsOffline()
 
 			var offlineError error
 			if reader := entry.StatusReader(); reader != nil {

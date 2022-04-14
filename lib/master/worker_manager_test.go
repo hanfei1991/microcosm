@@ -5,8 +5,6 @@ import (
 	"testing"
 	"time"
 
-	derror "github.com/hanfei1991/microcosm/pkg/errors"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/require"
@@ -18,6 +16,7 @@ import (
 	"github.com/hanfei1991/microcosm/lib/statusutil"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	"github.com/hanfei1991/microcosm/pkg/clock"
+	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
@@ -310,6 +309,7 @@ func TestRecoverAfterFailover(t *testing.T) {
 		require.NoError(t, err)
 	}()
 
+	time.Sleep(10 * time.Millisecond)
 	err = suite.SimulateHeartbeat("worker-1", 1, "executor-1")
 	require.NoError(t, err)
 	err = suite.SimulateHeartbeat("worker-2", 1, "executor-2")
@@ -337,5 +337,41 @@ func TestRecoverAfterFailover(t *testing.T) {
 	require.Nil(t, suite.manager.GetWorkers()["worker-2"].GetTombstone())
 	require.Nil(t, suite.manager.GetWorkers()["worker-3"].GetTombstone())
 	require.NotNil(t, suite.manager.GetWorkers()["worker-4"].GetTombstone())
+	suite.Close()
+}
+
+func TestRecoverAfterFailoverFast(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	suite := NewWorkerManageTestSuite(false)
+	err := suite.PutMeta("worker-1", &libModel.WorkerStatus{
+		Code: libModel.WorkerStatusNormal,
+	})
+	require.NoError(t, err)
+
+	doneCh := make(chan struct{})
+	go func() {
+		defer close(doneCh)
+		err := suite.manager.InitAfterRecover(ctx)
+		require.NoError(t, err)
+	}()
+
+	time.Sleep(10 * time.Millisecond)
+	err = suite.SimulateHeartbeat("worker-1", 1, "executor-1")
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool {
+		select {
+		case <-doneCh:
+			return true
+		default:
+		}
+		return false
+	}, 1*time.Second, 10*time.Millisecond)
+
+	require.True(t, suite.manager.IsInitialized())
+	require.Len(t, suite.manager.GetWorkers(), 1)
+	require.Contains(t, suite.manager.GetWorkers(), "worker-1")
 	suite.Close()
 }
