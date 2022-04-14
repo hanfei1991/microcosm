@@ -47,6 +47,7 @@ func (t *testDMJobmasterSuite) SetupSuite() {
 	TaskErrorInterval = 100 * time.Millisecond
 	WorkerNormalInterval = time.Hour
 	WorkerErrorInterval = 100 * time.Millisecond
+	runtime.HeartbeatInterval = 1 * time.Second
 }
 
 type masterParamListForTest struct {
