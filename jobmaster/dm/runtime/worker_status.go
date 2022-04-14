@@ -7,10 +7,8 @@ import (
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 )
 
-var (
-	// TODO: expose this config in lib
-	HeartbeatInterval = 3 * time.Second
-)
+// TODO: expose this config in lib
+var HeartbeatInterval = 3 * time.Second
 
 // WorkerStage represents the stage of a worker.
 //          ,──────────────.      ,────────────.      ,─────────────.     ,──────────────.
@@ -49,10 +47,10 @@ const (
 )
 
 type WorkerStatus struct {
-	TaskID      string
-	ID          libModel.WorkerID
-	Unit        lib.WorkerType
-	Stage       WorkerStage
+	TaskID string
+	ID     libModel.WorkerID
+	Unit   lib.WorkerType
+	Stage  WorkerStage
 	// only use when creating, change to updatedTime if needed.
 	createdTime time.Time
 }
