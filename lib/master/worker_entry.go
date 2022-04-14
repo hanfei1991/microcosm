@@ -1,11 +1,11 @@
 package master
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
 	libModel "github.com/hanfei1991/microcosm/lib/model"
@@ -53,8 +53,6 @@ type workerEntry struct {
 
 	statusReaderMu sync.RWMutex
 	statusReader   *statusutil.Reader
-
-	heartbeatCount atomic.Int64
 }
 
 func newWorkerEntry(
@@ -84,6 +82,14 @@ func newWaitingWorkerEntry(
 	return newWorkerEntry(id, "", time.Time{}, workerEntryWait, lastStatus)
 }
 
+func (e *workerEntry) String() string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	return fmt.Sprintf("{worker-id:%s, executor-id:%s, state:%d}",
+		e.id, e.executorID, e.state)
+}
+
 func (e *workerEntry) State() workerEntryState {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -102,7 +108,7 @@ func (e *workerEntry) MarkAsTombstone() {
 		return
 	}
 
-	log.L().Panic("Unreachable", zap.Any("entry", e))
+	log.L().Panic("Unreachable", zap.Stringer("entry", e))
 }
 
 func (e *workerEntry) IsTombstone() bool {
@@ -123,7 +129,7 @@ func (e *workerEntry) MarkAsOnline(executor model.ExecutorID, expireAt time.Time
 		return
 	}
 
-	log.L().Panic("Unreachable", zap.Any("entry", e))
+	log.L().Panic("Unreachable", zap.Stringer("entry", e))
 }
 
 func (e *workerEntry) MarkAsOffline() {
@@ -135,7 +141,7 @@ func (e *workerEntry) MarkAsOffline() {
 		return
 	}
 
-	log.L().Panic("Unreachable", zap.Any("entry", e))
+	log.L().Panic("Unreachable", zap.Stringer("entry", e))
 }
 
 func (e *workerEntry) StatusReader() *statusutil.Reader {
@@ -150,7 +156,7 @@ func (e *workerEntry) InitStatus(status *libModel.WorkerStatus) {
 	defer e.statusReaderMu.Unlock()
 
 	if e.statusReader != nil {
-		log.L().Panic("double InitStatus", zap.Any("worker-entry", e))
+		log.L().Panic("double InitStatus", zap.Stringer("entry", e))
 	}
 
 	e.statusReader = statusutil.NewReader(status)
