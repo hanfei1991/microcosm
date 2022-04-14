@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"sync"
 
+	"github.com/hanfei1991/microcosm/lib/master"
+
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/mock"
 	"go.uber.org/atomic"
@@ -222,6 +224,20 @@ type MockWorkerHandler struct {
 	WorkerID libModel.WorkerID
 }
 
+func (m *MockWorkerHandler) GetTombstone() master.TombstoneHandle {
+	if m.IsTombStone() {
+		return m
+	}
+	return nil
+}
+
+func (m *MockWorkerHandler) Unwrap() master.RunningHandle {
+	if !m.IsTombStone() {
+		return m
+	}
+	return nil
+}
+
 func (m *MockWorkerHandler) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error {
 	args := m.Called(ctx, topic, message, nonblocking)
 	return args.Error(0)
@@ -246,7 +262,7 @@ func (m *MockWorkerHandler) ToPB() (*pb.WorkerInfo, error) {
 	return args.Get(0).(*pb.WorkerInfo), args.Error(1)
 }
 
-func (m *MockWorkerHandler) DeleteTombStone(ctx context.Context) (bool, error) {
+func (m *MockWorkerHandler) CleanTombstone(ctx context.Context) error {
 	args := m.Called()
-	return args.Bool(0), args.Error(1)
+	return args.Error(0)
 }
