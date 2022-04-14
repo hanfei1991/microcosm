@@ -4,6 +4,7 @@ go 1.18
 
 require (
 	github.com/BurntSushi/toml v1.0.0
+	github.com/DATA-DOG/go-sqlmock v1.5.0
 	github.com/benbjohnson/clock v1.3.0
 	github.com/edwingeng/deque v0.0.0-20191220032131-8596380dee17
 	github.com/gavv/monotime v0.0.0-20190418164738-30dba4353424
@@ -48,7 +49,6 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v0.12.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/internal v0.8.1 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v0.2.0 // indirect
-	github.com/DATA-DOG/go-sqlmock v1.5.0 // indirect
 	github.com/DataDog/zstd v1.4.6-0.20210211175136-c6db21d202f4 // indirect
 	github.com/VividCortex/ewma v1.1.1 // indirect
 	github.com/andres-erbsen/clock v0.0.0-20160526145045-9e14626cd129 // indirect

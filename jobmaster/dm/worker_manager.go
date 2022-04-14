@@ -235,6 +235,7 @@ func getNextUnit(task *metadata.Task, worker runtime.WorkerStatus) lib.WorkerTyp
 }
 
 func (wm *WorkerManager) createWorker(ctx context.Context, taskID string, unit lib.WorkerType, taskCfg *config.TaskCfg) error {
+	log.L().Info("start to create worker", zap.String("task_id", taskID), zap.Int64("unit", int64(unit)))
 	workerID, err := wm.workerAgent.CreateWorker(ctx, taskID, unit, taskCfg)
 	if err != nil {
 		log.L().Error("failed to create workers", zap.String("task_id", taskID), zap.Int64("unit", int64(unit)), zap.Error(err))
@@ -254,6 +255,7 @@ func (wm *WorkerManager) createWorker(ctx context.Context, taskID string, unit l
 }
 
 func (wm *WorkerManager) stopWorker(ctx context.Context, taskID string, workerID libModel.WorkerID) error {
+	log.L().Info("start to stop worker", zap.String("task_id", taskID), zap.String("worker_id", workerID))
 	if err := wm.workerAgent.StopWorker(ctx, taskID, workerID); err != nil {
 		log.L().Error("failed to destroy worker", zap.String("task_id", taskID), zap.String("worker_id", workerID), zap.Error(err))
 		return err
