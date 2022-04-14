@@ -229,6 +229,10 @@ func TestCreateWorkerAndWorkerOnline(t *testing.T) {
 	suite.manager.OnCreatingWorker("worker-1", "executor-1")
 	err := suite.SimulateHeartbeat("worker-1", 1, "executor-1")
 	require.NoError(t, err)
+	err = suite.SimulateHeartbeat("worker-1", 1, "executor-1")
+	require.NoError(t, err)
+	err = suite.SimulateHeartbeat("worker-1", 1, "executor-1")
+	require.NoError(t, err)
 
 	event := suite.WaitForEvent(t, "worker-1")
 	require.Equal(t, workerOnlineEvent, event.Tp)

@@ -204,6 +204,8 @@ func (m *WorkerManager) HandleHeartbeat(msg *libModel.HeartbeatPingMessage, from
 		return nil
 	}
 
+	entry.SetExpireTime(m.nextExpireTime())
+
 	if m.state == workerManagerWaitingHeartbeat {
 		if entry.State() != workerEntryWait {
 			log.L().Panic("Unexpected worker entry state",
@@ -228,8 +230,7 @@ func (m *WorkerManager) HandleHeartbeat(msg *libModel.HeartbeatPingMessage, from
 		}
 	} else {
 		if entry.State() != workerEntryCreated {
-			log.L().Panic("Unexpected worker entry state",
-				zap.Any("entry", entry))
+			return nil
 		}
 
 		entry.MarkAsOnline(model.ExecutorID(fromNode), m.nextExpireTime())
