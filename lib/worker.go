@@ -421,6 +421,7 @@ func (w *DefaultBaseWorker) initMessageHandlers(ctx context.Context) (retErr err
 		func(sender p2p.NodeID, value p2p.MessageValue) error {
 			msg := value.(*libModel.HeartbeatPongMessage)
 			log.L().Info("heartbeat pong received",
+				zap.String("master-id", w.masterID),
 				zap.Any("msg", msg))
 			w.masterClient.HandleHeartbeat(sender, msg)
 			return nil
