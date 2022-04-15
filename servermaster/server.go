@@ -699,6 +699,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 			}
 			err := s.jobManager.Poll(ctx)
 			if err != nil {
+				log.L().Warn("Polling JobManager failed", zap.Error(err))
 				return err
 			}
 		case <-leaderTicker.C:

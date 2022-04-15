@@ -295,7 +295,7 @@ func (m *DefaultBaseMaster) registerMessageHandlers(ctx context.Context) error {
 				&libModel.HeartbeatPongMessage{
 					SendTime:   msg.SendTime,
 					ReplyTime:  m.clock.Now(),
-					ToWorkerID: m.id,
+					ToWorkerID: msg.FromWorkerID,
 					Epoch:      m.currentEpoch.Load(),
 				})
 			if err != nil {
