@@ -6,7 +6,7 @@ linters:
     - depguard
     - misspell
     - ineffassign
-#    - typecheck # https://github.com/golangci/golangci-lint/issues/2649
+    - typecheck
     - varcheck
     - unused
     - structcheck
