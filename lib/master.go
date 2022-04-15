@@ -275,6 +275,12 @@ func (m *DefaultBaseMaster) doInit(ctx context.Context) (isFirstStartUp bool, er
 	}
 
 	m.startBackgroundTasks()
+
+	if !isInit {
+		if err := m.workerManager.InitAfterRecover(ctx); err != nil {
+			return false, err
+		}
+	}
 	return isInit, nil
 }
 
