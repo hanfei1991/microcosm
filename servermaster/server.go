@@ -661,12 +661,6 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		return err
 	}
 
-	dctx = dctx.WithDeps(dp)
-	s.jobManager, err = NewJobManagerImplV2(dctx, metadata.JobManagerUUID)
-	if err != nil {
-		return
-	}
-
 	s.leader.Store(&Member{
 		Name:          s.name(),
 		IsServLeader:  true,
@@ -681,6 +675,12 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 			log.L().Warn("job manager close with error", zap.Error(err))
 		}
 	}()
+
+	dctx = dctx.WithDeps(dp)
+	s.jobManager, err = NewJobManagerImplV2(dctx, metadata.JobManagerUUID)
+	if err != nil {
+		return
+	}
 
 	metricTicker := time.NewTicker(defaultMetricInterval)
 	defer metricTicker.Stop()
