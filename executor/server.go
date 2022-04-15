@@ -548,7 +548,7 @@ func (s *Server) initClients(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
-	log.L().Logger.Info("master client init successful")
+	log.L().Info("master client init successful")
 
 	resourceCliDialer := func(ctx context.Context, addr string) (pb.ResourceManagerClient, rpcutil.CloseableConnIface, error) {
 		ctx, cancel := context.WithTimeout(ctx, client.DialTimeout)
@@ -568,10 +568,11 @@ func (s *Server) initClients(ctx context.Context) (err error) {
 	if err != nil {
 		if test.GetGlobalTestFlag() {
 			log.L().Info("ignore error when in unit tests")
+			return nil
 		}
-		return nil
+		return err
 	}
-	log.L().Logger.Info("resource client init successful")
+	log.L().Info("resource client init successful")
 	return nil
 }
 
