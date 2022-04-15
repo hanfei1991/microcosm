@@ -285,6 +285,9 @@ func (m *DefaultBaseMaster) registerMessageHandlers(ctx context.Context) error {
 		&libModel.HeartbeatPingMessage{},
 		func(sender p2p.NodeID, value p2p.MessageValue) error {
 			msg := value.(*libModel.HeartbeatPingMessage)
+			log.L().Info("Heartbeat Ping received",
+				zap.Any("msg", msg),
+				zap.String("master-id", m.id))
 			ok, err := m.messageSender.SendToNode(
 				ctx,
 				sender,
