@@ -97,6 +97,7 @@ func (t *testDMJobmasterSuite) TestRunDMJobMaster() {
 
 	// Init
 	_, mockDB, err := conn.InitMockDBFull()
+	require.NoError(t.T(), err)
 	mockDB.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	mockDB.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	require.NoError(t.T(), jobmaster.Init(context.Background()))
@@ -246,6 +247,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	workerHandle1.WorkerID = worker5
 	taskStatus1.Stage = metadata.StageRunning
 	bytes1, err = json.Marshal(taskStatus1)
+	require.NoError(t.T(), err)
 	workerHandle1.On("Status").Return(&libModel.WorkerStatus{ExtBytes: bytes1}).Once()
 	jm.OnWorkerOnline(workerHandle1)
 	require.NoError(t.T(), jm.Tick(context.Background()))
