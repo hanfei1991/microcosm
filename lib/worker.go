@@ -627,7 +627,8 @@ func (m *masterClient) SendHeartBeat(ctx context.Context, clock clock.Clock) err
 	if err != nil {
 		return errors.Trace(err)
 	}
-	log.L().Debug("sending heartbeat success", zap.String("worker", m.workerID))
+	log.L().Info("sending heartbeat success", zap.String("worker", m.workerID),
+		zap.String("master-id", m.masterID))
 	if !ok {
 		log.L().Warn("sending heartbeat ping encountered ErrPeerMessageSendTryAgain")
 	}
