@@ -36,7 +36,7 @@ type JobMaster struct {
 	taskManager           *TaskManager
 	messageAgent          *MessageAgent
 	messageHandlerManager p2p.MessageHandlerManager
-	checkpointAgent       checkpoint.CheckpointAgent
+	checkpointAgent       checkpoint.Agent
 }
 
 func RegisterWorker() {
@@ -53,7 +53,7 @@ func NewDMJobMaster(ctx *dcontext.Context, workerID libModel.WorkerID, masterID 
 		workerID:        workerID,
 		jobCfg:          conf.(*config.JobCfg),
 		closeCh:         make(chan struct{}),
-		checkpointAgent: checkpoint.NewCheckpointAgentImpl(conf.(*config.JobCfg)),
+		checkpointAgent: checkpoint.NewAgentImpl(conf.(*config.JobCfg)),
 	}
 
 	// TODO: we should expose the message handler register Func in base master.

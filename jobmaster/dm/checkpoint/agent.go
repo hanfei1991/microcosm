@@ -18,13 +18,13 @@ import (
 )
 
 const (
-	loadCheckpointTable = `CREATE TABLE IF NOT EXISTS %s (
+	loadCheckpointTable = `CREATE TABLE IF NOT EXISTS ? (
 		task_name varchar(255) NOT NULL,
 		source_name varchar(255) NOT NULL,
 		status varchar(10) NOT NULL DEFAULT 'init' COMMENT 'init,running,finished',
 		PRIMARY KEY (task_name, source_name)
 	);`
-	syncCheckpointTable = `CREATE TABLE IF NOT EXISTS %s (
+	syncCheckpointTable = `CREATE TABLE IF NOT EXISTS ? (
 		id VARCHAR(32) NOT NULL,
 		cp_schema VARCHAR(128) NOT NULL,
 		cp_table VARCHAR(128) NOT NULL,
@@ -42,30 +42,30 @@ const (
 	)`
 )
 
-type CheckpointAgent interface {
+type Agent interface {
 	Init(ctx context.Context) error
 	Remove(ctx context.Context) error
 	IsFresh(ctx context.Context, workerType lib.WorkerType, task *metadata.Task) (bool, error)
 }
 
-type CheckpointAgentImpl struct {
+type AgentImpl struct {
 	mu  sync.RWMutex
 	cfg *config.JobCfg
 }
 
-func NewCheckpointAgentImpl(jobCfg *config.JobCfg) *CheckpointAgentImpl {
-	c := &CheckpointAgentImpl{}
+func NewAgentImpl(jobCfg *config.JobCfg) *AgentImpl {
+	c := &AgentImpl{}
 	c.UpdateConfig(jobCfg)
 	return c
 }
 
-func (c *CheckpointAgentImpl) GetConfig() *config.JobCfg {
+func (c *AgentImpl) GetConfig() *config.JobCfg {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.cfg
 }
 
-func (c *CheckpointAgentImpl) UpdateConfig(jobCfg *config.JobCfg) {
+func (c *AgentImpl) UpdateConfig(jobCfg *config.JobCfg) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.cfg = jobCfg
@@ -75,7 +75,7 @@ func (c *CheckpointAgentImpl) UpdateConfig(jobCfg *config.JobCfg) {
 // to avoid the annoying log of "table already exists",
 // because one job only need to create one checkpoint table per unit.
 // move these codes to tiflow later.
-func (c *CheckpointAgentImpl) Init(ctx context.Context) error {
+func (c *AgentImpl) Init(ctx context.Context) error {
 	log.L().Info("init checkpoint", zap.String("job_id", c.cfg.Name))
 	cfg := c.GetConfig()
 	db, err := conn.DefaultDBProvider.Apply(cfg.TargetDB)
@@ -98,7 +98,7 @@ func (c *CheckpointAgentImpl) Init(ctx context.Context) error {
 	return nil
 }
 
-func (c *CheckpointAgentImpl) Remove(ctx context.Context) error {
+func (c *AgentImpl) Remove(ctx context.Context) error {
 	log.L().Info("remove checkpoint", zap.String("job_id", c.cfg.Name))
 	cfg := c.GetConfig()
 	db, err := conn.DefaultDBProvider.Apply(cfg.TargetDB)
@@ -113,7 +113,7 @@ func (c *CheckpointAgentImpl) Remove(ctx context.Context) error {
 	return dropSyncCheckpointTable(ctx, cfg, db)
 }
 
-func (c *CheckpointAgentImpl) IsFresh(ctx context.Context, workerType lib.WorkerType, task *metadata.Task) (bool, error) {
+func (c *AgentImpl) IsFresh(ctx context.Context, workerType lib.WorkerType, task *metadata.Task) (bool, error) {
 	if workerType == lib.WorkerDMDump {
 		return true, nil
 	}
@@ -126,18 +126,17 @@ func (c *CheckpointAgentImpl) IsFresh(ctx context.Context, workerType lib.Worker
 
 	if workerType == lib.WorkerDMLoad {
 		return isLoadFresh(ctx, task.Cfg, db)
-	} else {
-		return isSyncFresh(ctx, task.Cfg, db)
 	}
+	return isSyncFresh(ctx, task.Cfg, db)
 }
 
 func createLoadCheckpointTable(ctx context.Context, cfg *config.JobCfg, db *conn.BaseDB) error {
-	_, err := db.DB.ExecContext(ctx, fmt.Sprintf(loadCheckpointTable, loadTableName(cfg)))
+	_, err := db.DB.ExecContext(ctx, loadCheckpointTable, loadTableName(cfg))
 	return err
 }
 
 func createSyncCheckpointTable(ctx context.Context, cfg *config.JobCfg, db *conn.BaseDB) error {
-	_, err := db.DB.ExecContext(ctx, fmt.Sprintf(syncCheckpointTable, syncTableName(cfg)))
+	_, err := db.DB.ExecContext(ctx, syncCheckpointTable, syncTableName(cfg))
 	return err
 }
 
@@ -179,9 +178,9 @@ func onlineDDLName(cfg *config.JobCfg) string {
 }
 
 func isLoadFresh(ctx context.Context, taskCfg *config.TaskCfg, db *conn.BaseDB) (bool, error) {
-	query := fmt.Sprintf("SELECT status FROM %s WHERE `task_name` = ? AND `source_name` = ?", loadTableName((*config.JobCfg)(taskCfg)))
+	query := "SELECT status FROM ? WHERE `task_name` = ? AND `source_name` = ?"
 	var status string
-	err := db.DB.QueryRowContext(ctx, query, taskCfg.Name, taskCfg.Upstreams[0].SourceID).Scan(&status)
+	err := db.DB.QueryRowContext(ctx, query, loadTableName((*config.JobCfg)(taskCfg)), taskCfg.Name, taskCfg.Upstreams[0].SourceID).Scan(&status)
 	switch {
 	case err == nil:
 		return status == "init", nil
@@ -193,9 +192,9 @@ func isLoadFresh(ctx context.Context, taskCfg *config.TaskCfg, db *conn.BaseDB) 
 }
 
 func isSyncFresh(ctx context.Context, taskCfg *config.TaskCfg, db *conn.BaseDB) (bool, error) {
-	query := fmt.Sprintf("SELECT 1 FROM %s WHERE `id` = ? AND `is_global` = true", syncTableName((*config.JobCfg)(taskCfg)))
+	query := "SELECT 1 FROM ? WHERE `id` = ? AND `is_global` = true"
 	var status string
-	err := db.DB.QueryRowContext(ctx, query, taskCfg.Upstreams[0].SourceID).Scan(&status)
+	err := db.DB.QueryRowContext(ctx, query, syncTableName((*config.JobCfg)(taskCfg)), taskCfg.Upstreams[0].SourceID).Scan(&status)
 	switch {
 	case err == nil:
 		return false, nil
