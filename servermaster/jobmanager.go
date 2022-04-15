@@ -212,6 +212,7 @@ func NewJobManagerImplV2(
 	}
 	err = impl.BaseMaster.Init(dctx)
 	if err != nil {
+		_ = impl.BaseMaster.Close(dctx)
 		return nil, err
 	}
 	return impl, nil
