@@ -1,10 +1,11 @@
 package metadata
 
 import (
+	"bytes"
 	"context"
-	"encoding/json"
 	"testing"
 
+	"github.com/BurntSushi/toml"
 	"github.com/stretchr/testify/require"
 
 	"github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
@@ -80,9 +81,10 @@ func TestDefaultStore(t *testing.T) {
 	require.Error(t, err)
 	require.Nil(t, state)
 
-	v, err := json.Marshal(dummyState)
+	var b bytes.Buffer
+	err = toml.NewEncoder(&b).Encode(dummyState)
 	require.NoError(t, err)
-	kvClient.Put(context.Background(), dummyStore.Key(), string(v))
+	kvClient.Put(context.Background(), dummyStore.Key(), b.String())
 	state, err = dummyStore.Get(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, dummyState, state)
