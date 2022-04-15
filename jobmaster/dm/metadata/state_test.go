@@ -20,7 +20,7 @@ func (ds *DummyState) String() string {
 }
 
 type DummyStore struct {
-	*DefaultStore
+	*TomlStore
 }
 
 func (ds *DummyStore) CreateState() State {
@@ -38,7 +38,7 @@ type FailedState struct {
 }
 
 type FailedStore struct {
-	*DefaultStore
+	*TomlStore
 }
 
 func (fs *FailedStore) CreateState() State {
@@ -55,9 +55,9 @@ func TestDefaultStore(t *testing.T) {
 	kvClient := mock.NewMetaMock()
 	dummyState := &DummyState{I: 1}
 	dummyStore := &DummyStore{
-		DefaultStore: NewDefaultStore(kvClient),
+		TomlStore: NewTomlStore(kvClient),
 	}
-	dummyStore.DefaultStore.Store = dummyStore
+	dummyStore.TomlStore.Store = dummyStore
 
 	state, err := dummyStore.Get(context.Background())
 	require.Error(t, err)
@@ -95,8 +95,8 @@ func TestDefaultStore(t *testing.T) {
 
 	failedState := &FailedState{I: 1, i: 2}
 	failedStore := &FailedStore{
-		DefaultStore: NewDefaultStore(kvClient),
+		TomlStore: NewTomlStore(kvClient),
 	}
-	failedStore.DefaultStore.Store = failedStore
+	failedStore.TomlStore.Store = failedStore
 	require.EqualError(t, failedStore.Put(context.Background(), failedState), "fields of state should all be public")
 }
