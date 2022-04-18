@@ -3,7 +3,6 @@ package metautil
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"time"
 
 	"gorm.io/driver/mysql"
@@ -42,7 +41,7 @@ type DBConfig struct {
 func NewSQLDB(driver, dsn string, conf DBConfig) (*sql.DB, error) {
 	db, err := sql.Open(driver, dsn)
 	if err != nil {
-		return nil, cerrors.ErrMetaNewClientFail.GenWithStackByArgs(err)
+		return nil, cerrors.ErrMetaNewClientFail.Wrap(err)
 	}
 
 	db.SetConnMaxIdleTime(conf.ConnMaxIdleTime)
@@ -56,7 +55,7 @@ func NewSQLDB(driver, dsn string, conf DBConfig) (*sql.DB, error) {
 // NewMetaOpsClient return the client to operate framework metastore
 func NewMetaOpsClient(sqlDB *sql.DB) (*MetaOpsClient, error) {
 	if sqlDB == nil {
-		return nil, cerrors.ErrMetaOpFail.GenWithStackByArgs(fmt.Errorf("para is nil"))
+		return nil, cerrors.ErrMetaOpFail.GenWithStackByArgs("input db is nil")
 	}
 
 	db, err := gorm.Open(mysql.New(mysql.Config{
@@ -137,7 +136,7 @@ func (c *MetaOpsClient) GetProjectByID(ctx context.Context, projectID string) (*
 // AddProjectOperation insert the operation
 func (c *MetaOpsClient) AddProjectOperation(ctx context.Context, op *model.ProjectOperation) error {
 	if op == nil {
-		return cerrors.ErrMetaOpFail.GenWithStackByArgs(fmt.Errorf("para is nil"))
+		return cerrors.ErrMetaOpFail.GenWithStackByArgs("input project operation is nil")
 	}
 
 	if result := c.db.Create(op); result.Error != nil {
@@ -171,10 +170,10 @@ func (c *MetaOpsClient) QueryProjectOperationsByTimeRange(ctx context.Context,
 }
 
 /////////////////////////////// Job Operation
-// SetJob insert the jobInfo
+// AddJob insert the jobInfo
 func (c *MetaOpsClient) AddJob(ctx context.Context, job *model.MasterMeta) error {
 	if job == nil {
-		return cerrors.ErrMetaOpFail.GenWithStackByArgs("input job info is nil")
+		return cerrors.ErrMetaOpFail.GenWithStackByArgs("input master meta is nil")
 	}
 
 	if result := c.db.Create(job); result.Error != nil {
@@ -203,7 +202,7 @@ func (c *MetaOpsClient) DeleteJob(ctx context.Context, jobID string) error {
 	return nil
 }
 
-// QueryJobByID query job by `jobID`
+// GetJobByID query job by `jobID`
 func (c *MetaOpsClient) GetJobByID(ctx context.Context, jobID string) (*model.MasterMeta, error) {
 	var job model.MasterMeta
 	if result := c.db.Where("id = ?", jobID).First(&job); result.Error != nil {
@@ -239,7 +238,7 @@ func (c *MetaOpsClient) QueryJobsByStatus(ctx context.Context,
 // AddWorker insert the workerInfo
 func (c *MetaOpsClient) AddWorker(ctx context.Context, worker *model.WorkerMeta) error {
 	if worker == nil {
-		return cerrors.ErrMetaOpFail.GenWithStackByArgs("input worker info is nil")
+		return cerrors.ErrMetaOpFail.GenWithStackByArgs("input worker meta is nil")
 	}
 
 	if result := c.db.Create(worker); result.Error != nil {
@@ -304,7 +303,7 @@ func (c *MetaOpsClient) QueryWorkersByStatus(ctx context.Context, masterID strin
 // AddResource insert the model.ResourceMeta
 func (c *MetaOpsClient) AddResource(ctx context.Context, resource *model.ResourceMeta) error {
 	if resource == nil {
-		return cerrors.ErrMetaOpFail.GenWithStackByArgs("input resource info is nil")
+		return cerrors.ErrMetaOpFail.GenWithStackByArgs("input resource meta is nil")
 	}
 
 	if result := c.db.Create(resource); result.Error != nil {
@@ -332,7 +331,7 @@ func (c *MetaOpsClient) DeleteResource(ctx context.Context, resourceID string) e
 	return nil
 }
 
-// QueryResourceByID query resource of the resource_id
+// GetResourceByID query resource of the resource_id
 func (c *MetaOpsClient) GetResourceByID(ctx context.Context, resourceID string) (*model.ResourceMeta, error) {
 	var resource model.ResourceMeta
 	if result := c.db.Where("id = ?", resourceID).
