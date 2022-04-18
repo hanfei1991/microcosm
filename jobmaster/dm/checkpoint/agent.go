@@ -18,13 +18,13 @@ import (
 )
 
 const (
-	loadCheckpointTable = `CREATE TABLE IF NOT EXISTS ? (
+	loadCheckpointTable = `CREATE TABLE IF NOT EXISTS %s (
 		task_name varchar(255) NOT NULL,
 		source_name varchar(255) NOT NULL,
 		status varchar(10) NOT NULL DEFAULT 'init' COMMENT 'init,running,finished',
 		PRIMARY KEY (task_name, source_name)
 	);`
-	syncCheckpointTable = `CREATE TABLE IF NOT EXISTS ? (
+	syncCheckpointTable = `CREATE TABLE IF NOT EXISTS %s (
 		id VARCHAR(32) NOT NULL,
 		cp_schema VARCHAR(128) NOT NULL,
 		cp_table VARCHAR(128) NOT NULL,

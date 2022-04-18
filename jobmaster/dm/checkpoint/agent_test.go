@@ -30,7 +30,7 @@ func TestCheckpoint(t *testing.T) {
 	jobCfg := &config.JobCfg{Name: "test", MetaSchema: "meta", TaskMode: dmconfig.ModeAll}
 	db, mock, err := conn.InitMockDBFull()
 	require.NoError(t, err)
-	mock.ExpectExec(regexp.QuoteMeta(`CREATE TABLE IF NOT EXISTS ? (
+	mock.ExpectExec(regexp.QuoteMeta(`CREATE TABLE IF NOT EXISTS %s (
 		task_name varchar(255) NOT NULL,
 		source_name varchar(255) NOT NULL,
 		status varchar(10) NOT NULL DEFAULT 'init' COMMENT 'init,running,finished',
@@ -38,7 +38,7 @@ func TestCheckpoint(t *testing.T) {
 	);`)).WithArgs("`meta`.`test_lightning_checkpoint_list`").WillReturnResult(sqlmock.NewResult(1, 1))
 	require.NoError(t, createLoadCheckpointTable(context.Background(), jobCfg, conn.NewBaseDB(db)))
 
-	mock.ExpectExec(regexp.QuoteMeta(`CREATE TABLE IF NOT EXISTS ? (
+	mock.ExpectExec(regexp.QuoteMeta(`CREATE TABLE IF NOT EXISTS %s (
 		id VARCHAR(32) NOT NULL,
 		cp_schema VARCHAR(128) NOT NULL,
 		cp_table VARCHAR(128) NOT NULL,
