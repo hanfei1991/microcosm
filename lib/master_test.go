@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/hanfei1991/microcosm/lib/metadata"
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/statusutil"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
@@ -22,12 +23,9 @@ const (
 	masterName            = "my-master"
 	masterNodeName        = "node-1"
 	executorNodeID1       = "node-exec-1"
-	executorNodeID2       = "node-exec-2"
 	executorNodeID3       = "node-exec-3"
 	workerTypePlaceholder = 999
-	workerID1             = WorkerID("worker-1")
-	workerID2             = WorkerID("worker-2")
-	workerID3             = WorkerID("worker-3")
+	workerID1             = libModel.WorkerID("worker-1")
 )
 
 type dummyConfig struct {
@@ -36,10 +34,10 @@ type dummyConfig struct {
 
 func prepareMeta(ctx context.Context, t *testing.T, metaclient metaclient.KVClient) {
 	masterKey := adapter.MasterMetaKey.Encode(masterName)
-	masterInfo := &MasterMetaKVData{
+	masterInfo := &libModel.MasterMetaKVData{
 		ID:         masterName,
 		NodeID:     masterNodeName,
-		StatusCode: MasterStatusUninit,
+		StatusCode: libModel.MasterStatusUninit,
 	}
 	masterInfoBytes, err := json.Marshal(masterInfo)
 	require.NoError(t, err)
@@ -64,10 +62,10 @@ func TestMasterInit(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, resp.Kvs, 1)
 
-	var masterData MasterMetaKVData
+	var masterData libModel.MasterMetaKVData
 	err = json.Unmarshal(resp.Kvs[0].Value, &masterData)
 	require.NoError(t, err)
-	require.Equal(t, MasterStatusInit, masterData.StatusCode)
+	require.Equal(t, libModel.MasterStatusInit, masterData.StatusCode)
 
 	master.On("CloseImpl", mock.Anything).Return(nil)
 	err = master.Close(ctx)
@@ -75,6 +73,9 @@ func TestMasterInit(t *testing.T) {
 
 	// Restart the master
 	master.Reset()
+	master.timeoutConfig.WorkerTimeoutDuration = 10 * time.Millisecond
+	master.timeoutConfig.WorkerTimeoutGracefulDuration = 10 * time.Millisecond
+
 	master.On("OnMasterRecovered", mock.Anything).Return(nil)
 	err = master.Init(ctx)
 	require.NoError(t, err)
@@ -82,6 +83,8 @@ func TestMasterInit(t *testing.T) {
 	master.On("CloseImpl", mock.Anything).Return(nil)
 	err = master.Close(ctx)
 	require.NoError(t, err)
+
+	master.AssertExpectations(t)
 }
 
 func TestMasterPollAndClose(t *testing.T) {
@@ -121,6 +124,7 @@ func TestMasterPollAndClose(t *testing.T) {
 	err = master.Close(ctx)
 	require.NoError(t, err)
 
+	master.AssertExpectations(t)
 	wg.Wait()
 }
 
@@ -131,8 +135,8 @@ func TestMasterCreateWorker(t *testing.T) {
 	defer cancel()
 
 	master := NewMockMasterImpl("", masterName)
-	master.timeoutConfig.workerTimeoutDuration = time.Second * 1000
-	master.timeoutConfig.masterHeartbeatCheckLoopInterval = time.Millisecond * 10
+	master.timeoutConfig.WorkerTimeoutDuration = time.Second * 1000
+	master.timeoutConfig.MasterHeartbeatCheckLoopInterval = time.Millisecond * 10
 	master.uuidGen = uuid.NewMock()
 	prepareMeta(ctx, t, master.metaKVClient)
 
@@ -154,28 +158,22 @@ func TestMasterCreateWorker(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, workerID1, workerID)
 
-	master.On("OnWorkerDispatched", mock.AnythingOfType("*lib.workerHandleImpl"), nil).Return(nil)
-	<-master.dispatchedWorkers
-	err = <-master.dispatchedResult
-	require.NoError(t, err)
-
-	master.On("OnWorkerOnline", mock.AnythingOfType("*lib.workerHandleImpl")).Return(nil)
-
-	MockBaseMasterWorkerHeartbeat(t, master.DefaultBaseMaster, masterName, workerID1, executorNodeID1)
-
-	master.On("Tick", mock.Anything).Return(nil)
-	err = master.Poll(ctx)
-	require.NoError(t, err)
+	master.On("OnWorkerDispatched", mock.AnythingOfType("*master.runningHandleImpl"), nil).Return(nil)
+	master.On("OnWorkerOnline", mock.AnythingOfType("*master.runningHandleImpl")).Return(nil)
 
 	require.Eventuallyf(t, func() bool {
+		MockBaseMasterWorkerHeartbeat(t, master.DefaultBaseMaster, masterName, workerID1, executorNodeID1)
+		master.On("Tick", mock.Anything).Return(nil)
+		err = master.Poll(ctx)
+		require.NoError(t, err)
 		return master.onlineWorkerCount.Load() == 1
-	}, time.Second*1, time.Millisecond*10, "final worker count %d", master.onlineWorkerCount.Load())
+	}, time.Second*10, time.Millisecond*10, "final worker count %d", master.onlineWorkerCount.Load())
 
 	workerList := master.GetWorkers()
 	require.Len(t, workerList, 1)
 	require.Contains(t, workerList, workerID)
 
-	workerMetaClient := NewWorkerMetadataClient(masterName, master.metaKVClient)
+	workerMetaClient := metadata.NewWorkerMetadataClient(masterName, master.metaKVClient)
 	dummySt := &dummyStatus{Val: 4}
 	ext, err := dummySt.Marshal()
 	require.NoError(t, err)
@@ -207,15 +205,20 @@ func TestMasterCreateWorker(t *testing.T) {
 	require.Eventually(t, func() bool {
 		err := master.Poll(ctx)
 		require.NoError(t, err)
+
+		select {
+		case updatedStatus := <-master.updatedStatuses:
+			require.Equal(t, &libModel.WorkerStatus{
+				Code:     libModel.WorkerStatusNormal,
+				ExtBytes: ext,
+			}, updatedStatus)
+		default:
+			return false
+		}
+
 		status := master.GetWorkers()[workerID1].Status()
 		return status.Code == libModel.WorkerStatusNormal
 	}, 1*time.Second, 10*time.Millisecond)
-
-	status := master.GetWorkers()[workerID1].Status()
-	require.Equal(t, &libModel.WorkerStatus{
-		Code:     libModel.WorkerStatusNormal,
-		ExtBytes: ext,
-	}, status)
 }
 
 func TestMasterCreateWorkerMetError(t *testing.T) {
@@ -225,7 +228,7 @@ func TestMasterCreateWorkerMetError(t *testing.T) {
 	defer cancel()
 
 	master := NewMockMasterImpl("", masterName)
-	master.timeoutConfig.masterHeartbeatCheckLoopInterval = time.Millisecond * 10
+	master.timeoutConfig.MasterHeartbeatCheckLoopInterval = time.Millisecond * 10
 	master.uuidGen = uuid.NewMock()
 	prepareMeta(ctx, t, master.metaKVClient)
 
@@ -243,16 +246,15 @@ func TestMasterCreateWorkerMetError(t *testing.T) {
 		workerID1,
 		executorNodeID1)
 
-	workerID, err := master.CreateWorker(workerTypePlaceholder, &dummyConfig{param: 1}, 100)
-	require.NoError(t, err)
-	require.Equal(t, workerID1, workerID)
+	master.On("OnWorkerDispatched", mock.Anything, mock.Anything).
+		Return(nil).
+		Run(func(args mock.Arguments) {
+			err := args.Error(1)
+			require.Regexp(t, ".*ErrClusterResourceNotEnough.*", err)
+		})
 
-	master.On("OnWorkerDispatched",
-		mock.AnythingOfType("*lib.tombstoneWorkerHandleImpl"),
-		mock.AnythingOfType("*errors.withStack")).Return(nil)
-	<-master.dispatchedWorkers
-	err = <-master.dispatchedResult
-	require.Regexp(t, ".*ErrClusterResourceNotEnough.*", err)
+	_, err = master.CreateWorker(workerTypePlaceholder, &dummyConfig{param: 1}, 100)
+	require.NoError(t, err)
 }
 
 func TestPrepareWorkerConfig(t *testing.T) {
@@ -271,14 +273,14 @@ func TestPrepareWorkerConfig(t *testing.T) {
 	fakeWorkerID := "worker-1"
 	master.uuidGen.(*uuid.MockGenerator).Push(fakeWorkerID)
 	testCases := []struct {
-		workerType WorkerType
+		workerType libModel.WorkerType
 		config     WorkerConfig
 		// expected return result
 		rawConfig []byte
 		workerID  string
 	}{
 		{
-			FakeJobMaster, &MasterMetaKVData{ID: "master-1", Config: fakeCfgBytes},
+			FakeJobMaster, &libModel.MasterMetaKVData{ID: "master-1", Config: fakeCfgBytes},
 			fakeCfgBytes, "master-1",
 		},
 		{

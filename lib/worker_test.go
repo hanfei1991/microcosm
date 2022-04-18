@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanfei1991/microcosm/lib/config"
+
 	runtime "github.com/hanfei1991/microcosm/executor/worker"
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/statusutil"
@@ -22,12 +24,19 @@ var (
 	_ runtime.Runnable = (Worker)(nil)
 )
 
-func putMasterMeta(ctx context.Context, t *testing.T, metaclient metaclient.KVClient, metaData *MasterMetaKVData) {
+func putMasterMeta(ctx context.Context, t *testing.T, metaclient metaclient.KVClient, metaData *libModel.MasterMetaKVData) {
 	masterKey := adapter.MasterMetaKey.Encode(masterName)
 	masterInfoBytes, err := json.Marshal(metaData)
 	require.NoError(t, err)
 	_, err = metaclient.Put(ctx, masterKey, string(masterInfoBytes))
 	require.NoError(t, err)
+}
+
+func fastMarshalDummyStatus(t *testing.T, val int) []byte {
+	dummySt := &dummyStatus{Val: val}
+	bytes, err := dummySt.Marshal()
+	require.NoError(t, err)
+	return bytes
 }
 
 func TestWorkerInitAndClose(t *testing.T) {
@@ -39,11 +48,11 @@ func TestWorkerInitAndClose(t *testing.T) {
 	worker := newMockWorkerImpl(workerID1, masterName)
 	worker.clock = clock.NewMock()
 	worker.clock.(*clock.Mock).Set(time.Now())
-	putMasterMeta(ctx, t, worker.metaKVClient, &MasterMetaKVData{
+	putMasterMeta(ctx, t, worker.metaKVClient, &libModel.MasterMetaKVData{
 		ID:         masterName,
 		NodeID:     masterNodeName,
 		Epoch:      1,
-		StatusCode: MasterStatusInit,
+		StatusCode: libModel.MasterStatusInit,
 	})
 
 	worker.On("InitImpl", mock.Anything).Return(nil)
@@ -55,14 +64,14 @@ func TestWorkerInitAndClose(t *testing.T) {
 	err := worker.Init(ctx)
 	require.NoError(t, err)
 
-	worker.clock.(*clock.Mock).Add(defaultTimeoutConfig.workerHeartbeatInterval + 1*time.Second)
-	worker.clock.(*clock.Mock).Add(defaultTimeoutConfig.workerHeartbeatInterval + 1*time.Second)
+	worker.clock.(*clock.Mock).Add(config.DefaultTimeoutConfig().WorkerHeartbeatInterval + 1*time.Second)
+	worker.clock.(*clock.Mock).Add(config.DefaultTimeoutConfig().WorkerHeartbeatInterval + 1*time.Second)
 
-	var hbMsg *HeartbeatPingMessage
+	var hbMsg *libModel.HeartbeatPingMessage
 	require.Eventually(t, func() bool {
-		rawMsg, ok := worker.messageSender.TryPop(masterNodeName, HeartbeatPingTopic(masterName))
+		rawMsg, ok := worker.messageSender.TryPop(masterNodeName, libModel.HeartbeatPingTopic(masterName))
 		if ok {
-			hbMsg = rawMsg.(*HeartbeatPingMessage)
+			hbMsg = rawMsg.(*libModel.HeartbeatPingMessage)
 		}
 		return ok
 	}, time.Second, time.Millisecond*10)
@@ -107,11 +116,11 @@ func TestWorkerHeartbeatPingPong(t *testing.T) {
 	worker := newMockWorkerImpl(workerID1, masterName)
 	worker.clock = clock.NewMock()
 	worker.clock.(*clock.Mock).Set(time.Now())
-	putMasterMeta(ctx, t, worker.metaKVClient, &MasterMetaKVData{
+	putMasterMeta(ctx, t, worker.metaKVClient, &libModel.MasterMetaKVData{
 		ID:         masterName,
 		NodeID:     masterNodeName,
 		Epoch:      1,
-		StatusCode: MasterStatusInit,
+		StatusCode: libModel.MasterStatusInit,
 	})
 
 	worker.On("InitImpl", mock.Anything).Return(nil)
@@ -122,7 +131,7 @@ func TestWorkerHeartbeatPingPong(t *testing.T) {
 	err := worker.Init(ctx)
 	require.NoError(t, err)
 
-	worker.clock.(*clock.Mock).Add(defaultTimeoutConfig.workerHeartbeatInterval)
+	worker.clock.(*clock.Mock).Add(config.DefaultTimeoutConfig().WorkerHeartbeatInterval)
 
 	worker.On("Tick", mock.Anything).Return(nil)
 	var lastHeartbeatSendTime clock.MonotonicTime
@@ -130,29 +139,30 @@ func TestWorkerHeartbeatPingPong(t *testing.T) {
 		err := worker.Poll(ctx)
 		require.NoError(t, err)
 
-		worker.clock.(*clock.Mock).Add(defaultTimeoutConfig.workerHeartbeatInterval)
-		var hbMsg *HeartbeatPingMessage
+		worker.clock.(*clock.Mock).Add(config.DefaultTimeoutConfig().WorkerHeartbeatInterval)
+		var hbMsg *libModel.HeartbeatPingMessage
 		require.Eventually(t, func() bool {
-			rawMsg, ok := worker.messageSender.TryPop(masterNodeName, HeartbeatPingTopic(masterName))
+			rawMsg, ok := worker.messageSender.TryPop(masterNodeName, libModel.HeartbeatPingTopic(masterName))
 			if ok {
-				hbMsg = rawMsg.(*HeartbeatPingMessage)
+				hbMsg = rawMsg.(*libModel.HeartbeatPingMessage)
 			}
 			return ok
 		}, time.Second, time.Millisecond*10)
 
 		require.Conditionf(t, func() (success bool) {
-			return hbMsg.SendTime.Sub(lastHeartbeatSendTime) >= defaultTimeoutConfig.workerHeartbeatInterval &&
+			return hbMsg.SendTime.Sub(lastHeartbeatSendTime) >= config.DefaultTimeoutConfig().WorkerHeartbeatInterval &&
 				hbMsg.FromWorkerID == workerID1
 		}, "last-send-time %s, cur-send-time %s", lastHeartbeatSendTime, hbMsg.SendTime)
 		lastHeartbeatSendTime = hbMsg.SendTime
 
-		pongMsg := &HeartbeatPongMessage{
+		pongMsg := &libModel.HeartbeatPongMessage{
 			SendTime:   hbMsg.SendTime,
 			ReplyTime:  time.Now(),
 			ToWorkerID: workerID1,
 			Epoch:      1,
 		}
-		err = worker.messageHandlerManager.InvokeHandler(t, HeartbeatPongTopic(masterName, workerID1), masterNodeName, pongMsg)
+		err = worker.messageHandlerManager.InvokeHandler(
+			t, libModel.HeartbeatPongTopic(masterName, workerID1), masterNodeName, pongMsg)
 		require.NoError(t, err)
 	}
 }
@@ -164,11 +174,11 @@ func TestWorkerMasterFailover(t *testing.T) {
 	worker := newMockWorkerImpl(workerID1, masterName)
 	worker.clock = clock.NewMock()
 	worker.clock.(*clock.Mock).Set(time.Now())
-	putMasterMeta(ctx, t, worker.metaKVClient, &MasterMetaKVData{
+	putMasterMeta(ctx, t, worker.metaKVClient, &libModel.MasterMetaKVData{
 		ID:         masterName,
 		NodeID:     masterNodeName,
 		Epoch:      1,
-		StatusCode: MasterStatusInit,
+		StatusCode: libModel.MasterStatusInit,
 	})
 
 	worker.On("InitImpl", mock.Anything).Return(nil)
@@ -178,39 +188,40 @@ func TestWorkerMasterFailover(t *testing.T) {
 	err := worker.Init(ctx)
 	require.NoError(t, err)
 
-	worker.clock.(*clock.Mock).Add(defaultTimeoutConfig.workerHeartbeatInterval)
-	worker.clock.(*clock.Mock).Add(defaultTimeoutConfig.workerHeartbeatInterval)
-	var hbMsg *HeartbeatPingMessage
+	worker.clock.(*clock.Mock).Add(config.DefaultTimeoutConfig().WorkerHeartbeatInterval)
+	worker.clock.(*clock.Mock).Add(config.DefaultTimeoutConfig().WorkerHeartbeatInterval)
+	var hbMsg *libModel.HeartbeatPingMessage
 	require.Eventually(t, func() bool {
-		rawMsg, ok := worker.messageSender.TryPop(masterNodeName, HeartbeatPingTopic(masterName))
+		rawMsg, ok := worker.messageSender.TryPop(masterNodeName, libModel.HeartbeatPingTopic(masterName))
 		if ok {
-			hbMsg = rawMsg.(*HeartbeatPingMessage)
+			hbMsg = rawMsg.(*libModel.HeartbeatPingMessage)
 		}
 		return ok
 	}, time.Second, time.Millisecond*10)
 	require.Equal(t, workerID1, hbMsg.FromWorkerID)
 
-	pongMsg := &HeartbeatPongMessage{
+	pongMsg := &libModel.HeartbeatPongMessage{
 		SendTime:   hbMsg.SendTime,
 		ReplyTime:  time.Now(),
 		ToWorkerID: workerID1,
 		Epoch:      1,
 	}
-	err = worker.messageHandlerManager.InvokeHandler(t, HeartbeatPongTopic(masterName, workerID1), masterNodeName, pongMsg)
+	err = worker.messageHandlerManager.InvokeHandler(t,
+		libModel.HeartbeatPongTopic(masterName, workerID1), masterNodeName, pongMsg)
 	require.NoError(t, err)
 	masterAckedTimeAfterPing := worker.masterClient.getLastMasterAckedPingTime()
 
 	worker.clock.(*clock.Mock).Add(time.Second * 1)
-	putMasterMeta(ctx, t, worker.metaKVClient, &MasterMetaKVData{
+	putMasterMeta(ctx, t, worker.metaKVClient, &libModel.MasterMetaKVData{
 		ID:         masterName,
 		NodeID:     executorNodeID3,
 		Epoch:      2,
-		StatusCode: MasterStatusInit,
+		StatusCode: libModel.MasterStatusInit,
 	})
 
 	worker.On("OnMasterFailover", mock.Anything).Return(nil)
 	// Trigger a pull from Meta for the latest master's info.
-	worker.clock.(*clock.Mock).Add(3 * defaultTimeoutConfig.workerHeartbeatInterval)
+	worker.clock.(*clock.Mock).Add(3 * config.DefaultTimeoutConfig().WorkerHeartbeatInterval)
 
 	require.Eventually(t, func() bool {
 		return worker.failoverCount.Load() == 1
@@ -227,11 +238,11 @@ func TestWorkerStatus(t *testing.T) {
 	worker := newMockWorkerImpl(workerID1, masterName)
 	worker.clock = clock.NewMock()
 	worker.clock.(*clock.Mock).Set(time.Now())
-	putMasterMeta(ctx, t, worker.metaKVClient, &MasterMetaKVData{
+	putMasterMeta(ctx, t, worker.metaKVClient, &libModel.MasterMetaKVData{
 		ID:         masterName,
 		NodeID:     masterNodeName,
 		Epoch:      1,
-		StatusCode: MasterStatusInit,
+		StatusCode: libModel.MasterStatusInit,
 	})
 
 	worker.On("InitImpl", mock.Anything).Return(nil)
@@ -285,11 +296,11 @@ func TestWorkerSuicide(t *testing.T) {
 	worker := newMockWorkerImpl(workerID1, masterName)
 	worker.clock = clock.NewMock()
 	worker.clock.(*clock.Mock).Set(time.Now())
-	putMasterMeta(ctx, t, worker.metaKVClient, &MasterMetaKVData{
+	putMasterMeta(ctx, t, worker.metaKVClient, &libModel.MasterMetaKVData{
 		ID:         masterName,
 		NodeID:     masterNodeName,
 		Epoch:      1,
-		StatusCode: MasterStatusInit,
+		StatusCode: libModel.MasterStatusInit,
 	})
 
 	worker.On("InitImpl", mock.Anything).Return(nil)
@@ -304,8 +315,8 @@ func TestWorkerSuicide(t *testing.T) {
 	err = worker.Poll(ctx)
 	require.NoError(t, err)
 
-	worker.clock.(*clock.Mock).Add(defaultTimeoutConfig.workerTimeoutDuration)
-	worker.clock.(*clock.Mock).Add(defaultTimeoutConfig.workerTimeoutDuration)
+	worker.clock.(*clock.Mock).Add(config.DefaultTimeoutConfig().WorkerTimeoutDuration)
+	worker.clock.(*clock.Mock).Add(config.DefaultTimeoutConfig().WorkerTimeoutDuration)
 
 	var exitErr error
 	require.Eventually(t, func() bool {

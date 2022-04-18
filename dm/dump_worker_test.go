@@ -5,12 +5,13 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/pingcap/tidb-tools/pkg/filter"
+	"github.com/pingcap/tidb/util/filter"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/require"
 
 	"github.com/hanfei1991/microcosm/lib"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/registry"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
@@ -64,7 +65,7 @@ func putMasterMeta(
 	ctx context.Context,
 	t *testing.T,
 	metaClient metaclient.KVClient,
-	metaData *lib.MasterMetaKVData,
+	metaData *libModel.MasterMetaKVData,
 ) {
 	masterKey := adapter.MasterInfoKey.Encode(masterID)
 	masterInfoBytes, err := json.Marshal(metaData)
@@ -89,11 +90,11 @@ func TestDumpWorker(t *testing.T) {
 	worker := workerWrapped.(*dumpWorker)
 	worker.BaseWorker = lib.MockBaseWorker(workerID, masterID, worker)
 
-	putMasterMeta(context.Background(), t, worker.MetaKVClient(), &lib.MasterMetaKVData{
+	putMasterMeta(context.Background(), t, worker.MetaKVClient(), &libModel.MasterMetaKVData{
 		ID:         masterID,
 		NodeID:     nodeID,
 		Epoch:      1,
-		StatusCode: lib.MasterStatusInit,
+		StatusCode: libModel.MasterStatusInit,
 	})
 
 	err = worker.Init(ctx)

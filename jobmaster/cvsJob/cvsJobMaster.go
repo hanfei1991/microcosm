@@ -9,11 +9,10 @@ import (
 	"unsafe"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
-
-	"go.uber.org/atomic"
 
 	cvsTask "github.com/hanfei1991/microcosm/executor/cvsTask"
 	"github.com/hanfei1991/microcosm/executor/worker"
@@ -58,7 +57,7 @@ type JobMaster struct {
 	jobStatus         *Status
 	syncFilesInfo     map[int]*WorkerInfo
 	counter           int64
-	workerID          lib.WorkerID
+	workerID          libModel.WorkerID
 	statusRateLimiter *rate.Limiter
 
 	launchedWorkers sync.Map
@@ -71,14 +70,14 @@ type JobMaster struct {
 }
 
 func RegisterWorker() {
-	constructor := func(ctx *dcontext.Context, id lib.WorkerID, masterID lib.MasterID, config lib.WorkerConfig) lib.WorkerImpl {
+	constructor := func(ctx *dcontext.Context, id libModel.WorkerID, masterID libModel.MasterID, config lib.WorkerConfig) lib.WorkerImpl {
 		return NewCVSJobMaster(ctx, id, masterID, config)
 	}
 	factory := registry.NewSimpleWorkerFactory(constructor, &Config{})
 	registry.GlobalWorkerRegistry().MustRegisterWorkerType(lib.CvsJobMaster, factory)
 }
 
-func NewCVSJobMaster(ctx *dcontext.Context, workerID lib.WorkerID, masterID lib.MasterID, conf lib.WorkerConfig) *JobMaster {
+func NewCVSJobMaster(ctx *dcontext.Context, workerID libModel.WorkerID, masterID libModel.MasterID, conf lib.WorkerConfig) *JobMaster {
 	jm := &JobMaster{}
 	jm.workerID = workerID
 	jm.jobStatus = &Status{
@@ -328,7 +327,7 @@ func (jm *JobMaster) OnJobManagerMessage(topic p2p.Topic, message p2p.MessageVal
 	jm.Lock()
 	defer jm.Unlock()
 	switch msg := message.(type) {
-	case *lib.StatusChangeRequest:
+	case *libModel.StatusChangeRequest:
 		switch msg.ExpectState {
 		case libModel.WorkerStatusStopped:
 			jm.setStatusCode(libModel.WorkerStatusStopped)
@@ -337,21 +336,26 @@ func (jm *JobMaster) OnJobManagerMessage(topic p2p.Topic, message p2p.MessageVal
 					continue
 				}
 				handle := *(*lib.WorkerHandle)(worker.handle.Load())
-
-				wTopic := lib.WorkerStatusChangeRequestTopic(jm.BaseJobMaster.ID(), handle.ID())
-				wMessage := &lib.StatusChangeRequest{
+				workerID := handle.ID()
+				wTopic := libModel.WorkerStatusChangeRequestTopic(jm.BaseJobMaster.ID(), handle.ID())
+				wMessage := &libModel.StatusChangeRequest{
 					SendTime:     jm.clocker.Mono(),
 					FromMasterID: jm.BaseJobMaster.ID(),
 					Epoch:        jm.BaseJobMaster.CurrentEpoch(),
 					ExpectState:  libModel.WorkerStatusStopped,
 				}
-				ctx, cancel := context.WithTimeout(jm.ctx, time.Second*2)
-				if err := handle.SendMessage(ctx, wTopic, wMessage, false /*nonblocking*/); err != nil {
+
+				if handle := handle.Unwrap(); handle != nil {
+					ctx, cancel := context.WithTimeout(jm.ctx, time.Second*2)
+					if err := handle.SendMessage(ctx, wTopic, wMessage, false /*nonblocking*/); err != nil {
+						cancel()
+						return err
+					}
+					log.L().Info("sent message to worker", zap.String("topic", topic), zap.Any("message", wMessage))
 					cancel()
-					return err
+				} else {
+					log.L().Info("skip sending message to tombstone worker", zap.String("worker-id", workerID))
 				}
-				log.L().Info("sent message to worker", zap.String("topic", topic), zap.Any("message", wMessage))
-				cancel()
 			}
 		default:
 			log.L().Info("FakeMaster: ignore status change state", zap.Int32("state", int32(msg.ExpectState)))
