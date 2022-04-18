@@ -124,19 +124,19 @@ func (t *testDMJobmasterSuite) TestClearWorkerStatus() {
 
 	job := metadata.NewJob(&config.JobCfg{})
 	job.Tasks[source2] = metadata.NewTask(&config.TaskCfg{})
-	err := workerManager.destroyUnneededWorkers(ctx, job)
+	err := workerManager.stopUnneededWorkers(ctx, job)
 	require.NoError(t.T(), err)
 	require.Len(t.T(), workerManager.WorkerStatus(), 1)
 
 	delete(job.Tasks, source2)
 	destroyError := errors.New("destroy error")
 	mockAgent.SetDestroyResult([]error{destroyError})
-	err = workerManager.destroyUnneededWorkers(ctx, job)
+	err = workerManager.stopUnneededWorkers(ctx, job)
 	require.EqualError(t.T(), err, destroyError.Error())
 	require.Len(t.T(), workerManager.WorkerStatus(), 1)
 
 	mockAgent.SetDestroyResult([]error{nil})
-	err = workerManager.destroyUnneededWorkers(ctx, job)
+	err = workerManager.stopUnneededWorkers(ctx, job)
 	require.NoError(t.T(), err)
 	require.Len(t.T(), workerManager.WorkerStatus(), 0)
 

@@ -205,7 +205,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	bytes1, err := json.Marshal(taskStatus1)
 	require.NoError(t.T(), err)
 	workerHandle1.On("Status").Return(&libModel.WorkerStatus{ExtBytes: bytes1}).Once()
-	workerHandle1.On("IsTombStone").Return(false)
+	workerHandle1.On("IsTombStone").Return(false).Once()
 	jm.OnWorkerOnline(workerHandle1)
 	jm.OnWorkerDispatched(workerHandle2, errors.New("dispatch error"))
 	worker3 := "worker3"
@@ -213,16 +213,13 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	mockCheckpointAgent.On("IsFresh", mock.Anything).Return(true, nil).Times(3)
 	require.NoError(t.T(), jm.Tick(context.Background()))
 
-	mockBaseJobmaster.AssertExpectations(t.T())
-	mockCheckpointAgent.AssertExpectations(t.T())
-
 	// worker1 offline, worker3 online
 	workerHandle2.WorkerID = worker3
 
 	bytes2, err := json.Marshal(taskStatus2)
 	require.NoError(t.T(), err)
-	workerHandle2.On("IsTombStone").Return(false)
 	workerHandle2.On("Status").Return(&libModel.WorkerStatus{ExtBytes: bytes2}).Once()
+	workerHandle2.On("IsTombStone").Return(false).Once()
 	jm.OnWorkerOnline(workerHandle2)
 	workerHandle1.On("Status").Return(&libModel.WorkerStatus{ExtBytes: bytes1}).Once()
 	jm.OnWorkerOffline(workerHandle1, errors.New("offline error"))
@@ -231,12 +228,10 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	mockCheckpointAgent.On("IsFresh", mock.Anything).Return(true, nil).Times(3)
 	require.NoError(t.T(), jm.Tick(context.Background()))
 
-	mockBaseJobmaster.AssertExpectations(t.T())
-	mockCheckpointAgent.AssertExpectations(t.T())
-
 	// worker4 online
 	workerHandle1.WorkerID = worker4
 	workerHandle1.On("Status").Return(&libModel.WorkerStatus{ExtBytes: bytes1}).Once()
+	workerHandle1.On("IsTombStone").Return(false).Once()
 	jm.OnWorkerOnline(workerHandle1)
 	require.NoError(t.T(), jm.Tick(context.Background()))
 
@@ -249,18 +244,15 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	mockBaseJobmaster.On("CreateWorker", mock.Anything, mock.Anything, mock.Anything).Return(worker5, nil).Once()
 	jm.OnWorkerOffline(workerHandle1, nil)
 	require.NoError(t.T(), jm.Tick(context.Background()))
-	mockCheckpointAgent.AssertExpectations(t.T())
 	// worker5 online
 	workerHandle1.WorkerID = worker5
 	taskStatus1.Stage = metadata.StageRunning
 	bytes1, err = json.Marshal(taskStatus1)
 	require.NoError(t.T(), err)
 	workerHandle1.On("Status").Return(&libModel.WorkerStatus{ExtBytes: bytes1}).Once()
+	workerHandle1.On("IsTombStone").Return(false).Once()
 	jm.OnWorkerOnline(workerHandle1)
 	require.NoError(t.T(), jm.Tick(context.Background()))
-
-	mockBaseJobmaster.AssertExpectations(t.T())
-	mockCheckpointAgent.AssertExpectations(t.T())
 
 	// master failover
 	jm = &JobMaster{
@@ -274,10 +266,8 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	mockBaseJobmaster.On("GetWorkers").Return(map[string]lib.WorkerHandle{worker4: workerHandle1, worker3: workerHandle2}).Once()
 	workerHandle1.On("Status").Return(&libModel.WorkerStatus{ExtBytes: bytes1}).Once()
 	workerHandle2.On("Status").Return(&libModel.WorkerStatus{ExtBytes: bytes2}).Once()
-	workerHandle1.On("IsTombStone").Return(false).Once()
-	workerHandle2.On("IsTombStone").Return(false).Once()
-	workerHandle1.On("SendMessage", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
-	workerHandle2.On("SendMessage", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+	workerHandle1.On("IsTombStone").Return(false).Twice()
+	workerHandle2.On("IsTombStone").Return(false).Twice()
 	jm.OnMasterRecovered(context.Background())
 	require.NoError(t.T(), jm.Tick(context.Background()))
 	// placeholder
@@ -289,9 +279,6 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	require.Equal(t.T(), jm.Workload(), model.RescUnit(2))
 	require.NoError(t.T(), jm.OnWorkerStatusUpdated(workerHandle1, &libModel.WorkerStatus{ExtBytes: bytes1}))
 	require.EqualError(t.T(), jm.OnWorkerMessage(workerHandle1, "", dmpkg.MessageWithID{}), "request 0 not found")
-
-	mockBaseJobmaster.AssertExpectations(t.T())
-	mockCheckpointAgent.AssertExpectations(t.T())
 
 	// Close
 	workerHandle1.On("SendMessage", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
