@@ -41,7 +41,8 @@ func RegisterWorker() {
 	constructor := func(ctx *dcontext.Context, id libModel.WorkerID, masterID libModel.MasterID, config lib.WorkerConfig) lib.WorkerImpl {
 		return NewDMJobMaster(ctx, id, masterID, config)
 	}
-	factory := registry.NewSimpleWorkerFactory(constructor, &config.JobCfg{})
+
+	factory := registry.NewTomlWorkerFactory(constructor, &config.JobCfg{})
 	registry.GlobalWorkerRegistry().MustRegisterWorkerType(lib.DMJobMaster, factory)
 }
 
@@ -113,7 +114,7 @@ func (jm *JobMaster) OnWorkerOnline(worker lib.WorkerHandle) error {
 
 	jm.taskManager.UpdateTaskStatus(taskStatus)
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus(taskStatus.GetTask(), taskStatus.GetUnit(), worker.ID(), runtime.WorkerOnline))
-	jm.messageAgent.UpdateWorkerHandle(taskStatus.GetTask(), worker)
+	jm.messageAgent.UpdateWorkerHandle(taskStatus.GetTask(), worker.Unwrap())
 	return nil
 }
 
@@ -235,7 +236,7 @@ func (jm *JobMaster) getInitStatus() ([]runtime.TaskStatus, []runtime.WorkerStat
 	workerStatusList := make([]runtime.WorkerStatus, 0, len(workerHandles))
 	sendHandleMap := make(map[string]SendHandle, len(workerHandles))
 	for _, workerHandle := range workerHandles {
-		if workerHandle.IsTombStone() {
+		if workerHandle.GetTombstone() != nil {
 			continue
 		}
 		taskStatus, err := runtime.UnmarshalTaskStatus(workerHandle.Status().ExtBytes)
@@ -244,7 +245,7 @@ func (jm *JobMaster) getInitStatus() ([]runtime.TaskStatus, []runtime.WorkerStat
 		}
 		taskStatusList = append(taskStatusList, taskStatus)
 		workerStatusList = append(workerStatusList, runtime.NewWorkerStatus(taskStatus.GetTask(), taskStatus.GetUnit(), workerHandle.ID(), runtime.WorkerOnline))
-		sendHandleMap[taskStatus.GetTask()] = workerHandle
+		sendHandleMap[taskStatus.GetTask()] = workerHandle.Unwrap()
 	}
 
 	return taskStatusList, workerStatusList, sendHandleMap, nil
