@@ -16,8 +16,8 @@ import (
 // TODO: context control??
 
 const (
-	DefaultConnMaxIdleTime = time.Duration(30 * time.Second)
-	DefaultConnMaxLifeTime = time.Duration(12 * time.Hour)
+	DefaultConnMaxIdleTime = 30 * time.Second
+	DefaultConnMaxLifeTime = 12 * time.Hour
 	DefaultMaxIdleConns    = 3
 	DefaultMaxOpenConns    = 10
 )
