@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanfei1991/microcosm/lib/config"
+
 	runtime "github.com/hanfei1991/microcosm/executor/worker"
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/statusutil"
@@ -28,6 +30,13 @@ func putMasterMeta(ctx context.Context, t *testing.T, metaclient metaclient.KVCl
 	require.NoError(t, err)
 	_, err = metaclient.Put(ctx, masterKey, string(masterInfoBytes))
 	require.NoError(t, err)
+}
+
+func fastMarshalDummyStatus(t *testing.T, val int) []byte {
+	dummySt := &dummyStatus{Val: val}
+	bytes, err := dummySt.Marshal()
+	require.NoError(t, err)
+	return bytes
 }
 
 func TestWorkerInitAndClose(t *testing.T) {
@@ -55,8 +64,8 @@ func TestWorkerInitAndClose(t *testing.T) {
 	err := worker.Init(ctx)
 	require.NoError(t, err)
 
-	worker.clock.(*clock.Mock).Add(defaultTimeoutConfig.workerHeartbeatInterval + 1*time.Second)
-	worker.clock.(*clock.Mock).Add(defaultTimeoutConfig.workerHeartbeatInterval + 1*time.Second)
+	worker.clock.(*clock.Mock).Add(config.DefaultTimeoutConfig().WorkerHeartbeatInterval + 1*time.Second)
+	worker.clock.(*clock.Mock).Add(config.DefaultTimeoutConfig().WorkerHeartbeatInterval + 1*time.Second)
 
 	var hbMsg *libModel.HeartbeatPingMessage
 	require.Eventually(t, func() bool {
@@ -122,7 +131,7 @@ func TestWorkerHeartbeatPingPong(t *testing.T) {
 	err := worker.Init(ctx)
 	require.NoError(t, err)
 
-	worker.clock.(*clock.Mock).Add(defaultTimeoutConfig.workerHeartbeatInterval)
+	worker.clock.(*clock.Mock).Add(config.DefaultTimeoutConfig().WorkerHeartbeatInterval)
 
 	worker.On("Tick", mock.Anything).Return(nil)
 	var lastHeartbeatSendTime clock.MonotonicTime
@@ -130,7 +139,7 @@ func TestWorkerHeartbeatPingPong(t *testing.T) {
 		err := worker.Poll(ctx)
 		require.NoError(t, err)
 
-		worker.clock.(*clock.Mock).Add(defaultTimeoutConfig.workerHeartbeatInterval)
+		worker.clock.(*clock.Mock).Add(config.DefaultTimeoutConfig().WorkerHeartbeatInterval)
 		var hbMsg *libModel.HeartbeatPingMessage
 		require.Eventually(t, func() bool {
 			rawMsg, ok := worker.messageSender.TryPop(masterNodeName, libModel.HeartbeatPingTopic(masterName))
@@ -141,7 +150,7 @@ func TestWorkerHeartbeatPingPong(t *testing.T) {
 		}, time.Second, time.Millisecond*10)
 
 		require.Conditionf(t, func() (success bool) {
-			return hbMsg.SendTime.Sub(lastHeartbeatSendTime) >= defaultTimeoutConfig.workerHeartbeatInterval &&
+			return hbMsg.SendTime.Sub(lastHeartbeatSendTime) >= config.DefaultTimeoutConfig().WorkerHeartbeatInterval &&
 				hbMsg.FromWorkerID == workerID1
 		}, "last-send-time %s, cur-send-time %s", lastHeartbeatSendTime, hbMsg.SendTime)
 		lastHeartbeatSendTime = hbMsg.SendTime
@@ -152,7 +161,8 @@ func TestWorkerHeartbeatPingPong(t *testing.T) {
 			ToWorkerID: workerID1,
 			Epoch:      1,
 		}
-		err = worker.messageHandlerManager.InvokeHandler(t, libModel.HeartbeatPongTopic(masterName, workerID1), masterNodeName, pongMsg)
+		err = worker.messageHandlerManager.InvokeHandler(
+			t, libModel.HeartbeatPongTopic(masterName, workerID1), masterNodeName, pongMsg)
 		require.NoError(t, err)
 	}
 }
@@ -178,8 +188,8 @@ func TestWorkerMasterFailover(t *testing.T) {
 	err := worker.Init(ctx)
 	require.NoError(t, err)
 
-	worker.clock.(*clock.Mock).Add(defaultTimeoutConfig.workerHeartbeatInterval)
-	worker.clock.(*clock.Mock).Add(defaultTimeoutConfig.workerHeartbeatInterval)
+	worker.clock.(*clock.Mock).Add(config.DefaultTimeoutConfig().WorkerHeartbeatInterval)
+	worker.clock.(*clock.Mock).Add(config.DefaultTimeoutConfig().WorkerHeartbeatInterval)
 	var hbMsg *libModel.HeartbeatPingMessage
 	require.Eventually(t, func() bool {
 		rawMsg, ok := worker.messageSender.TryPop(masterNodeName, libModel.HeartbeatPingTopic(masterName))
@@ -196,7 +206,8 @@ func TestWorkerMasterFailover(t *testing.T) {
 		ToWorkerID: workerID1,
 		Epoch:      1,
 	}
-	err = worker.messageHandlerManager.InvokeHandler(t, libModel.HeartbeatPongTopic(masterName, workerID1), masterNodeName, pongMsg)
+	err = worker.messageHandlerManager.InvokeHandler(t,
+		libModel.HeartbeatPongTopic(masterName, workerID1), masterNodeName, pongMsg)
 	require.NoError(t, err)
 	masterAckedTimeAfterPing := worker.masterClient.getLastMasterAckedPingTime()
 
@@ -210,7 +221,7 @@ func TestWorkerMasterFailover(t *testing.T) {
 
 	worker.On("OnMasterFailover", mock.Anything).Return(nil)
 	// Trigger a pull from Meta for the latest master's info.
-	worker.clock.(*clock.Mock).Add(3 * defaultTimeoutConfig.workerHeartbeatInterval)
+	worker.clock.(*clock.Mock).Add(3 * config.DefaultTimeoutConfig().WorkerHeartbeatInterval)
 
 	require.Eventually(t, func() bool {
 		return worker.failoverCount.Load() == 1
@@ -304,8 +315,8 @@ func TestWorkerSuicide(t *testing.T) {
 	err = worker.Poll(ctx)
 	require.NoError(t, err)
 
-	worker.clock.(*clock.Mock).Add(defaultTimeoutConfig.workerTimeoutDuration)
-	worker.clock.(*clock.Mock).Add(defaultTimeoutConfig.workerTimeoutDuration)
+	worker.clock.(*clock.Mock).Add(config.DefaultTimeoutConfig().WorkerTimeoutDuration)
+	worker.clock.(*clock.Mock).Add(config.DefaultTimeoutConfig().WorkerTimeoutDuration)
 
 	var exitErr error
 	require.Eventually(t, func() bool {

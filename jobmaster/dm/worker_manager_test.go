@@ -233,7 +233,7 @@ func (t *testDMJobmasterSuite) TestGetUnit() {
 	mockAgent.On("IsFresh", mock.Anything, mock.Anything, mock.Anything).Return(false, errors.New("checkpoint error")).Once()
 	unit, err := workerManager.getCurrentUnit(ctx, task)
 	require.Error(t.T(), err)
-	require.Equal(t.T(), unit, lib.WorkerType(0))
+	require.Equal(t.T(), unit, libModel.WorkerType(0))
 	mockAgent.On("IsFresh", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Twice()
 	unit, err = workerManager.getCurrentUnit(ctx, task)
 	require.NoError(t.T(), err)
