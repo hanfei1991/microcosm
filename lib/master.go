@@ -304,9 +304,7 @@ func (m *DefaultBaseMaster) registerMessageHandlers(ctx context.Context) error {
 				// TODO add a retry mechanism
 				return nil
 			}
-			if err := m.workerManager.HandleHeartbeat(msg, sender); err != nil {
-				return errors.Trace(err)
-			}
+			m.workerManager.HandleHeartbeat(msg, sender)
 			return nil
 		})
 	if err != nil {
