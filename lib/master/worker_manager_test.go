@@ -392,4 +392,6 @@ func TestRecoverWithNoWorker(t *testing.T) {
 	// InitAfterRecover returning at all would indicate a successful test.
 	err := suite.manager.InitAfterRecover(ctx)
 	require.NoError(t, err)
+
+	suite.Close()
 }
