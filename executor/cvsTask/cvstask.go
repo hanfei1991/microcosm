@@ -218,7 +218,6 @@ func (task *cvsTask) Receive(ctx context.Context) error {
 		return err
 	}
 	client := pb.NewDataRWServiceClient(conn)
-	defer conn.Close()
 	reader, err := client.ReadLines(ctx, &pb.ReadLinesRequest{FileIdx: int32(task.Idx), LineNo: []byte(task.StartLoc)})
 	if err != nil {
 		log.L().Error("read data from file failed ", zap.String("id", task.ID()), zap.Error(err))
@@ -255,7 +254,6 @@ func (task *cvsTask) Send(ctx context.Context) error {
 		return err
 	}
 	client := pb.NewDataRWServiceClient(conn)
-	defer conn.Close()
 	writer, err := client.WriteLines(ctx)
 	if err != nil {
 		log.L().Error("call write data rpc failed", zap.String("id", task.ID()), zap.Error(err))
