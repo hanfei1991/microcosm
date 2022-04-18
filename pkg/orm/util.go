@@ -10,6 +10,7 @@ import (
 	"gorm.io/gorm"
 
 	cerrors "github.com/hanfei1991/microcosm/pkg/errors"
+	"github.com/hanfei1991/microcosm/pkg/orm/model"
 )
 
 // TODO: retry and idempotent??
@@ -83,7 +84,8 @@ type MetaOpsClient struct {
 // Initialize will create all related tables in SQL backend
 // TODO: What if we change the definition of orm??
 func (c *MetaOpsClient) Initialize(ctx context.Context) error {
-	if err := c.db.AutoMigrate(&ProjectInfo{}, &ProjectOperation{}, &JobInfo{}, &WorkerInfo{}, &ResourceInfo{}); err != nil {
+	if err := c.db.AutoMigrate(&model.ProjectInfo{}, &model.ProjectOperation{}, &model.MasterMeta{},
+		&model.WorkerMeta{}, &model.ResourceMeta{}); err != nil {
 		return cerrors.ErrMetaOpFail.GenWithStackByArgs(err)
 	}
 
@@ -91,10 +93,10 @@ func (c *MetaOpsClient) Initialize(ctx context.Context) error {
 }
 
 ///////////////////////// Project Operation
-// AddProject insert the ProjectInfo
-func (c *MetaOpsClient) AddProject(ctx context.Context, project *ProjectInfo) error {
+// AddProject insert the model.ProjectInfo
+func (c *MetaOpsClient) AddProject(ctx context.Context, project *model.ProjectInfo) error {
 	if project == nil {
-		return cerrors.ErrMetaOpFail.GenWithStackByArgs(fmt.Errorf("para is nil"))
+		return cerrors.ErrMetaOpFail.GenWithStackByArgs("input project info is nil")
 	}
 	if result := c.db.Create(project); result.Error != nil {
 		return cerrors.ErrMetaOpFail.GenWithStackByArgs(result.Error)
@@ -103,9 +105,9 @@ func (c *MetaOpsClient) AddProject(ctx context.Context, project *ProjectInfo) er
 	return nil
 }
 
-// DeleteProject delete the ProjectInfo
+// DeleteProject delete the model.ProjectInfo
 func (c *MetaOpsClient) DeleteProject(ctx context.Context, projectID string) error {
-	if result := c.db.Where("project_id=?", projectID).Delete(&ProjectInfo{}); result.Error != nil {
+	if result := c.db.Where("id=?", projectID).Delete(&model.ProjectInfo{}); result.Error != nil {
 		return cerrors.ErrMetaOpFail.GenWithStackByArgs(result.Error)
 	}
 
@@ -113,8 +115,8 @@ func (c *MetaOpsClient) DeleteProject(ctx context.Context, projectID string) err
 }
 
 // QueryProject query all projects
-func (c *MetaOpsClient) QueryProjects(ctx context.Context) ([]ProjectInfo, error) {
-	var projects []ProjectInfo
+func (c *MetaOpsClient) QueryProjects(ctx context.Context) ([]model.ProjectInfo, error) {
+	var projects []model.ProjectInfo
 	if result := c.db.Find(&projects); result.Error != nil {
 		return nil, cerrors.ErrMetaOpFail.GenWithStackByArgs(result.Error)
 	}
@@ -123,9 +125,9 @@ func (c *MetaOpsClient) QueryProjects(ctx context.Context) ([]ProjectInfo, error
 }
 
 // GetProjectByID query project by projectID
-func (c *MetaOpsClient) GetProjectByID(ctx context.Context, projectID string) (*ProjectInfo, error) {
-	var project ProjectInfo
-	if result := c.db.Where("project_id = ?", projectID).First(&project); result.Error != nil {
+func (c *MetaOpsClient) GetProjectByID(ctx context.Context, projectID string) (*model.ProjectInfo, error) {
+	var project model.ProjectInfo
+	if result := c.db.Where("id = ?", projectID).First(&project); result.Error != nil {
 		return nil, cerrors.ErrMetaOpFail.GenWithStackByArgs(result.Error)
 	}
 
@@ -133,7 +135,7 @@ func (c *MetaOpsClient) GetProjectByID(ctx context.Context, projectID string) (*
 }
 
 // AddProjectOperation insert the operation
-func (c *MetaOpsClient) AddProjectOperation(ctx context.Context, op *ProjectOperation) error {
+func (c *MetaOpsClient) AddProjectOperation(ctx context.Context, op *model.ProjectOperation) error {
 	if op == nil {
 		return cerrors.ErrMetaOpFail.GenWithStackByArgs(fmt.Errorf("para is nil"))
 	}
@@ -146,8 +148,8 @@ func (c *MetaOpsClient) AddProjectOperation(ctx context.Context, op *ProjectOper
 }
 
 // QueryProjectOperations query all operations of the projectID
-func (c *MetaOpsClient) QueryProjectOperations(ctx context.Context, projectID string) ([]ProjectOperation, error) {
-	var projectOps []ProjectOperation
+func (c *MetaOpsClient) QueryProjectOperations(ctx context.Context, projectID string) ([]model.ProjectOperation, error) {
+	var projectOps []model.ProjectOperation
 	if result := c.db.Where("project_id = ?", projectID).Find(&projectOps); result.Error != nil {
 		return nil, cerrors.ErrMetaOpFail.GenWithStackByArgs(result.Error)
 	}
@@ -158,8 +160,8 @@ func (c *MetaOpsClient) QueryProjectOperations(ctx context.Context, projectID st
 // QueryProjectOperationsByTimeRange query project operation betweem a time range of the projectID
 func (c *MetaOpsClient) QueryProjectOperationsByTimeRange(ctx context.Context,
 	projectID string, tr TimeRange,
-) ([]ProjectOperation, error) {
-	var projectOps []ProjectOperation
+) ([]model.ProjectOperation, error) {
+	var projectOps []model.ProjectOperation
 	if result := c.db.Where("project_id = ? AND created_at >= ? AND created_at <= ?", projectID, tr.start,
 		tr.end).Find(&projectOps); result.Error != nil {
 		return nil, cerrors.ErrMetaOpFail.GenWithStackByArgs(result.Error)
@@ -170,9 +172,9 @@ func (c *MetaOpsClient) QueryProjectOperationsByTimeRange(ctx context.Context,
 
 /////////////////////////////// Job Operation
 // SetJob insert the jobInfo
-func (c *MetaOpsClient) AddJob(ctx context.Context, job *JobInfo) error {
+func (c *MetaOpsClient) AddJob(ctx context.Context, job *model.MasterMeta) error {
 	if job == nil {
-		return cerrors.ErrMetaOpFail.GenWithStackByArgs(fmt.Errorf("para is nil"))
+		return cerrors.ErrMetaOpFail.GenWithStackByArgs("input job info is nil")
 	}
 
 	if result := c.db.Create(job); result.Error != nil {
@@ -183,7 +185,7 @@ func (c *MetaOpsClient) AddJob(ctx context.Context, job *JobInfo) error {
 }
 
 // UpdateJob update the jobInfo
-func (c *MetaOpsClient) UpdateJob(ctx context.Context, job *JobInfo) error {
+func (c *MetaOpsClient) UpdateJob(ctx context.Context, job *model.MasterMeta) error {
 	// TODO: shall we change the model name?
 	if result := c.db.Save(job); result.Error != nil {
 		return cerrors.ErrMetaOpFail.GenWithStackByArgs(result.Error)
@@ -194,7 +196,7 @@ func (c *MetaOpsClient) UpdateJob(ctx context.Context, job *JobInfo) error {
 
 // DeleteJob delete the specified jobInfo
 func (c *MetaOpsClient) DeleteJob(ctx context.Context, jobID string) error {
-	if result := c.db.Where("job_id = ?", jobID).Delete(&JobInfo{}); result.Error != nil {
+	if result := c.db.Where("id = ?", jobID).Delete(&model.MasterMeta{}); result.Error != nil {
 		return cerrors.ErrMetaOpFail.GenWithStackByArgs(result.Error)
 	}
 
@@ -202,9 +204,9 @@ func (c *MetaOpsClient) DeleteJob(ctx context.Context, jobID string) error {
 }
 
 // QueryJobByID query job by `jobID`
-func (c *MetaOpsClient) GetJobByID(ctx context.Context, jobID string) (*JobInfo, error) {
-	var job JobInfo
-	if result := c.db.Where("job_id = ?", jobID).First(&job); result.Error != nil {
+func (c *MetaOpsClient) GetJobByID(ctx context.Context, jobID string) (*model.MasterMeta, error) {
+	var job model.MasterMeta
+	if result := c.db.Where("id = ?", jobID).First(&job); result.Error != nil {
 		return nil, cerrors.ErrMetaOpFail.GenWithStackByArgs(result.Error)
 	}
 
@@ -212,8 +214,8 @@ func (c *MetaOpsClient) GetJobByID(ctx context.Context, jobID string) (*JobInfo,
 }
 
 // QueryJobsByProjectID query all jobs of projectID
-func (c *MetaOpsClient) QueryJobsByProjectID(ctx context.Context, projectID string) ([]JobInfo, error) {
-	var jobs []JobInfo
+func (c *MetaOpsClient) QueryJobsByProjectID(ctx context.Context, projectID string) ([]model.MasterMeta, error) {
+	var jobs []model.MasterMeta
 	if result := c.db.Where("project_id = ?", projectID).Find(&jobs); result.Error != nil {
 		return nil, cerrors.ErrMetaOpFail.GenWithStackByArgs(result.Error)
 	}
@@ -224,9 +226,9 @@ func (c *MetaOpsClient) QueryJobsByProjectID(ctx context.Context, projectID stri
 // QueryJobsByStatus query all jobs with `status` of the projectID
 func (c *MetaOpsClient) QueryJobsByStatus(ctx context.Context,
 	jobID string, status int,
-) ([]JobInfo, error) {
-	var jobs []JobInfo
-	if result := c.db.Where("job_id = ? AND job_status = ?", jobID, status).Find(&jobs); result.Error != nil {
+) ([]model.MasterMeta, error) {
+	var jobs []model.MasterMeta
+	if result := c.db.Where("id = ? AND status = ?", jobID, status).Find(&jobs); result.Error != nil {
 		return nil, cerrors.ErrMetaOpFail.GenWithStackByArgs(result.Error)
 	}
 
@@ -235,9 +237,9 @@ func (c *MetaOpsClient) QueryJobsByStatus(ctx context.Context,
 
 /////////////////////////////// Worker Operation
 // AddWorker insert the workerInfo
-func (c *MetaOpsClient) AddWorker(ctx context.Context, worker *WorkerInfo) error {
+func (c *MetaOpsClient) AddWorker(ctx context.Context, worker *model.WorkerMeta) error {
 	if worker == nil {
-		return cerrors.ErrMetaOpFail.GenWithStackByArgs(fmt.Errorf("para is nil"))
+		return cerrors.ErrMetaOpFail.GenWithStackByArgs("input worker info is nil")
 	}
 
 	if result := c.db.Create(worker); result.Error != nil {
@@ -247,7 +249,7 @@ func (c *MetaOpsClient) AddWorker(ctx context.Context, worker *WorkerInfo) error
 	return nil
 }
 
-func (c *MetaOpsClient) UpdateWorker(ctx context.Context, worker *WorkerInfo) error {
+func (c *MetaOpsClient) UpdateWorker(ctx context.Context, worker *model.WorkerMeta) error {
 	// TODO: shall we change the model name?
 	if result := c.db.Save(worker); result.Error != nil {
 		return cerrors.ErrMetaOpFail.GenWithStackByArgs(result.Error)
@@ -258,8 +260,8 @@ func (c *MetaOpsClient) UpdateWorker(ctx context.Context, worker *WorkerInfo) er
 
 // DeleteWorker delete the specified workInfo
 func (c *MetaOpsClient) DeleteWorker(ctx context.Context, masterID string, workerID string) error {
-	if result := c.db.Where("job_id = ? AND worker_id = ?", masterID,
-		workerID).Delete(&WorkerInfo{}); result.Error != nil {
+	if result := c.db.Where("job_id = ? AND id = ?", masterID,
+		workerID).Delete(&model.WorkerMeta{}); result.Error != nil {
 		return cerrors.ErrMetaOpFail.GenWithStackByArgs(result.Error)
 	}
 
@@ -267,9 +269,9 @@ func (c *MetaOpsClient) DeleteWorker(ctx context.Context, masterID string, worke
 }
 
 // GetWorkerByID query worker info by workerID
-func (c *MetaOpsClient) GetWorkerByID(ctx context.Context, masterID string, workerID string) (*WorkerInfo, error) {
-	var worker WorkerInfo
-	if result := c.db.Where("job_id = ? AND worker_id = ?", masterID,
+func (c *MetaOpsClient) GetWorkerByID(ctx context.Context, masterID string, workerID string) (*model.WorkerMeta, error) {
+	var worker model.WorkerMeta
+	if result := c.db.Where("job_id = ? AND id = ?", masterID,
 		workerID).First(&worker); result.Error != nil {
 		return nil, cerrors.ErrMetaOpFail.GenWithStackByArgs(result.Error)
 	}
@@ -278,8 +280,8 @@ func (c *MetaOpsClient) GetWorkerByID(ctx context.Context, masterID string, work
 }
 
 // QueryWorkersByMasterID query all workers of masterID
-func (c *MetaOpsClient) QueryWorkersByMasterID(ctx context.Context, masterID string) ([]WorkerInfo, error) {
-	var workers []WorkerInfo
+func (c *MetaOpsClient) QueryWorkersByMasterID(ctx context.Context, masterID string) ([]model.WorkerMeta, error) {
+	var workers []model.WorkerMeta
 	if result := c.db.Where("job_id = ?", masterID).Find(&workers); result.Error != nil {
 		return nil, cerrors.ErrMetaOpFail.GenWithStackByArgs(result.Error)
 	}
@@ -288,9 +290,9 @@ func (c *MetaOpsClient) QueryWorkersByMasterID(ctx context.Context, masterID str
 }
 
 // QueryWorkersByStatus query all workers with specified status of masterID
-func (c *MetaOpsClient) QueryWorkersByStatus(ctx context.Context, masterID string, status int) ([]WorkerInfo, error) {
-	var workers []WorkerInfo
-	if result := c.db.Where("job_id = ? AND worker_status = ?", masterID,
+func (c *MetaOpsClient) QueryWorkersByStatus(ctx context.Context, masterID string, status int) ([]model.WorkerMeta, error) {
+	var workers []model.WorkerMeta
+	if result := c.db.Where("job_id = ? AND status = ?", masterID,
 		status).Find(&workers); result.Error != nil {
 		return nil, cerrors.ErrMetaOpFail.GenWithStackByArgs(result.Error)
 	}
@@ -299,10 +301,10 @@ func (c *MetaOpsClient) QueryWorkersByStatus(ctx context.Context, masterID strin
 }
 
 /////////////////////////////// Resource Operation
-// AddResource insert the ResourceInfo
-func (c *MetaOpsClient) AddResource(ctx context.Context, resource *ResourceInfo) error {
+// AddResource insert the model.ResourceMeta
+func (c *MetaOpsClient) AddResource(ctx context.Context, resource *model.ResourceMeta) error {
 	if resource == nil {
-		return cerrors.ErrMetaOpFail.GenWithStackByArgs(fmt.Errorf("para is nil"))
+		return cerrors.ErrMetaOpFail.GenWithStackByArgs("input resource info is nil")
 	}
 
 	if result := c.db.Create(resource); result.Error != nil {
@@ -312,7 +314,7 @@ func (c *MetaOpsClient) AddResource(ctx context.Context, resource *ResourceInfo)
 	return nil
 }
 
-func (c *MetaOpsClient) UpdateResource(ctx context.Context, resource *ResourceInfo) error {
+func (c *MetaOpsClient) UpdateResource(ctx context.Context, resource *model.ResourceMeta) error {
 	// TODO: shall we change the model name?
 	if result := c.db.Save(resource); result.Error != nil {
 		return cerrors.ErrMetaOpFail.GenWithStackByArgs(result.Error)
@@ -321,9 +323,9 @@ func (c *MetaOpsClient) UpdateResource(ctx context.Context, resource *ResourceIn
 	return nil
 }
 
-// DeleteResource delete the specified ResourceInfo
+// DeleteResource delete the specified model.ResourceMeta
 func (c *MetaOpsClient) DeleteResource(ctx context.Context, resourceID string) error {
-	if result := c.db.Where("resource_id = ?", resourceID).Delete(&ResourceInfo{}); result.Error != nil {
+	if result := c.db.Where("id = ?", resourceID).Delete(&model.ResourceMeta{}); result.Error != nil {
 		return cerrors.ErrMetaOpFail.GenWithStackByArgs(result.Error)
 	}
 
@@ -331,9 +333,9 @@ func (c *MetaOpsClient) DeleteResource(ctx context.Context, resourceID string) e
 }
 
 // QueryResourceByID query resource of the resource_id
-func (c *MetaOpsClient) GetResourceByID(ctx context.Context, resourceID string) (*ResourceInfo, error) {
-	var resource ResourceInfo
-	if result := c.db.Where("resource_id = ?", resourceID).
+func (c *MetaOpsClient) GetResourceByID(ctx context.Context, resourceID string) (*model.ResourceMeta, error) {
+	var resource model.ResourceMeta
+	if result := c.db.Where("id = ?", resourceID).
 		First(&resource); result.Error != nil {
 		return nil, cerrors.ErrMetaOpFail.GenWithStackByArgs(result.Error)
 	}
@@ -342,8 +344,8 @@ func (c *MetaOpsClient) GetResourceByID(ctx context.Context, resourceID string) 
 }
 
 // QueryResourcesByJobID query all resources of the jobID
-func (c *MetaOpsClient) QueryResourcesByJobID(ctx context.Context, jobID string) ([]ResourceInfo, error) {
-	var resources []ResourceInfo
+func (c *MetaOpsClient) QueryResourcesByJobID(ctx context.Context, jobID string) ([]model.ResourceMeta, error) {
+	var resources []model.ResourceMeta
 	if result := c.db.Where("job_id = ?", jobID).Find(&resources); result.Error != nil {
 		return nil, cerrors.ErrMetaOpFail.GenWithStackByArgs(result.Error)
 	}
@@ -352,8 +354,8 @@ func (c *MetaOpsClient) QueryResourcesByJobID(ctx context.Context, jobID string)
 }
 
 // QueryResourcesByExecutorID query all resources of the executor_id
-func (c *MetaOpsClient) QueryResourcesByExecutorID(ctx context.Context, executorID string) ([]ResourceInfo, error) {
-	var resources []ResourceInfo
+func (c *MetaOpsClient) QueryResourcesByExecutorID(ctx context.Context, executorID string) ([]model.ResourceMeta, error) {
+	var resources []model.ResourceMeta
 	if result := c.db.Where("executor_id = ?", executorID).Find(&resources); result.Error != nil {
 		return nil, cerrors.ErrMetaOpFail.GenWithStackByArgs(result.Error)
 	}
