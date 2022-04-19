@@ -3,19 +3,30 @@ package scheduler
 import (
 	"context"
 
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 
 	"github.com/hanfei1991/microcosm/model"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
 	schedModel "github.com/hanfei1991/microcosm/servermaster/scheduler/model"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
 type Scheduler struct {
 	capacityProvider     CapacityProvider
 	costScheduler        *CostScheduler
 	placementConstrainer PlacementConstrainer
+}
+
+func NewScheduler(
+	capacityProvider CapacityProvider,
+	placementConstrainer PlacementConstrainer,
+) *Scheduler {
+	return &Scheduler{
+		capacityProvider:     capacityProvider,
+		costScheduler:        NewRandomizedCostScheduler(capacityProvider),
+		placementConstrainer: placementConstrainer,
+	}
 }
 
 func (s *Scheduler) ScheduleTask(
@@ -74,8 +85,7 @@ func (s *Scheduler) getConstraint(
 		ret            model.ExecutorID
 	)
 	for _, resourceID := range resources {
-		executorID, hasConstraint, err :=
-			s.placementConstrainer.GetPlacementConstraint(ctx, resourceID)
+		executorID, hasConstraint, err := s.placementConstrainer.GetPlacementConstraint(ctx, resourceID)
 		if err != nil {
 			if derror.ErrResourceDoesNotExist.Equal(err) {
 				return "", schedModel.NewResourceNotFoundError(resourceID, err)
