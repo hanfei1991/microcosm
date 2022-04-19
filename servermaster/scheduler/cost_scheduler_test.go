@@ -4,9 +4,10 @@ import (
 	"math"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/hanfei1991/microcosm/model"
 	schedModel "github.com/hanfei1991/microcosm/servermaster/scheduler/model"
-	"github.com/stretchr/testify/require"
 )
 
 func getMockCapacityData() CapacityProvider {
