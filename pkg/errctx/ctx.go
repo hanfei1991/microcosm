@@ -3,17 +3,14 @@ package errctx
 import (
 	"context"
 	"sync"
-
-	"go.uber.org/atomic"
 )
 
 type errCtx struct {
 	context.Context
 	center *ErrCenter
 
-	hasDoneCh atomic.Bool
-	mu        sync.Mutex
-	doneCh    <-chan struct{}
+	once   sync.Once
+	doneCh <-chan struct{}
 }
 
 func newErrCtx(parent context.Context, center *ErrCenter) *errCtx {
@@ -24,43 +21,29 @@ func newErrCtx(parent context.Context, center *ErrCenter) *errCtx {
 }
 
 func (c *errCtx) Done() <-chan struct{} {
-	if c.hasDoneCh.Load() {
-		// Fast path. No lock contention.
-		return c.doneCh
-	}
+	c.once.Do(func() {
+		doneCh := make(chan struct{})
 
-	c.mu.Lock()
-	defer c.mu.Unlock()
+		go func() {
+			select {
+			case <-c.center.doneCh:
+			case <-c.Context.Done():
+			}
 
-	if c.hasDoneCh.Load() {
-		// Re-check under lock. In case there was
-		// a race with another goroutine.
-		return c.doneCh
-	}
+			close(doneCh)
+		}()
 
-	doneCh := make(chan struct{})
-
-	go func() {
-		select {
-		case <-c.center.doneCh:
-		case <-c.Context.Done():
-		}
-
-		close(doneCh)
-	}()
-
-	// There is no data race here because
-	// c.doneCh is read from only if c.hasDoneCh
-	// has true.
-	c.doneCh = doneCh
-	c.hasDoneCh.Store(true)
-
-	return doneCh
+		// There is no data race here because
+		// c.doneCh is read from only if c.hasDoneCh
+		// has true.
+		c.doneCh = doneCh
+	})
+	return c.doneCh
 }
 
 func (c *errCtx) Err() error {
-	if c.center.hasErr.Load() {
-		return c.center.errVal.Load()
+	if err := c.center.CheckError(); err != nil {
+		return err
 	}
 
 	return c.Context.Err()

@@ -217,7 +217,7 @@ func (m *DefaultBaseMaster) MetaKVClient() metaclient.KVClient {
 }
 
 func (m *DefaultBaseMaster) Init(ctx context.Context) error {
-	ctx = m.errCenter.DeriveContext(ctx)
+	ctx = m.errCenter.WithCancelOnFirstError(ctx)
 
 	isInit, err := m.doInit(ctx)
 	if err != nil {
@@ -334,7 +334,7 @@ func (m *DefaultBaseMaster) registerMessageHandlers(ctx context.Context) error {
 }
 
 func (m *DefaultBaseMaster) Poll(ctx context.Context) error {
-	ctx = m.errCenter.DeriveContext(ctx)
+	ctx = m.errCenter.WithCancelOnFirstError(ctx)
 
 	if err := m.doPoll(ctx); err != nil {
 		return errors.Trace(err)
@@ -491,7 +491,7 @@ func (m *DefaultBaseMaster) CreateWorker(
 		zap.Any("worker-config", config),
 		zap.String("master-id", m.id))
 
-	ctx := m.errCenter.DeriveContext(context.Background())
+	ctx := m.errCenter.WithCancelOnFirstError(context.Background())
 	quotaCtx, cancel := context.WithTimeout(ctx, createWorkerWaitQuotaTimeout)
 	defer cancel()
 	if err := m.createWorkerQuota.Consume(quotaCtx); err != nil {

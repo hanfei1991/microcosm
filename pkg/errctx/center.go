@@ -2,16 +2,22 @@ package errctx
 
 import (
 	"context"
+	"sync"
 
-	"go.uber.org/atomic"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/zap"
 )
 
+// ErrCenter is used to receive errors and provide
+// ways to detect the error(s).
 type ErrCenter struct {
-	hasErr atomic.Bool
-	errVal atomic.Error
+	errMu  sync.RWMutex
+	errVal error
+
 	doneCh chan struct{}
 }
 
+// NewErrCenter creates a new ErrCenter.
 func NewErrCenter() *ErrCenter {
 	return &ErrCenter{
 		doneCh: make(chan struct{}),
@@ -19,22 +25,31 @@ func NewErrCenter() *ErrCenter {
 }
 
 func (c *ErrCenter) OnError(err error) {
+	c.errMu.Lock()
+	defer c.errMu.Unlock()
+
 	if err == nil {
 		return
 	}
-	if c.hasErr.Swap(true) {
+	if c.errVal != nil {
 		// OnError is no-op after the first call with
 		// a non-nil error.
+		log.L().Warn("More than one error is received",
+			zap.Error(err))
 		return
 	}
-	c.errVal.Store(err)
+	c.errVal = err
+
 	close(c.doneCh)
 }
 
 func (c *ErrCenter) CheckError() error {
-	return c.errVal.Load()
+	c.errMu.RLock()
+	defer c.errMu.RUnlock()
+
+	return c.errVal
 }
 
-func (c *ErrCenter) DeriveContext(ctx context.Context) context.Context {
+func (c *ErrCenter) WithCancelOnFirstError(ctx context.Context) context.Context {
 	return newErrCtx(ctx, c)
 }

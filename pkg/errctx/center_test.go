@@ -18,7 +18,7 @@ func TestErrCenterMultipleErrCtx(t *testing.T) {
 		go func() {
 			defer wg.Done()
 
-			ctx := center.DeriveContext(context.Background())
+			ctx := center.WithCancelOnFirstError(context.Background())
 			<-ctx.Done()
 			require.Error(t, ctx.Err())
 			require.Regexp(t, ".*fake error.*", ctx.Err())
@@ -34,7 +34,7 @@ func TestErrCenterMultipleErrCtx(t *testing.T) {
 
 func TestErrCenterSingleErrCtx(t *testing.T) {
 	center := NewErrCenter()
-	ctx := center.DeriveContext(context.Background())
+	ctx := center.WithCancelOnFirstError(context.Background())
 
 	var wg sync.WaitGroup
 	for i := 0; i < 10; i++ {
@@ -57,7 +57,7 @@ func TestErrCenterSingleErrCtx(t *testing.T) {
 
 func TestErrCenterRepeatedErrors(t *testing.T) {
 	center := NewErrCenter()
-	ctx := center.DeriveContext(context.Background())
+	ctx := center.WithCancelOnFirstError(context.Background())
 
 	center.OnError(nil) // no-op
 	center.OnError(errors.New("first error"))
@@ -74,7 +74,7 @@ func TestErrCenterRepeatedErrors(t *testing.T) {
 func TestErrCtxPropagate(t *testing.T) {
 	center := NewErrCenter()
 	parentCtx, cancelParent := context.WithCancel(context.Background())
-	ctx := center.DeriveContext(parentCtx)
+	ctx := center.WithCancelOnFirstError(parentCtx)
 
 	cancelParent()
 	<-ctx.Done()
@@ -84,7 +84,7 @@ func TestErrCtxPropagate(t *testing.T) {
 
 func TestErrCtxDoneChSame(t *testing.T) {
 	center := NewErrCenter()
-	ctx := center.DeriveContext(context.Background())
+	ctx := center.WithCancelOnFirstError(context.Background())
 
 	doneCh1 := ctx.Done()
 	doneCh2 := ctx.Done()

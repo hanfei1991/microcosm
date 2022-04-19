@@ -166,7 +166,7 @@ func (w *DefaultBaseWorker) Workload() model.RescUnit {
 }
 
 func (w *DefaultBaseWorker) Init(ctx context.Context) error {
-	ctx = w.errCenter.DeriveContext(ctx)
+	ctx = w.errCenter.WithCancelOnFirstError(ctx)
 
 	if err := w.doPreInit(ctx); err != nil {
 		return errors.Trace(err)
@@ -256,7 +256,7 @@ func (w *DefaultBaseWorker) doPoll(ctx context.Context) error {
 }
 
 func (w *DefaultBaseWorker) Poll(ctx context.Context) error {
-	ctx = w.errCenter.DeriveContext(ctx)
+	ctx = w.errCenter.WithCancelOnFirstError(ctx)
 
 	if err := w.doPoll(ctx); err != nil {
 		return errors.Trace(err)
@@ -315,7 +315,7 @@ func (w *DefaultBaseWorker) MetaKVClient() metaclient.KVClient {
 // Note that if the master cannot handle the notifications fast enough, notifications
 // can be lost.
 func (w *DefaultBaseWorker) UpdateStatus(ctx context.Context, status libModel.WorkerStatus) error {
-	ctx = w.errCenter.DeriveContext(ctx)
+	ctx = w.errCenter.WithCancelOnFirstError(ctx)
 
 	err := w.statusSender.UpdateStatus(ctx, &status)
 	if err != nil {
@@ -329,12 +329,12 @@ func (w *DefaultBaseWorker) SendMessage(
 	topic p2p.Topic,
 	message interface{},
 ) (bool, error) {
-	ctx = w.errCenter.DeriveContext(ctx)
+	ctx = w.errCenter.WithCancelOnFirstError(ctx)
 	return w.messageSender.SendToNode(ctx, w.masterClient.MasterNode(), topic, message)
 }
 
 func (w *DefaultBaseWorker) OpenStorage(ctx context.Context, resourcePath resourcemeta.ResourceID) (broker.Handle, error) {
-	ctx = w.errCenter.DeriveContext(ctx)
+	ctx = w.errCenter.WithCancelOnFirstError(ctx)
 	return w.resourceBroker.OpenStorage(ctx, w.id, w.masterID, resourcePath)
 }
 
@@ -352,7 +352,7 @@ func (w *DefaultBaseWorker) Exit(ctx context.Context, status libModel.WorkerStat
 
 func (w *DefaultBaseWorker) startBackgroundTasks() {
 	ctx, cancel := context.WithCancel(context.Background())
-	ctx = w.errCenter.DeriveContext(ctx)
+	ctx = w.errCenter.WithCancelOnFirstError(ctx)
 
 	w.cancelMu.Lock()
 	w.cancelBgTasks = cancel
