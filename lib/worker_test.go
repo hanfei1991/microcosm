@@ -73,7 +73,7 @@ func TestWorkerInitAndClose(t *testing.T) {
 			hbMsg = rawMsg.(*libModel.HeartbeatPingMessage)
 		}
 		return ok
-	}, time.Second, time.Millisecond*10)
+	}, time.Second*3, time.Millisecond*10)
 	require.Conditionf(t, func() (success bool) {
 		return hbMsg.FromWorkerID == workerID1 && hbMsg.Epoch == 1
 	}, "unexpected heartbeat %v", hbMsg)
@@ -146,7 +146,7 @@ func TestWorkerHeartbeatPingPong(t *testing.T) {
 				hbMsg = rawMsg.(*libModel.HeartbeatPingMessage)
 			}
 			return ok
-		}, time.Second, time.Millisecond*10)
+		}, time.Second*3, time.Millisecond*10)
 
 		require.Conditionf(t, func() (success bool) {
 			return hbMsg.SendTime.Sub(lastHeartbeatSendTime) >= config.DefaultTimeoutConfig().WorkerHeartbeatInterval &&
