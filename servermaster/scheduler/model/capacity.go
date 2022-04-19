@@ -17,7 +17,6 @@ type ExecutorResourceStatus struct {
 func (s *ExecutorResourceStatus) Remaining() ResourceUnit {
 	if s.Used > s.Reserved {
 		return s.Capacity - s.Used
-	} else {
-		return s.Capacity - s.Reserved
 	}
+	return s.Capacity - s.Reserved
 }
