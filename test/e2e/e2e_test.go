@@ -20,8 +20,8 @@ import (
 )
 
 type Config struct {
-	DemoAddrs    []string   `json:"demo_address"`
-	DemoHost    string   `json:"demo_host"`
+	DemoAddrs   []string `json:"demo_address"`
+	DemoHost    []string `json:"demo_host"`
 	MasterAddrs []string `json:"master_address_list"`
 	RecordNum   int64    `json:"demo_record_num"`
 	JobNum      int      `json:"job_num"`
@@ -83,9 +83,9 @@ func TestSubmitTest(t *testing.T) {
 
 	flowControl := make(chan struct{}, 50)
 	// avoid job swarming
-	go func () {
-		for i :=1; i<= config.JobNum; i++{
-			if i % 50 == 0 {
+	go func() {
+		for i := 1; i <= config.JobNum; i++ {
+			if i%50 == 0 {
 				time.Sleep(100 * time.Millisecond)
 			}
 			flowControl <- struct{}{}
@@ -94,14 +94,15 @@ func TestSubmitTest(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(config.JobNum)
 	for i := 1; i <= config.JobNum; i++ {
+		demoAddr := config.DemoHost[i%len(config.DemoHost)]
 		go func(idx int) {
 			defer wg.Done()
 			cfg := &cvs.Config{
 				DstDir:  fmt.Sprintf(config.DemoDataDir+"/data%d", idx),
-				SrcHost: config.DemoHost,
-				DstHost: config.DemoHost,
+				SrcHost: demoAddr,
+				DstHost: demoAddr,
 			}
-			testSubmitTest(t, cfg, config, config.DemoAddrs[i % len(config.DemoAddrs)], flowControl)
+			testSubmitTest(t, cfg, config, demoAddr, flowControl)
 		}(i)
 	}
 	wg.Wait()
