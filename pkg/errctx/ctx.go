@@ -33,9 +33,6 @@ func (c *errCtx) Done() <-chan struct{} {
 			close(doneCh)
 		}()
 
-		// There is no data race here because
-		// c.doneCh is read from only if c.hasDoneCh
-		// has true.
 		c.doneCh = doneCh
 	})
 	return c.doneCh
