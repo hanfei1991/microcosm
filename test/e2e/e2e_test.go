@@ -20,7 +20,7 @@ import (
 )
 
 type Config struct {
-	DemoAddr    string   `json:"demo_address"`
+	DemoAddrs    []string   `json:"demo_address"`
 	DemoHost    string   `json:"demo_host"`
 	MasterAddrs []string `json:"master_address_list"`
 	RecordNum   int64    `json:"demo_record_num"`
@@ -66,18 +66,20 @@ func TestSubmitTest(t *testing.T) {
 	config, err := NewConfigFromFile(configPath)
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	democlient, err := NewDemoClient(ctx, config.DemoAddr)
-	require.Nil(t, err)
-	fmt.Printf("connect demo\n")
+	for _, demoAddr := range config.DemoAddrs {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		democlient, err := NewDemoClient(ctx, demoAddr)
+		require.Nil(t, err)
+		fmt.Println("connect demo " + demoAddr)
 
-	resp, err := democlient.client.GenerateData(ctx, &pb.GenerateDataRequest{
-		FileNum:   int32(config.FileNum),
-		RecordNum: int32(config.RecordNum),
-	})
-	require.Nil(t, err)
-	require.Empty(t, resp.ErrMsg)
+		resp, err := democlient.client.GenerateData(ctx, &pb.GenerateDataRequest{
+			FileNum:   int32(config.FileNum),
+			RecordNum: int32(config.RecordNum),
+		})
+		require.Nil(t, err)
+		require.Empty(t, resp.ErrMsg)
+	}
 
 	flowControl := make(chan struct{}, 50)
 	// avoid job swarming
@@ -99,17 +101,17 @@ func TestSubmitTest(t *testing.T) {
 				SrcHost: config.DemoHost,
 				DstHost: config.DemoHost,
 			}
-			testSubmitTest(t, cfg, config, flowControl)
+			testSubmitTest(t, cfg, config, config.DemoAddrs[i % len(config.DemoAddrs)], flowControl)
 		}(i)
 	}
 	wg.Wait()
 }
 
 // run this test after docker-compose has been up
-func testSubmitTest(t *testing.T, cfg *cvs.Config, config *Config, flowControl chan struct{}) {
+func testSubmitTest(t *testing.T, cfg *cvs.Config, config *Config, demoAddr string, flowControl chan struct{}) {
 	ctx := context.Background()
 	fmt.Printf("connect demo\n")
-	democlient, err := NewDemoClient(ctx, config.DemoAddr)
+	democlient, err := NewDemoClient(ctx, demoAddr)
 	require.Nil(t, err)
 	fmt.Printf("connect clients\n")
 	masterclient, err := client.NewMasterClient(ctx, config.MasterAddrs)
