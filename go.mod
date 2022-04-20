@@ -38,6 +38,8 @@ require (
 	golang.org/x/time v0.0.0-20220224211638-0e9765cccd65
 	google.golang.org/grpc v1.44.0
 	gopkg.in/yaml.v2 v2.4.0
+	gorm.io/driver/mysql v1.0.6
+	gorm.io/gorm v1.21.9
 )
 
 require (
@@ -118,6 +120,8 @@ require (
 	github.com/jcmturner/gokrb5/v8 v8.4.2 // indirect
 	github.com/jcmturner/rpc/v2 v2.0.3 // indirect
 	github.com/jedib0t/go-pretty/v6 v6.2.2 // indirect
+	github.com/jinzhu/inflection v1.0.0 // indirect
+	github.com/jinzhu/now v1.1.2 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/joho/sqltocsv v0.0.0-20210428211105-a6d6801d59df // indirect
 	github.com/jonboulle/clockwork v0.2.2 // indirect
