@@ -174,7 +174,7 @@ func TestIsFresh(t *testing.T) {
 
 	loadTableName := "`meta`.`test_lightning_checkpoint_list`"
 	syncTableName := "`meta`.`test_syncer_checkpoint`"
-	query := "SELECT status FROM ? WHERE `task_name` = ? AND `source_name` = ?"
+	query := "SELECT status FROM %s WHERE `task_name` = ? AND `source_name` = ?"
 	_, mock, err := conn.InitMockDBFull()
 	require.NoError(t, err)
 	mock.ExpectQuery(regexp.QuoteMeta(query)).WithArgs(loadTableName, "test", source1).WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("init"))
@@ -210,7 +210,7 @@ func TestIsFresh(t *testing.T) {
 	require.Error(t, err)
 	require.False(t, isFresh)
 
-	query = "SELECT 1 FROM ? WHERE `id` = ? AND `is_global` = true"
+	query = "SELECT 1 FROM %s WHERE `id` = ? AND `is_global` = true"
 	_, mock, err = conn.InitMockDBFull()
 	require.NoError(t, err)
 	mock.ExpectQuery(regexp.QuoteMeta(query)).WithArgs(syncTableName, source1).WillReturnRows(sqlmock.NewRows([]string{"1"}).AddRow(1))
