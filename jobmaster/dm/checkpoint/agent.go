@@ -178,9 +178,9 @@ func onlineDDLName(cfg *config.JobCfg) string {
 }
 
 func isLoadFresh(ctx context.Context, taskCfg *config.TaskCfg, db *conn.BaseDB) (bool, error) {
-	query := "SELECT status FROM ? WHERE `task_name` = ? AND `source_name` = ?"
+	query := fmt.Sprintf("SELECT status FROM %s WHERE `task_name` = ? AND `source_name` = ?", loadTableName((*config.JobCfg)(taskCfg)))
 	var status string
-	err := db.DB.QueryRowContext(ctx, query, loadTableName((*config.JobCfg)(taskCfg)), taskCfg.Name, taskCfg.Upstreams[0].SourceID).Scan(&status)
+	err := db.DB.QueryRowContext(ctx, query, taskCfg.Name, taskCfg.Upstreams[0].SourceID).Scan(&status)
 	switch {
 	case err == nil:
 		return status == "init", nil
@@ -192,9 +192,9 @@ func isLoadFresh(ctx context.Context, taskCfg *config.TaskCfg, db *conn.BaseDB) 
 }
 
 func isSyncFresh(ctx context.Context, taskCfg *config.TaskCfg, db *conn.BaseDB) (bool, error) {
-	query := "SELECT 1 FROM ? WHERE `id` = ? AND `is_global` = true"
+	query := fmt.Sprintf("SELECT 1 FROM %s WHERE `id` = ? AND `is_global` = true", syncTableName((*config.JobCfg)(taskCfg)))
 	var status string
-	err := db.DB.QueryRowContext(ctx, query, syncTableName((*config.JobCfg)(taskCfg)), taskCfg.Upstreams[0].SourceID).Scan(&status)
+	err := db.DB.QueryRowContext(ctx, query, taskCfg.Upstreams[0].SourceID).Scan(&status)
 	switch {
 	case err == nil:
 		return false, nil
