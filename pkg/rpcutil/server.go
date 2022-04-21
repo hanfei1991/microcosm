@@ -149,7 +149,7 @@ func (h PreRPCHook[T]) checkInitialized(respPointer interface{}) (shouldRet bool
 	respStruct := reflect.ValueOf(respPointer).Elem().Elem()
 	errField := respStruct.FieldByName("Err")
 	if !errField.IsValid() {
-		return true, errors.ErrMasterNotInitialized
+		return true, errors.ErrMasterNotInitialized.GenWithStackByArgs()
 	}
 
 	errField.Set(reflect.ValueOf(&pb.Error{
@@ -214,11 +214,13 @@ func (h PreRPCHook[T]) isLeaderAndNeedForward(ctx context.Context) (isLeader, ne
 			leader, exist = h.CheckLeader()
 		}
 	}
+
+	isLeader = false
+	needForward = h.leaderCli.Get() != nil
 	if leader == nil {
-		return false, false
+		return
 	}
 	isLeader = leader.Name == h.id
-	needForward = h.leaderCli.Get() != nil
 	return
 }
 

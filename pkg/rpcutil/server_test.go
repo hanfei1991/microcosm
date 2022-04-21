@@ -161,7 +161,7 @@ func TestForwardToLeader(t *testing.T) {
 	resp, err = s.MockRPC(ctx, req)
 	require.True(t, errors.ErrMasterRPCNotForward.Equal(err))
 
-	// the server is not leader, cluster has a leader but this the forwarding client is empty due to network problems
+	// the server is not leader, cluster has a leader but the forwarding client is empty due to network problems
 
 	s.hook.leader.Store(&Member{Name: "another"})
 	s.hook.leaderCli.inner = nil
