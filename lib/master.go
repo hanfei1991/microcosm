@@ -520,6 +520,7 @@ func (m *DefaultBaseMaster) CreateWorker(
 			// TODO (zixiong) make the timeout configurable
 			time.Second*10)
 		if err != nil {
+			log.L().Warn("ScheduleTask returned error", zap.Error(err))
 			m.workerManager.OnCreatingWorkerFinished(workerID, err)
 			return
 		}
