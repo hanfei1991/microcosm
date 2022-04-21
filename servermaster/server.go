@@ -182,8 +182,6 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 		server.rpcLogRL,
 	)
 	server.masterRPCHook = masterRPCHook
-	server.scheduler = makeScheduler(server.executorManager, server.resourceManagerService)
-
 	return server, nil
 }
 
@@ -503,6 +501,7 @@ func (s *Server) startResourceManager() error {
 		s.executorManager,
 		resourceRPCHook,
 	)
+	s.scheduler = makeScheduler(s.executorManager, s.resourceManagerService)
 	return nil
 }
 
