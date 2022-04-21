@@ -5,9 +5,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
-	"github.com/stretchr/testify/require"
 )
 
 func TestExecutorManager(t *testing.T) {
@@ -27,6 +28,10 @@ func TestExecutorManager(t *testing.T) {
 	}
 	info, err := mgr.AllocateNewExec(registerReq)
 	require.Nil(t, err)
+
+	addr, ok := mgr.GetAddr(info.ID)
+	require.True(t, ok)
+	require.Equal(t, "127.0.0.1:10001", addr)
 
 	require.Equal(t, 1, mgr.ExecutorCount(model.Initing))
 	require.Equal(t, 0, mgr.ExecutorCount(model.Running))
