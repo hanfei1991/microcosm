@@ -5,16 +5,18 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/zap"
+	"golang.org/x/time/rate"
+
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/autoid"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/ha"
 	"github.com/hanfei1991/microcosm/servermaster/resource"
+	"github.com/hanfei1991/microcosm/servermaster/scheduler"
 	"github.com/hanfei1991/microcosm/test"
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	"go.uber.org/zap"
-	"golang.org/x/time/rate"
 )
 
 // ExecutorManager defines an interface to manager all executors
@@ -28,6 +30,7 @@ type ExecutorManager interface {
 	ExecutorCount(status model.ExecutorStatus) int
 	HasExecutor(executorID string) bool
 	ListExecutors() []string
+	CapacityProvider() scheduler.CapacityProvider
 }
 
 // ExecutorManagerImpl holds all the executors info, including liveness, status, resource usage.
@@ -245,7 +248,7 @@ func (e *ExecutorManagerImpl) checkAliveImpl() error {
 	return nil
 }
 
-// Count implements ExecutorManager.ExecutorCount
+// ExecutorCount implements ExecutorManager.ExecutorCount
 func (e *ExecutorManagerImpl) ExecutorCount(status model.ExecutorStatus) (count int) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -255,4 +258,9 @@ func (e *ExecutorManagerImpl) ExecutorCount(status model.ExecutorStatus) (count 
 		}
 	}
 	return
+}
+
+// CapacityProvider returns the internal rescMgr as a scheduler.CapacityProvider.
+func (e *ExecutorManagerImpl) CapacityProvider() scheduler.CapacityProvider {
+	return e.rescMgr
 }

@@ -34,7 +34,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/deps"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/etcdutils"
-	"github.com/hanfei1991/microcosm/pkg/externalresource/manager"
+	externRescManager "github.com/hanfei1991/microcosm/pkg/externalresource/manager"
 	extKV "github.com/hanfei1991/microcosm/pkg/meta/extension"
 	"github.com/hanfei1991/microcosm/pkg/meta/kvclient"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
@@ -43,6 +43,8 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/serverutils"
 	"github.com/hanfei1991/microcosm/pkg/tenant"
 	"github.com/hanfei1991/microcosm/servermaster/cluster"
+	"github.com/hanfei1991/microcosm/servermaster/scheduler"
+	schedModel "github.com/hanfei1991/microcosm/servermaster/scheduler/model"
 	"github.com/hanfei1991/microcosm/test"
 	"github.com/hanfei1991/microcosm/test/mock"
 )
@@ -68,9 +70,11 @@ type Server struct {
 	masterRPCHook   *rpcutil.PreRPCHook[pb.MasterClient]
 
 	// sched scheduler
-	executorManager ExecutorManager
-	jobManager      JobManager
-	resourceManager *manager.Service
+	executorManager        ExecutorManager
+	jobManager             JobManager
+	resourceManagerService *externRescManager.Service
+	scheduler              *scheduler.Scheduler
+
 	//
 	cfg     *Config
 	info    *model.NodeInfo
@@ -178,6 +182,7 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 		server.rpcLogRL,
 	)
 	server.masterRPCHook = masterRPCHook
+	server.scheduler = makeScheduler(server.executorManager, server.resourceManagerService)
 
 	return server, nil
 }
@@ -276,12 +281,28 @@ func (s *Server) ScheduleTask(ctx context.Context, req *pb.TaskSchedulerRequest)
 		return resp2, err
 	}
 
-	tasks := req.GetTasks()
-	success, resp := s.executorManager.Allocate(tasks)
-	if !success {
-		return nil, errors.ErrClusterResourceNotEnough.GenWithStackByArgs()
+	// NOTE This is a temporary implementation before we update the proto.
+	// We first need to make sure that the scheduler.Scheduler works properly.
+	// TODO (zixiong) re-implement this chunk of code in a subsequent PR.
+	results := make(map[int64]*pb.ScheduleResult)
+	for _, task := range req.GetTasks() {
+		schedulerReq := &schedModel.SchedulerRequest{
+			Cost: schedModel.ResourceUnit(task.GetCost()),
+			// TODO fill ExternalResources properly after proto is updated.
+			ExternalResources: nil,
+		}
+		schedulerResp, err := s.scheduler.ScheduleTask(ctx, schedulerReq)
+		if err != nil {
+			// TODO proper error handling
+			return nil, err
+		}
+		results[task.GetTask().Id] = &pb.ScheduleResult{
+			ExecutorId: string(schedulerResp.ExecutorID),
+		}
 	}
-	return resp, nil
+	return &pb.TaskSchedulerResponse{
+		Schedule: results,
+	}, nil
 }
 
 // DeleteExecutor deletes an executor, but have yet implemented.
@@ -477,7 +498,7 @@ func (s *Server) startResourceManager() error {
 		&s.leaderInitialized,
 		s.rpcLogRL,
 	)
-	s.resourceManager = manager.NewService(
+	s.resourceManagerService = externRescManager.NewService(
 		s.metaKVClient,
 		s.executorManager,
 		resourceRPCHook,
@@ -508,7 +529,7 @@ func (s *Server) startGrpcSrv(ctx context.Context) (err error) {
 
 	gRPCSvr := func(gs *grpc.Server) {
 		pb.RegisterMasterServer(gs, s)
-		pb.RegisterResourceManagerServer(gs, s.resourceManager)
+		pb.RegisterResourceManagerServer(gs, s.resourceManagerService)
 		s.msgService = p2p.NewMessageRPCServiceWithRPCServer(s.name(), nil, gs)
 		p2pProtocol.RegisterCDCPeerToPeerServer(gs, s.msgService.GetMessageServer())
 	}
@@ -591,9 +612,9 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 
 	// start background managers
 	s.executorManager.Start(ctx)
-	s.resourceManager.StartBackgroundWorker()
+	s.resourceManagerService.StartBackgroundWorker()
 	defer func() {
-		s.resourceManager.Stop()
+		s.resourceManagerService.Stop()
 	}()
 	clients := client.NewClientManager()
 	err = clients.AddMasterClient(ctx, []string{s.cfg.MasterAddr})
@@ -750,4 +771,17 @@ func (s *Server) collectLeaderMetric() {
 	for status := range model.ExecutorStatusNameMapping {
 		s.metrics.metricExecutorNum[status].Set(float64(s.executorManager.ExecutorCount(status)))
 	}
+}
+
+// makeScheduler is a helper function for Server to create a scheduler.Scheduler.
+// This function makes it clear how a Scheduler is supposed to be constructed
+// using concrete type, from the perspective of Server.
+func makeScheduler(
+	executorManager ExecutorManager,
+	externalResourceManager *externRescManager.Service,
+) *scheduler.Scheduler {
+	return scheduler.NewScheduler(
+		executorManager.CapacityProvider(),
+		externalResourceManager,
+	)
 }
