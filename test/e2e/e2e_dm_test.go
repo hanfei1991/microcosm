@@ -13,7 +13,7 @@ import (
 	"github.com/hanfei1991/microcosm/pb"
 )
 
-func TestDMSubtask(t *testing.T) {
+func TestDMJob(t *testing.T) {
 	ctx := context.Background()
 	masterClient, err := client.NewMasterClient(ctx, []string{"127.0.0.1:10240"})
 	require.NoError(t, err)

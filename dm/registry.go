@@ -18,7 +18,6 @@ func init() {
 	r.MustRegisterWorkerType(lib.WorkerDMDump, dumpFactory)
 	r.MustRegisterWorkerType(lib.WorkerDMLoad, loadFactory)
 	r.MustRegisterWorkerType(lib.WorkerDMSync, syncFactory)
-	r.MustRegisterWorkerType(lib.DMJobMaster, jobMasterFactory{})
 }
 
 type workerConstructor func(lib.WorkerConfig) lib.WorkerImpl
