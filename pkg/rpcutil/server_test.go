@@ -64,6 +64,7 @@ type (
 		id int
 	}
 )
+
 type mockRPCRespWithErrField struct {
 	Err *pb.Error
 }
