@@ -31,6 +31,7 @@ type ExecutorManager interface {
 	HasExecutor(executorID string) bool
 	ListExecutors() []string
 	CapacityProvider() scheduler.CapacityProvider
+	GetAddr(executorID model.ExecutorID) (string, bool)
 }
 
 // ExecutorManagerImpl holds all the executors info, including liveness, status, resource usage.
@@ -263,4 +264,16 @@ func (e *ExecutorManagerImpl) ExecutorCount(status model.ExecutorStatus) (count 
 // CapacityProvider returns the internal rescMgr as a scheduler.CapacityProvider.
 func (e *ExecutorManagerImpl) CapacityProvider() scheduler.CapacityProvider {
 	return e.rescMgr
+}
+
+func (e *ExecutorManagerImpl) GetAddr(executorID model.ExecutorID) (string, bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	executor, exists := e.executors[executorID]
+	if !exists {
+		return "", false
+	}
+
+	return executor.Addr, true
 }

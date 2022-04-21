@@ -294,8 +294,17 @@ func (s *Server) ScheduleTask(ctx context.Context, req *pb.TaskSchedulerRequest)
 			// TODO proper error handling
 			return nil, err
 		}
+
+		addr, ok := s.executorManager.GetAddr(schedulerResp.ExecutorID)
+		if !ok {
+			log.L().Warn("Executor is gone, RPC call needs retry",
+				zap.Any("request", req),
+				zap.String("executor-id", string(schedulerResp.ExecutorID)))
+			return nil, errors.ErrUnknownExecutorID.GenWithStackByArgs(string(schedulerResp.ExecutorID))
+		}
 		results[task.GetTask().Id] = &pb.ScheduleResult{
 			ExecutorId: string(schedulerResp.ExecutorID),
+			Addr:       addr,
 		}
 	}
 	return &pb.TaskSchedulerResponse{

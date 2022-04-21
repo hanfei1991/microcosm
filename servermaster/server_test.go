@@ -247,8 +247,11 @@ type mockExecutorManager struct {
 	count      map[model.ExecutorStatus]int
 }
 
+func (m *mockExecutorManager) GetAddr(executorID model.ExecutorID) (string, bool) {
+	panic("implement me")
+}
+
 func (m *mockExecutorManager) CapacityProvider() scheduler.CapacityProvider {
-	// TODO implement me
 	panic("implement me")
 }
 
