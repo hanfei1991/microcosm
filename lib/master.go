@@ -524,6 +524,7 @@ func (m *DefaultBaseMaster) CreateWorker(
 			m.workerManager.OnCreatingWorkerFinished(workerID, err)
 			return
 		}
+		log.L().Info("ScheduleTask succeeded", zap.Any("response", resp))
 
 		schedule := resp.GetSchedule()
 		if len(schedule) != 1 {
