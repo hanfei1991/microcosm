@@ -22,7 +22,6 @@ import (
 // ExecutorManager defines an interface to manager all executors
 type ExecutorManager interface {
 	HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error)
-	Allocate(tasks []*pb.ScheduleTask) (bool, *pb.TaskSchedulerResponse)
 	AllocateNewExec(req *pb.RegisterExecutorRequest) (*model.NodeInfo, error)
 	RegisterExec(info *model.NodeInfo)
 	Start(ctx context.Context)
@@ -160,10 +159,6 @@ func (e *ExecutorManagerImpl) AllocateNewExec(req *pb.RegisterExecutorRequest) (
 
 	e.RegisterExec(info)
 	return info, nil
-}
-
-func (e *ExecutorManagerImpl) Allocate(tasks []*pb.ScheduleTask) (bool, *pb.TaskSchedulerResponse) {
-	return e.rescMgr.Allocate(tasks)
 }
 
 func (e *ExecutorManagerImpl) HasExecutor(executorID string) bool {

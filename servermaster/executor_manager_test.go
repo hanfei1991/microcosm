@@ -53,23 +53,6 @@ func TestExecutorManager(t *testing.T) {
 	require.Nil(t, err)
 	require.Nil(t, resp.Err)
 
-	// test allocate resource to given task request
-	tasks := []*pb.ScheduleTask{
-		{
-			Task: &pb.TaskRequest{Id: 1, OpTp: int32(model.JobMasterType)},
-			Cost: 1,
-		},
-	}
-	allocated, allocResp := mgr.Allocate(tasks)
-	require.True(t, allocated)
-	require.Equal(t, 1, len(allocResp.GetSchedule()))
-	require.Equal(t, map[int64]*pb.ScheduleResult{
-		1: {
-			ExecutorId: string(info.ID),
-			Addr:       executorAddr,
-		},
-	}, allocResp.GetSchedule())
-
 	mgr.Start(ctx)
 
 	require.Eventually(t, func() bool {

@@ -9,13 +9,13 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/hanfei1991/microcosm/model"
-	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	schedModel "github.com/hanfei1991/microcosm/servermaster/scheduler/model"
 )
 
 // CapRescMgr implements ResourceMgr interface, and it uses node capacity as
 // alloction algorithm
+// TODO Unit tests for this struct.
 type CapRescMgr struct {
 	mu        sync.RWMutex
 	r         *rand.Rand // random generator for choosing node
@@ -49,12 +49,6 @@ func (m *CapRescMgr) Unregister(id model.ExecutorID) {
 	delete(m.executors, id)
 	log.L().Info("executor resource is unregistered",
 		zap.String("executor-id", string(id)))
-}
-
-// Allocate implements RescMgr.Allocate
-// Deprecated.
-func (m *CapRescMgr) Allocate(tasks []*pb.ScheduleTask) (bool, *pb.TaskSchedulerResponse) {
-	return m.allocateTasksWithNaiveStrategy(tasks)
 }
 
 // Update implements RescMgr.Update
@@ -109,53 +103,4 @@ func (m *CapRescMgr) CapacityForExecutor(executor model.ExecutorID) (*schedModel
 		Reserved: resc.Reserved,
 		Used:     resc.Used,
 	}, true
-}
-
-// getAvailableResource returns resources that are available
-func (m *CapRescMgr) getAvailableResource() []*ExecutorResource {
-	res := make([]*ExecutorResource, 0)
-	for _, exec := range m.executors {
-		if exec.Status == model.Running &&
-			exec.Capacity > exec.Reserved && exec.Capacity > exec.Used {
-			res = append(res, exec)
-		}
-	}
-	return res
-}
-
-func (m *CapRescMgr) allocateTasksWithNaiveStrategy(
-	tasks []*pb.ScheduleTask,
-) (bool, *pb.TaskSchedulerResponse) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	result := make(map[int64]*pb.ScheduleResult)
-	resources := m.getAvailableResource()
-	if len(resources) == 0 {
-		// No resources in this cluster
-		return false, nil
-	}
-	idx := m.r.Intn(len(resources))
-	for _, task := range tasks {
-		originalIdx := idx
-		for {
-			exec := resources[idx]
-			used := exec.Used
-			if exec.Reserved > used {
-				used = exec.Reserved
-			}
-			rest := exec.Capacity - used
-			if rest >= model.RescUnit(task.Cost) {
-				result[task.GetTask().Id] = &pb.ScheduleResult{
-					ExecutorId: string(exec.ID),
-					Addr:       exec.Addr,
-				}
-				break
-			}
-			idx = (idx + 1) % len(resources)
-			if idx == originalIdx {
-				return false, nil
-			}
-		}
-	}
-	return true, &pb.TaskSchedulerResponse{Schedule: result}
 }

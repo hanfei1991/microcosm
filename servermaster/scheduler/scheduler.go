@@ -29,6 +29,7 @@ func NewScheduler(
 	}
 }
 
+// ScheduleTask tries to assign an executor to a given task.
 func (s *Scheduler) ScheduleTask(
 	ctx context.Context,
 	request *schedModel.SchedulerRequest,

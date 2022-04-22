@@ -2,7 +2,6 @@ package resource
 
 import (
 	"github.com/hanfei1991/microcosm/model"
-	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/servermaster/scheduler"
 )
 
@@ -17,10 +16,6 @@ type RescMgr interface {
 
 	// Unregister is called when an executor exits
 	Unregister(id model.ExecutorID)
-
-	// Allocate allocates executor resources to given tasks.
-	// Deprecated.
-	Allocate(tasks []*pb.ScheduleTask) (bool, *pb.TaskSchedulerResponse)
 
 	// Update updates executor resource usage and running status
 	Update(id model.ExecutorID, used, reserved model.RescUnit, status model.ExecutorStatus) error
