@@ -121,7 +121,7 @@ func TestTaskRunnerSubmitTime(t *testing.T) {
 	err := tr.AddTask(worker)
 	require.NoError(t, err)
 
-	// Advance the internal Clock
+	// Advance the internal clock
 	mockClock.Add(time.Hour)
 
 	var wg sync.WaitGroup
