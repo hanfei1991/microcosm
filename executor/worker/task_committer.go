@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
 	"github.com/hanfei1991/microcosm/executor/worker/internal"
@@ -28,9 +29,14 @@ func (r *requestEntry) TaskID() internal.RunnableID {
 	return r.task.ID()
 }
 
+// WrappedTaskAdder is an interface used to abstract a TaskRunner.
+type WrappedTaskAdder interface {
+	addWrappedTask(task *internal.RunnableContainer) error
+}
+
 // TaskCommitter is used to implement two-phase task dispatching.
 type TaskCommitter struct {
-	runner *TaskRunner
+	runner WrappedTaskAdder
 
 	mu               sync.Mutex
 	pendingRequests  map[requestID]*requestEntry
@@ -40,16 +46,29 @@ type TaskCommitter struct {
 	wg       sync.WaitGroup
 	cancelCh chan struct{}
 
+	// for unit tests only
+	requestCleanUpCount atomic.Int64
+
 	requestTTL time.Duration
 }
 
-func NewTaskCommitter(runner *TaskRunner, requestTTL time.Duration) *TaskCommitter {
+// NewTaskCommitter returns a TaskCommitter.
+func NewTaskCommitter(runner WrappedTaskAdder, requestTTL time.Duration) *TaskCommitter {
+	return newTaskCommitterWithClock(runner, requestTTL, clock.New())
+}
+
+func newTaskCommitterWithClock(
+	runner WrappedTaskAdder,
+	requestTTL time.Duration,
+	clock clock.Clock,
+) *TaskCommitter {
 	committer := &TaskCommitter{
 		runner: runner,
 
-		pendingRequests: make(map[requestID]*requestEntry),
+		pendingRequests:  make(map[requestID]*requestEntry),
+		requestsByTaskID: make(map[RunnableID]*requestEntry),
 
-		clock:      clock.New(),
+		clock:      clock,
 		cancelCh:   make(chan struct{}),
 		requestTTL: requestTTL,
 	}
@@ -63,6 +82,7 @@ func NewTaskCommitter(runner *TaskRunner, requestTTL time.Duration) *TaskCommitt
 	return committer
 }
 
+// PreDispatchTask is the "prepare" stage of submitting a task.
 func (c *TaskCommitter) PreDispatchTask(rID requestID, task Runnable) (ok bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -96,6 +116,11 @@ func (c *TaskCommitter) PreDispatchTask(rID requestID, task Runnable) (ok bool) 
 	return true
 }
 
+// ConfirmDispatchTask is the "commit" stage of dispatching a task.
+// Return values:
+// - (true, nil) is returned on success.
+// - (false, nil) is returned if the PreDispatchTask request is not found in memory.
+// - (false, [error]) is returned for other unexpected situations.
 func (c *TaskCommitter) ConfirmDispatchTask(rID requestID, taskID RunnableID) (ok bool, retErr error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -110,16 +135,22 @@ func (c *TaskCommitter) ConfirmDispatchTask(rID requestID, taskID RunnableID) (o
 
 	c.removeRequestByID(rID)
 
-	if err := c.runner.AddTask(request.task); err != nil {
+	if err := c.runner.addWrappedTask(request.task); err != nil {
 		return false, err
 	}
 
 	return true, nil
 }
 
+// Close terminates the background task of the TaskCommitter.
 func (c *TaskCommitter) Close() {
 	close(c.cancelCh)
 	c.wg.Wait()
+}
+
+// cleanUpCount is for unit tests only.
+func (c *TaskCommitter) cleanUpCount() int64 {
+	return c.requestCleanUpCount.Load()
 }
 
 func (c *TaskCommitter) runTTLChecker() {
@@ -133,6 +164,7 @@ func (c *TaskCommitter) runTTLChecker() {
 		case <-ticker.C:
 		}
 
+		c.requestCleanUpCount.Add(1)
 		c.checkTTLOnce()
 	}
 }

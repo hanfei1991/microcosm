@@ -16,6 +16,9 @@ const (
 	workerNum = 100
 )
 
+// TaskRunner must implement WrappedTaskAdder for TaskCommitter to work.
+var _ WrappedTaskAdder = &TaskRunner{}
+
 func TestTaskRunnerBasics(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -118,7 +121,7 @@ func TestTaskRunnerSubmitTime(t *testing.T) {
 	err := tr.AddTask(worker)
 	require.NoError(t, err)
 
-	// Advance the internal clock
+	// Advance the internal Clock
 	mockClock.Add(time.Hour)
 
 	var wg sync.WaitGroup
