@@ -108,7 +108,7 @@ var (
 
 	// meta related errors
 	ErrMetaNewClientFail    = errors.Normalize("create meta client fail", errors.RFCCodeText("DFLOW:ErrMetaNewClientFail"))
-	ErrMetaOpFail           = errors.Normalize("meta operation fail:%v", errors.RFCCodeText("DFLOW:ErrMetaOpFail"))
+	ErrMetaOpFail           = errors.Normalize("meta operation fail", errors.RFCCodeText("DFLOW:ErrMetaOpFail"))
 	ErrMetaOptionInvalid    = errors.Normalize("meta option invalid", errors.RFCCodeText("DFLOW:ErrMetaOptionInvalid"))
 	ErrMetaOptionConflict   = errors.Normalize("WithRange/WithPrefix/WithFromKey, more than one option are used", errors.RFCCodeText("DFLOW:ErrMetaOptionConflict"))
 	ErrMetaEmptyKey         = errors.Normalize("meta empty key", errors.RFCCodeText("DFLOW:ErrMetaEmptyKey"))

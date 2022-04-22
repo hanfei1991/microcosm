@@ -1,4 +1,4 @@
-package resourcemeta
+package model
 
 import (
 	"path"
@@ -34,11 +34,11 @@ var ResourceUpdateColumns = []string{
 // ResourceMeta is the records stored in the metastore.
 type ResourceMeta struct {
 	ormModel.Model
-	ProjectID tenant.ProjectID `gorm:"column:project_id;type:char(36) not null"`
-	ID        ResourceID       `json:"id" gorm:"column:id;type:char(36) not null;uniqueIndex:uidx_id;index:idx_ji,priority:2;index:idx_ei,priority:2"`
-	Job       JobID            `json:"job" gorm:"column:job_id;type:char(36) not null;index:idx_ji,priority:1"`
-	Worker    WorkerID         `json:"worker" gorm:"column:worker_id;type:char(36) not null"`
-	Executor  ExecutorID       `json:"executor" gorm:"column:executor_id;type:char(36) not null;index:idx_ei,priority:1"`
+	ProjectID tenant.ProjectID `json:"project-id" gorm:"column:project_id;type:varchar(64) not null"`
+	ID        ResourceID       `json:"id" gorm:"column:id;type:varchar(64) not null;uniqueIndex:uidx_id;index:idx_ji,priority:2;index:idx_ei,priority:2"`
+	Job       JobID            `json:"job" gorm:"column:job_id;type:varchar(64) not null;index:idx_ji,priority:1"`
+	Worker    WorkerID         `json:"worker" gorm:"column:worker_id;type:varchar(64) not null"`
+	Executor  ExecutorID       `json:"executor" gorm:"column:executor_id;type:varchar(64) not null;index:idx_ei,priority:1"`
 	Deleted   bool             `json:"deleted" gorm:"column:deleted;type:BOOLEAN"`
 }
 

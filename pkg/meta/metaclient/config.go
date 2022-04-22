@@ -1,13 +1,15 @@
 package metaclient
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 const (
 	FrameMetaID       = "root"
 	DefaultUserMetaID = "default"
 
-	DefaultFrameMetaEndpoints = "127.0.0.1:12379"
-	DefaultUserMetaEndpoints  = "127.0.0.1:12479"
+	DefaultUserMetaEndpoints = "127.0.0.1:12479"
 )
 
 type AuthConfParams struct {
@@ -26,4 +28,13 @@ func (s *StoreConfigParams) SetEndpoints(endpoints string) {
 	if endpoints != "" {
 		s.Endpoints = strings.Split(endpoints, ",")
 	}
+}
+
+// dsn format: [username[:password]@][protocol[(address)]]
+func (s *StoreConfigParams) GenerateDsn() string {
+	if len(s.Endpoints) == 0 {
+		return ""
+	}
+
+	return fmt.Sprintf("%s:%s@tcp(%s)", s.Auth.User, s.Auth.Passwd, s.Endpoints[0])
 }

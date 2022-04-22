@@ -1,13 +1,17 @@
 version: '2.3'
 
 services:
-  frame_etcd_standalone:
-    image: quay.io/coreos/etcd
-    container_name: frame_etcd_standalone
-    command: etcd -name frame_etcd_standalone -advertise-client-urls http://0.0.0.0:2379 -listen-client-urls http://0.0.0.0:2379 -listen-peer-urls http://0.0.0.0:2380 -initial-cluster-token etcd-cluster -initial-cluster "frame_etcd_standalone=http://frame_etcd_standalone:2380" -initial-cluster-state new
+  frame_mysql_standalone:
+    image: mysql:5.7
+    platform: linux/amd64
+    container_name: frame_mysql_standalone
+    environment:
+      MYSQL_ROOT_PASSWORD: 123456
+    volumes:
+       - '/tmp/dataflow/mysql:/var/lib/mysql'
+       - './config/mysql_meta.cnf:/etc/my.cnf'
     ports:
-      - "12379:2379"
-      - "12380:2380"
+      - "3336:3306"
   user_etcd_standalone:
     image: quay.io/coreos/etcd
     container_name: user_etcd_standalone
