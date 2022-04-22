@@ -104,7 +104,7 @@ var (
 
 	// meta related errors
 	ErrMetaNewClientFail    = errors.Normalize("create meta client fail", errors.RFCCodeText("DFLOW:ErrMetaNewClientFail"))
-	ErrMetaOpFail           = errors.Normalize("meta operation fail:%v", errors.RFCCodeText("DFLOW:ErrMetaOpFail"))
+	ErrMetaOpFail           = errors.Normalize("meta operation fail", errors.RFCCodeText("DFLOW:ErrMetaOpFail"))
 	ErrMetaOptionInvalid    = errors.Normalize("meta option invalid", errors.RFCCodeText("DFLOW:ErrMetaOptionInvalid"))
 	ErrMetaOptionConflict   = errors.Normalize("WithRange/WithPrefix/WithFromKey, more than one option are used", errors.RFCCodeText("DFLOW:ErrMetaOptionConflict"))
 	ErrMetaEmptyKey         = errors.Normalize("meta empty key", errors.RFCCodeText("DFLOW:ErrMetaEmptyKey"))
@@ -113,6 +113,7 @@ var (
 	ErrMetaCommittedTxn     = errors.Normalize("meta already committed txn", errors.RFCCodeText("DFLOW:ErrMetaCommittedTxn"))
 	ErrMetaStoreIDDuplicate = errors.Normalize("metastore id duplicated", errors.RFCCodeText("DFLOW:ErrMetaStoreIDDuplicate"))
 	ErrMetaStoreUnfounded   = errors.Normalize("metastore unfounded:%s", errors.RFCCodeText("DFLOW:ErrMetaStoreUnfounded"))
+	ErrMetaEntryNotFound    = errors.Normalize("meta entry not found", errors.RFCCodeText("DFLOW:ErrMetaEntryNotFound"))
 
 	// DataSet errors
 	ErrDatasetEntryNotFound = errors.Normalize("dataset entry not found. Key: %s", errors.RFCCodeText("DFLOW:ErrDatasetEntryNotFound"))

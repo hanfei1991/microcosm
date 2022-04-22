@@ -16,7 +16,6 @@ import (
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	"github.com/hanfei1991/microcosm/pkg/errors"
-	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
 )
 
@@ -33,9 +32,10 @@ func TestJobManagerSubmitJob(t *testing.T) {
 		&pb.TaskSchedulerResponse{}, errors.ErrClusterResourceNotEnough.FastGenByArgs(),
 	)
 	mgr := &JobManagerImplV2{
-		BaseMaster: mockMaster.DefaultBaseMaster,
-		JobFsm:     NewJobFsm(),
-		uuidGen:    uuid.NewGenerator(),
+		BaseMaster:      mockMaster.DefaultBaseMaster,
+		JobFsm:          NewJobFsm(),
+		uuidGen:         uuid.NewGenerator(),
+		frameMetaClient: mockMaster.GetFrameMetaClient(),
 	}
 	// set master impl to JobManagerImplV2
 	mockMaster.Impl = mgr
@@ -81,9 +81,10 @@ func TestCreateWorkerReturnError(t *testing.T) {
 		MockMasterImpl: masterImpl,
 	}
 	mgr := &JobManagerImplV2{
-		BaseMaster: mockMaster,
-		JobFsm:     NewJobFsm(),
-		uuidGen:    uuid.NewGenerator(),
+		BaseMaster:      mockMaster,
+		JobFsm:          NewJobFsm(),
+		uuidGen:         uuid.NewGenerator(),
+		frameMetaClient: mockMaster.GetFrameMetaClient(),
 	}
 	mockMaster.Impl = mgr
 	err := mockMaster.Init(ctx)
@@ -106,9 +107,10 @@ func TestJobManagerPauseJob(t *testing.T) {
 	mockMaster := lib.NewMockMasterImpl("", "pause-job-test")
 	mockMaster.On("InitImpl", mock.Anything).Return(nil)
 	mgr := &JobManagerImplV2{
-		BaseMaster: mockMaster.DefaultBaseMaster,
-		JobFsm:     NewJobFsm(),
-		clocker:    clock.New(),
+		BaseMaster:      mockMaster.DefaultBaseMaster,
+		JobFsm:          NewJobFsm(),
+		clocker:         clock.New(),
+		frameMetaClient: mockMaster.GetFrameMetaClient(),
 	}
 
 	pauseWorkerID := "pause-worker-id"
@@ -163,7 +165,7 @@ func TestJobManagerQueryJob(t *testing.T) {
 
 	mockMaster := lib.NewMockMasterImpl("", "job-manager-query-job-test")
 	for _, tc := range testCases {
-		cli := metadata.NewMasterMetadataClient(tc.meta.ID, mockMaster.MetaKVClient())
+		cli := metadata.NewMasterMetadataClient(tc.meta.ID, mockMaster.GetFrameMetaClient())
 		err := cli.Store(ctx, tc.meta)
 		require.Nil(t, err)
 	}
@@ -172,7 +174,8 @@ func TestJobManagerQueryJob(t *testing.T) {
 		BaseMaster:       mockMaster.DefaultBaseMaster,
 		JobFsm:           NewJobFsm(),
 		uuidGen:          uuid.NewGenerator(),
-		masterMetaClient: metadata.NewMasterMetadataClient(metadata.JobManagerUUID, mockMaster.MetaKVClient()),
+		masterMetaClient: metadata.NewMasterMetadataClient(metadata.JobManagerUUID, mockMaster.GetFrameMetaClient()),
+		frameMetaClient:  mockMaster.GetFrameMetaClient(),
 	}
 
 	for _, tc := range testCases {
@@ -198,9 +201,10 @@ func TestJobManagerOnlineJob(t *testing.T) {
 		&pb.TaskSchedulerResponse{}, errors.ErrClusterResourceNotEnough.FastGenByArgs(),
 	)
 	mgr := &JobManagerImplV2{
-		BaseMaster: mockMaster.DefaultBaseMaster,
-		JobFsm:     NewJobFsm(),
-		uuidGen:    uuid.NewGenerator(),
+		BaseMaster:      mockMaster.DefaultBaseMaster,
+		JobFsm:          NewJobFsm(),
+		uuidGen:         uuid.NewGenerator(),
+		frameMetaClient: mockMaster.GetFrameMetaClient(),
 	}
 	// set master impl to JobManagerImplV2
 	mockMaster.Impl = mgr
@@ -230,8 +234,8 @@ func TestJobManagerRecover(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	mockMaster := lib.NewMockMasterImpl("", "job-manager-recover-test")
 	// prepare mockvk with two job masters
-	metaKVClient := mockkv.NewMetaMock()
 	meta := []*libModel.MasterMetaKVData{
 		{
 			ID: "master-1",
@@ -243,17 +247,17 @@ func TestJobManagerRecover(t *testing.T) {
 		},
 	}
 	for _, data := range meta {
-		cli := metadata.NewMasterMetadataClient(data.ID, metaKVClient)
+		cli := metadata.NewMasterMetadataClient(data.ID, mockMaster.GetFrameMetaClient())
 		err := cli.Store(ctx, data)
 		require.Nil(t, err)
 	}
 
-	mockMaster := lib.NewMockMasterImpl("", "job-manager-recover-test")
 	mgr := &JobManagerImplV2{
 		BaseMaster:       mockMaster.DefaultBaseMaster,
 		JobFsm:           NewJobFsm(),
 		uuidGen:          uuid.NewGenerator(),
-		masterMetaClient: metadata.NewMasterMetadataClient(metadata.JobManagerUUID, metaKVClient),
+		masterMetaClient: metadata.NewMasterMetadataClient(metadata.JobManagerUUID, mockMaster.GetFrameMetaClient()),
+		frameMetaClient:  mockMaster.GetFrameMetaClient(),
 	}
 	err := mgr.OnMasterRecovered(ctx)
 	require.Nil(t, err)

@@ -2,6 +2,7 @@ package executor
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"time"
 
@@ -11,8 +12,8 @@ import (
 	extkv "github.com/hanfei1991/microcosm/pkg/meta/extension"
 	"github.com/hanfei1991/microcosm/pkg/meta/kvclient"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
+	dorm "github.com/hanfei1991/microcosm/pkg/orm"
 	"github.com/hanfei1991/microcosm/pkg/rpcutil"
-	"github.com/hanfei1991/microcosm/pkg/tenant"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	p2pImpl "github.com/pingcap/tiflow/pkg/p2p"
@@ -39,6 +40,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/pkg/serverutils"
+	"github.com/hanfei1991/microcosm/pkg/tenant"
 	"github.com/hanfei1991/microcosm/test"
 	"github.com/hanfei1991/microcosm/test/mock"
 )
@@ -64,8 +66,8 @@ type Server struct {
 	// etcdCli connects to server master embed etcd, it should be used in service
 	// discovery only.
 	etcdCli *clientv3.Client
-	// framework metastore prefix kvclient
-	metaKVClient metaclient.KVClient
+	// framework metastore client
+	frameMetaClient dorm.Client
 	// user metastore raw kvclient(reuse for all workers)
 	userRawKVClient extkv.KVClientEx
 	p2pMsgRouter    p2pImpl.MessageRouter
@@ -160,8 +162,8 @@ func (s *Server) buildDeps() (*deps.Deps, error) {
 		return nil, err
 	}
 
-	err = deps.Provide(func() metaclient.KVClient {
-		return s.metaKVClient
+	err = deps.Provide(func() dorm.Client {
+		return s.frameMetaClient
 	})
 	if err != nil {
 		return nil, err
@@ -201,17 +203,7 @@ func (s *Server) buildDeps() (*deps.Deps, error) {
 func (s *Server) DispatchTask(ctx context.Context, req *pb.DispatchTaskRequest) (*pb.DispatchTaskResponse, error) {
 	log.L().Info("dispatch task", zap.String("req", req.String()))
 
-	// TODO better dependency management
 	dctx := dcontext.Background()
-	dctx.Dependencies = dcontext.RuntimeDependencies{
-		MessageHandlerManager: s.msgServer.MakeHandlerManager(),
-		MessageRouter:         p2p.NewMessageSender(s.p2pMsgRouter),
-		MetaKVClient:          s.metaKVClient,
-		UserRawKVClient:       s.userRawKVClient,
-		ExecutorClientManager: client.NewClientManager(),
-		ServerMasterClient:    s.masterClient,
-	}
-
 	dp, err := s.buildDeps()
 	if err != nil {
 		return nil, err
@@ -220,7 +212,9 @@ func (s *Server) DispatchTask(ctx context.Context, req *pb.DispatchTaskRequest) 
 	dctx.Environ.NodeID = p2p.NodeID(s.info.ID)
 	dctx.Environ.Addr = s.info.Addr
 
+	// NOTICE: only take effect when job type is job master
 	masterMeta := &libModel.MasterMetaKVData{
+		ProjectID: req.GetUserId(),
 		// GetWorkerId here returns id of current unit
 		ID:     req.GetWorkerId(),
 		Tp:     libModel.WorkerType(req.GetTaskTypeId()),
@@ -286,8 +280,8 @@ func (s *Server) Stop() {
 		}
 	}
 
-	if s.metaKVClient != nil {
-		err := s.metaKVClient.Close()
+	if s.frameMetaClient != nil {
+		err := s.frameMetaClient.Close()
 		if err != nil {
 			log.L().Warn("failed to close connection to framework metastore", zap.Error(err))
 		}
@@ -503,21 +497,22 @@ func (s *Server) fetchMetaStore(ctx context.Context) error {
 		s.cfg.RPCTimeout,
 	)
 	if err != nil {
+		log.L().Error("query framework metastore fail")
 		return err
 	}
-	log.L().Info("update framework metastore", zap.String("addr", resp.Address))
-
-	conf := metaclient.StoreConfigParams{
-		Endpoints: []string{resp.Address},
-	}
-
-	cliEx, err := kvclient.NewKVClient(&conf)
+	var conf metaclient.StoreConfigParams
+	err = json.Unmarshal([]byte(resp.Address), &conf)
 	if err != nil {
-		log.L().Error("access framework metastore fail", zap.Any("store-conf", conf), zap.Error(err))
+		log.L().Error("unmarshal framework metastore config fail", zap.String("conf", resp.Address), zap.Error(err))
 		return err
 	}
-	// [TODO] use FrameTenantID here if support multi-tenant
-	s.metaKVClient = kvclient.NewPrefixKVClient(cliEx, tenant.DefaultUserTenantID)
+	// TODO: replace the default DB config
+	s.frameMetaClient, err = dorm.NewClient(conf, tenant.FrameTenantID, dorm.NewDefaultDBConfig())
+	if err != nil {
+		log.L().Error("connect to framework metastore fail", zap.Any("conf", conf), zap.Error(err))
+		return err
+	}
+	log.L().Info("update framework metastore successful", zap.String("addr", resp.Address))
 
 	// fetch user metastore connection endpoint
 	resp, err = s.masterClient.QueryMetaStore(
@@ -526,18 +521,19 @@ func (s *Server) fetchMetaStore(ctx context.Context) error {
 		s.cfg.RPCTimeout,
 	)
 	if err != nil {
+		log.L().Error("query user metastore fail")
 		return err
 	}
-	log.L().Info("update user metastore", zap.String("addr", resp.Address))
 
 	conf = metaclient.StoreConfigParams{
 		Endpoints: []string{resp.Address},
 	}
 	s.userRawKVClient, err = kvclient.NewKVClient(&conf)
 	if err != nil {
-		log.L().Error("access user metastore fail", zap.Any("store-conf", conf), zap.Error(err))
+		log.L().Error("connect to user metastore fail", zap.Any("store-conf", conf), zap.Error(err))
 		return err
 	}
+	log.L().Info("update user metastore successful", zap.String("addr", resp.Address))
 
 	return nil
 }

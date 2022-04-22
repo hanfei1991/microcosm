@@ -1,4 +1,4 @@
-package resourcemeta
+package model
 
 import (
 	"testing"

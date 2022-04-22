@@ -2,7 +2,6 @@ package lib
 
 import (
 	"context"
-	"encoding/json"
 	"sync"
 	"testing"
 	"time"
@@ -13,9 +12,8 @@ import (
 	"github.com/hanfei1991/microcosm/lib/metadata"
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/statusutil"
-	"github.com/hanfei1991/microcosm/pkg/adapter"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
-	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
+	dorm "github.com/hanfei1991/microcosm/pkg/orm"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
 )
 
@@ -32,16 +30,13 @@ type dummyConfig struct {
 	param int
 }
 
-func prepareMeta(ctx context.Context, t *testing.T, metaclient metaclient.KVClient) {
-	masterKey := adapter.MasterMetaKey.Encode(masterName)
+func prepareMeta(ctx context.Context, t *testing.T, metaclient dorm.Client) {
 	masterInfo := &libModel.MasterMetaKVData{
 		ID:         masterName,
 		NodeID:     masterNodeName,
 		StatusCode: libModel.MasterStatusUninit,
 	}
-	masterInfoBytes, err := json.Marshal(masterInfo)
-	require.NoError(t, err)
-	_, err = metaclient.Put(ctx, masterKey, string(masterInfoBytes))
+	err := metaclient.UpsertJob(ctx, masterInfo)
 	require.NoError(t, err)
 }
 
@@ -52,20 +47,15 @@ func TestMasterInit(t *testing.T) {
 	defer cancel()
 
 	master := NewMockMasterImpl("", masterName)
-	prepareMeta(ctx, t, master.metaKVClient)
+	prepareMeta(ctx, t, master.GetFrameMetaClient())
 
 	master.On("InitImpl", mock.Anything).Return(nil)
 	err := master.Init(ctx)
 	require.NoError(t, err)
 
-	resp, err := master.metaKVClient.Get(ctx, adapter.MasterMetaKey.Encode(masterName))
+	resp, err := master.GetFrameMetaClient().GetJobByID(ctx, masterName)
 	require.NoError(t, err)
-	require.Len(t, resp.Kvs, 1)
-
-	var masterData libModel.MasterMetaKVData
-	err = json.Unmarshal(resp.Kvs[0].Value, &masterData)
-	require.NoError(t, err)
-	require.Equal(t, libModel.MasterStatusInit, masterData.StatusCode)
+	require.Equal(t, libModel.MasterStatusInit, resp.StatusCode)
 
 	master.On("CloseImpl", mock.Anything).Return(nil)
 	err = master.Close(ctx)
@@ -94,7 +84,7 @@ func TestMasterPollAndClose(t *testing.T) {
 	defer cancel()
 
 	master := NewMockMasterImpl("", masterName)
-	prepareMeta(ctx, t, master.metaKVClient)
+	prepareMeta(ctx, t, master.GetFrameMetaClient())
 
 	master.On("InitImpl", mock.Anything).Return(nil)
 	err := master.Init(ctx)
@@ -138,7 +128,7 @@ func TestMasterCreateWorker(t *testing.T) {
 	master.timeoutConfig.WorkerTimeoutDuration = time.Second * 1000
 	master.timeoutConfig.MasterHeartbeatCheckLoopInterval = time.Millisecond * 10
 	master.uuidGen = uuid.NewMock()
-	prepareMeta(ctx, t, master.metaKVClient)
+	prepareMeta(ctx, t, master.GetFrameMetaClient())
 
 	master.On("InitImpl", mock.Anything).Return(nil)
 	err := master.Init(ctx)
@@ -173,11 +163,11 @@ func TestMasterCreateWorker(t *testing.T) {
 	require.Len(t, workerList, 1)
 	require.Contains(t, workerList, workerID)
 
-	workerMetaClient := metadata.NewWorkerMetadataClient(masterName, master.metaKVClient)
+	workerMetaClient := metadata.NewWorkerMetadataClient(masterName, master.GetFrameMetaClient())
 	dummySt := &dummyStatus{Val: 4}
 	ext, err := dummySt.Marshal()
 	require.NoError(t, err)
-	err = workerMetaClient.Store(ctx, workerID1, &libModel.WorkerStatus{
+	err = workerMetaClient.Store(ctx, &libModel.WorkerStatus{
 		Code:     libModel.WorkerStatusNormal,
 		ExtBytes: ext,
 	})
@@ -230,7 +220,7 @@ func TestMasterCreateWorkerMetError(t *testing.T) {
 	master := NewMockMasterImpl("", masterName)
 	master.timeoutConfig.MasterHeartbeatCheckLoopInterval = time.Millisecond * 10
 	master.uuidGen = uuid.NewMock()
-	prepareMeta(ctx, t, master.metaKVClient)
+	prepareMeta(ctx, t, master.GetFrameMetaClient())
 
 	master.On("InitImpl", mock.Anything).Return(nil)
 	err := master.Init(ctx)

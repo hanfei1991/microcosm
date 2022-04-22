@@ -90,6 +90,7 @@ func NewBaseJobMaster(
 	baseMaster := NewBaseMaster(
 		ctx, &jobMasterImplAsMasterImpl{jobMasterImpl}, workerID)
 	baseWorker := NewBaseWorker(
+		// TODO: need worker_type
 		ctx, &jobMasterImplAsWorkerImpl{jobMasterImpl}, workerID, masterID)
 	errCenter := errctx.NewErrCenter()
 	baseMaster.(*DefaultBaseMaster).errCenter = errCenter
