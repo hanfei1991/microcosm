@@ -272,44 +272,55 @@ func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorR
 // - receives request from job master
 // - queries resource manager to allocate resource and maps tasks to executors
 // - returns scheduler response to job master
-func (s *Server) ScheduleTask(ctx context.Context, req *pb.TaskSchedulerRequest) (*pb.TaskSchedulerResponse, error) {
-	resp2 := &pb.TaskSchedulerResponse{}
+func (s *Server) ScheduleTask(ctx context.Context, req *pb.ScheduleTaskRequest) (*pb.ScheduleTaskResponse, error) {
+	resp2 := &pb.ScheduleTaskResponse{}
 	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp2)
 	if shouldRet {
 		return resp2, err
 	}
 
+	schedulerReq := &schedModel.SchedulerRequest{
+		Cost:              schedModel.ResourceUnit(req.GetCost()),
+		ExternalResources: req.GetResourceRequirements(),
+	}
+	schedulerResp, err := s.scheduler.ScheduleTask(ctx, schedulerReq)
+	if err != nil {
+
+	}
+
 	// NOTE This is a temporary implementation before we update the proto.
 	// We first need to make sure that the scheduler.Scheduler works properly.
 	// TODO (zixiong) re-implement this chunk of code in a subsequent PR.
-	results := make(map[int64]*pb.ScheduleResult)
-	for _, task := range req.GetTasks() {
-		schedulerReq := &schedModel.SchedulerRequest{
-			Cost: schedModel.ResourceUnit(task.GetCost()),
-			// TODO fill ExternalResources properly after proto is updated.
-			ExternalResources: nil,
-		}
-		schedulerResp, err := s.scheduler.ScheduleTask(ctx, schedulerReq)
-		if err != nil {
-			// TODO proper error handling
-			return nil, err
-		}
+	/*
+		results := make(map[int64]*pb.ScheduleResult)
+		for _, task := range req.GetTasks() {
+			schedulerReq := &schedModel.SchedulerRequest{
+				Cost: schedModel.ResourceUnit(task.GetCost()),
+				// TODO fill ExternalResources properly after proto is updated.
+				ExternalResources: nil,
+			}
+			schedulerResp, err := s.scheduler.ScheduleTask(ctx, schedulerReq)
+			if err != nil {
+				// TODO proper error handling
+				return nil, err
+			}
 
-		addr, ok := s.executorManager.GetAddr(schedulerResp.ExecutorID)
-		if !ok {
-			log.L().Warn("Executor is gone, RPC call needs retry",
-				zap.Any("request", req),
-				zap.String("executor-id", string(schedulerResp.ExecutorID)))
-			return nil, errors.ErrUnknownExecutorID.GenWithStackByArgs(string(schedulerResp.ExecutorID))
+			addr, ok := s.executorManager.GetAddr(schedulerResp.ExecutorID)
+			if !ok {
+				log.L().Warn("Executor is gone, RPC call needs retry",
+					zap.Any("request", req),
+					zap.String("executor-id", string(schedulerResp.ExecutorID)))
+				return nil, errors.ErrUnknownExecutorID.GenWithStackByArgs(string(schedulerResp.ExecutorID))
+			}
+			results[task.GetTask().Id] = &pb.ScheduleResult{
+				ExecutorId: string(schedulerResp.ExecutorID),
+				Addr:       addr,
+			}
 		}
-		results[task.GetTask().Id] = &pb.ScheduleResult{
-			ExecutorId: string(schedulerResp.ExecutorID),
-			Addr:       addr,
-		}
-	}
-	return &pb.TaskSchedulerResponse{
-		Schedule: results,
-	}, nil
+		return &pb.TaskSchedulerResponse{
+			Schedule: results,
+		}, nil
+	*/
 }
 
 // DeleteExecutor deletes an executor, but have yet implemented.
