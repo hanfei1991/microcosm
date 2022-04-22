@@ -11,15 +11,15 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 
-	libModel "github.com/hanfei1991/microcosm/lib/model"
-	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
+	dorm "github.com/hanfei1991/microcosm/pkg/meta/orm"
+	libModel "github.com/hanfei1991/microcosm/pkg/meta/orm/model"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
 // Writer is used to persist WorkerStatus changes and send notifications
 // to the Master.
 type Writer struct {
-	metaclient    metaclient.KVClient
+	metaclient    *dorm.MetaOpsClient
 	messageSender p2p.MessageSender
 	lastStatus    *libModel.WorkerStatus
 
@@ -30,7 +30,7 @@ type Writer struct {
 
 // NewWriter creates a new Writer.
 func NewWriter(
-	metaclient metaclient.KVClient,
+	metaclient *dorm.MetaOpsClient,
 	messageSender p2p.MessageSender,
 	masterInfo MasterInfoProvider,
 	workerID string,
@@ -111,14 +111,8 @@ func (w *Writer) sendStatusMessageWithRetry(
 }
 
 func (w *Writer) persistStatus(ctx context.Context, newStatus *libModel.WorkerStatus) error {
-	raw, err := newStatus.Marshal()
-	if err != nil {
-		return err
-	}
-
 	return retry.Do(ctx, func() error {
-		key := libModel.EncodeWorkerStatusKey(w.masterInfo.MasterID(), w.workerID)
-		if _, err := w.metaclient.Put(ctx, key, string(raw)); err != nil {
+		if err := w.metaclient.UpdateWorker(ctx, newStatus); err != nil {
 			return err
 		}
 		return nil

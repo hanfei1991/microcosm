@@ -9,9 +9,9 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/hanfei1991/microcosm/lib"
-	libModel "github.com/hanfei1991/microcosm/lib/model"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
+	libModel "github.com/hanfei1991/microcosm/pkg/meta/orm/model"
 )
 
 type WorkerConfig = lib.WorkerConfig

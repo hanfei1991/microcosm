@@ -9,10 +9,10 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 
 	"github.com/hanfei1991/microcosm/executor/worker"
-	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/model"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
-	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
+	"github.com/hanfei1991/microcosm/pkg/meta/kv/kvclient"
+	libModel "github.com/hanfei1991/microcosm/pkg/meta/orm/model"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
@@ -21,7 +21,7 @@ type BaseJobMaster interface {
 	Poll(ctx context.Context) error
 	Close(ctx context.Context) error
 	OnError(err error)
-	MetaKVClient() metaclient.KVClient
+	MetaKVClient() kvclient.KVClient
 	GetWorkers() map[libModel.WorkerID]WorkerHandle
 	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (libModel.WorkerID, error)
 	Workload() model.RescUnit
@@ -102,7 +102,7 @@ func NewBaseJobMaster(
 	}
 }
 
-func (d *DefaultBaseJobMaster) MetaKVClient() metaclient.KVClient {
+func (d *DefaultBaseJobMaster) MetaKVClient() kvclient.KVClient {
 	return d.master.MetaKVClient()
 }
 

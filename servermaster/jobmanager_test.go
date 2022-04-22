@@ -11,12 +11,12 @@ import (
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/lib/master"
 	"github.com/hanfei1991/microcosm/lib/metadata"
-	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	"github.com/hanfei1991/microcosm/pkg/errors"
-	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
+	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kv/mockclient"
+	libModel "github.com/hanfei1991/microcosm/pkg/meta/orm/model"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
 )
 

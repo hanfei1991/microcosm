@@ -8,11 +8,11 @@ import (
 
 	runtime "github.com/hanfei1991/microcosm/executor/worker"
 	"github.com/hanfei1991/microcosm/lib/config"
-	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/statusutil"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	"github.com/hanfei1991/microcosm/pkg/clock"
-	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
+	"github.com/hanfei1991/microcosm/pkg/meta/kv/kvclient"
+	libModel "github.com/hanfei1991/microcosm/pkg/meta/orm/model"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -23,11 +23,11 @@ var (
 	_ runtime.Runnable = (Worker)(nil)
 )
 
-func putMasterMeta(ctx context.Context, t *testing.T, metaclient metaclient.KVClient, metaData *libModel.MasterMetaKVData) {
+func putMasterMeta(ctx context.Context, t *testing.T, kvclient kvclient.KVClient, metaData *libModel.MasterMetaKVData) {
 	masterKey := adapter.MasterMetaKey.Encode(masterName)
 	masterInfoBytes, err := json.Marshal(metaData)
 	require.NoError(t, err)
-	_, err = metaclient.Put(ctx, masterKey, string(masterInfoBytes))
+	_, err = kvclient.Put(ctx, masterKey, string(masterInfoBytes))
 	require.NoError(t, err)
 }
 

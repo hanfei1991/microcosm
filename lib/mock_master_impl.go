@@ -14,14 +14,14 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/hanfei1991/microcosm/client"
-	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/pb"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/deps"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
-	extkv "github.com/hanfei1991/microcosm/pkg/meta/extension"
-	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
-	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
+	"github.com/hanfei1991/microcosm/pkg/meta/kv/kvclient"
+	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kv/mockclient"
+	dorm "github.com/hanfei1991/microcosm/pkg/meta/orm"
+	libModel "github.com/hanfei1991/microcosm/pkg/meta/orm/model"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
@@ -42,7 +42,7 @@ type MockMasterImpl struct {
 
 	messageHandlerManager *p2p.MockMessageHandlerManager
 	messageSender         p2p.MessageSender
-	metaKVClient          *mockkv.MetaMock
+	frameMetaClient       *dorm.MetaOpsClient
 	userRawKVClient       *mockkv.MetaMock
 	executorClientManager *client.Manager
 	serverMasterClient    *client.MockServerMasterClient
@@ -59,8 +59,8 @@ func NewMockMasterImpl(masterID, id libModel.MasterID) *MockMasterImpl {
 	ret.DefaultBaseMaster = MockBaseMaster(id, ret)
 	ret.messageHandlerManager = ret.DefaultBaseMaster.messageHandlerManager.(*p2p.MockMessageHandlerManager)
 	ret.messageSender = ret.DefaultBaseMaster.messageSender
-	ret.metaKVClient = ret.DefaultBaseMaster.metaKVClient.(*mockkv.MetaMock)
-	ret.userRawKVClient = ret.DefaultBaseMaster.metaKVClient.(*mockkv.MetaMock)
+	ret.frameMetaClient = ret.DefaultBaseMaster.frameMetaClient
+	ret.userRawKVClient = ret.DefaultBaseMaster.userRawKVClient.(*mockkv.MetaMock)
 	ret.executorClientManager = ret.DefaultBaseMaster.executorClientManager.(*client.Manager)
 	ret.serverMasterClient = ret.DefaultBaseMaster.serverMasterClient.(*client.MockServerMasterClient)
 
@@ -72,8 +72,8 @@ type masterParamListForTest struct {
 
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
-	MetaKVClient          metaclient.KVClient
-	UserRawKVClient       extkv.KVClientEx
+	FrameMetaClient       *dorm.MetaOpsClient
+	UserRawKVClient       kvclient.KVClientEx
 	ExecutorClientManager client.ClientsManager
 	ServerMasterClient    client.MasterClient
 	ResourceBroker        broker.Broker
@@ -92,7 +92,7 @@ func (m *MockMasterImpl) Reset() {
 		return masterParamListForTest{
 			MessageHandlerManager: m.messageHandlerManager,
 			MessageSender:         m.messageSender,
-			MetaKVClient:          m.metaKVClient,
+			FrameMetaClient:       m.frameMetaClient,
 			UserRawKVClient:       m.userRawKVClient,
 			ExecutorClientManager: m.executorClientManager,
 			ServerMasterClient:    m.serverMasterClient,

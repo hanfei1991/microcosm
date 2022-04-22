@@ -13,7 +13,6 @@ import (
 
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/lib/metadata"
-	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/statusutil"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
@@ -21,19 +20,28 @@ import (
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/deps"
 	"github.com/hanfei1991/microcosm/pkg/errors"
-	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
+	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kv/mockclient"
+	dorm "github.com/hanfei1991/microcosm/pkg/meta/orm"
+	libModel "github.com/hanfei1991/microcosm/pkg/meta/orm/model"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
 )
 
 func MockBaseMaster(id libModel.MasterID, masterImpl MasterImpl) *DefaultBaseMaster {
 	ctx := dcontext.Background()
+
+	// TODO: mock ??
+	mcli, mock, err := dorm.NewMockMetaOpsClient()
+	if err != nil {
+		panic(err)
+	}
+
 	dp := deps.NewDeps()
 	err := dp.Provide(func() masterParamListForTest {
 		return masterParamListForTest{
 			MessageHandlerManager: p2p.NewMockMessageHandlerManager(),
 			MessageSender:         p2p.NewMockMessageSender(),
-			MetaKVClient:          mockkv.NewMetaMock(),
+			FrameMetaClient:       mcli,
 			UserRawKVClient:       mockkv.NewMetaMock(),
 			ExecutorClientManager: client.NewClientManager(),
 			ServerMasterClient:    &client.MockServerMasterClient{},

@@ -19,8 +19,8 @@ import (
 
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/pkg/deps"
-	extKV "github.com/hanfei1991/microcosm/pkg/meta/extension"
-	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
+	"github.com/hanfei1991/microcosm/pkg/meta/kv/kvclient"
+	dorm "github.com/hanfei1991/microcosm/pkg/meta/orm"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 )
@@ -99,17 +99,19 @@ func (c *Context) L() log.Logger {
 	return c.Logger
 }
 
+// deprecated
 type RuntimeDependencies struct {
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageRouter         p2p.MessageSender
-	MetaKVClient          metaclient.KVClient
-	UserRawKVClient       extKV.KVClientEx
+	FrameMetaClient       *dorm.MetaOpsClient
+	UserRawKVClient       kvclient.KVClientEx
 	ExecutorClientManager *client.Manager
 	ServerMasterClient    client.MasterClient
 }
 
 type Environment struct {
-	NodeID          p2p.NodeID
-	Addr            string
+	NodeID p2p.NodeID
+	Addr   string
+	// TODO: why we use a []byte here
 	MasterMetaBytes []byte
 }

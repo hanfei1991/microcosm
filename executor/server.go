@@ -5,12 +5,11 @@ import (
 	"strings"
 	"time"
 
-	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/pkg/deps"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/storagecfg"
-	extkv "github.com/hanfei1991/microcosm/pkg/meta/extension"
-	"github.com/hanfei1991/microcosm/pkg/meta/kvclient"
-	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
+	"github.com/hanfei1991/microcosm/pkg/meta/kv/kvclient"
+	dorm "github.com/hanfei1991/microcosm/pkg/meta/orm"
+	libModel "github.com/hanfei1991/microcosm/pkg/meta/orm/model"
 	"github.com/hanfei1991/microcosm/pkg/rpcutil"
 	"github.com/hanfei1991/microcosm/pkg/tenant"
 
@@ -64,10 +63,11 @@ type Server struct {
 	// etcdCli connects to server master embed etcd, it should be used in service
 	// discovery only.
 	etcdCli *clientv3.Client
-	// framework metastore prefix kvclient
-	metaKVClient metaclient.KVClient
+	// framework metastore client
+	frameMetaClient *dorm.MetaOpsClient
+	db              *sql.DB
 	// user metastore raw kvclient(reuse for all workers)
-	userRawKVClient extkv.KVClientEx
+	userRawKVClient kvclient.KVClientEx
 	p2pMsgRouter    p2pImpl.MessageRouter
 	discoveryKeeper *serverutils.DiscoveryKeepaliver
 	resourceBroker  broker.Broker
@@ -160,14 +160,14 @@ func (s *Server) buildDeps() (*deps.Deps, error) {
 		return nil, err
 	}
 
-	err = deps.Provide(func() metaclient.KVClient {
-		return s.metaKVClient
+	err = deps.Provide(func() *dorm.MetaOpsClient {
+		return s.frameMetaClient
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	err = deps.Provide(func() extkv.KVClientEx {
+	err = deps.Provide(func() kvclient.KVClientEx {
 		return s.userRawKVClient
 	})
 	if err != nil {
@@ -201,17 +201,7 @@ func (s *Server) buildDeps() (*deps.Deps, error) {
 func (s *Server) DispatchTask(ctx context.Context, req *pb.DispatchTaskRequest) (*pb.DispatchTaskResponse, error) {
 	log.L().Info("dispatch task", zap.String("req", req.String()))
 
-	// TODO better dependency management
 	dctx := dcontext.Background()
-	dctx.Dependencies = dcontext.RuntimeDependencies{
-		MessageHandlerManager: s.msgServer.MakeHandlerManager(),
-		MessageRouter:         p2p.NewMessageSender(s.p2pMsgRouter),
-		MetaKVClient:          s.metaKVClient,
-		UserRawKVClient:       s.userRawKVClient,
-		ExecutorClientManager: client.NewClientManager(),
-		ServerMasterClient:    s.masterClient,
-	}
-
 	dp, err := s.buildDeps()
 	if err != nil {
 		return nil, err
@@ -220,8 +210,11 @@ func (s *Server) DispatchTask(ctx context.Context, req *pb.DispatchTaskRequest) 
 	dctx.Environ.NodeID = p2p.NodeID(s.info.ID)
 	dctx.Environ.Addr = s.info.Addr
 
-	masterMeta := &libModel.MasterMetaKVData{
+	// [NOTICE]: masterMeta only take effect on job-master task
+	masterMeta := &libModel.MasterMeta{
+		ProjectID: req.GetUserID(),
 		// GetWorkerId here returns id of current unit
+		// For the job master, jobID is the workerID here
 		ID:     req.GetWorkerId(),
 		Tp:     libModel.WorkerType(req.GetTaskTypeId()),
 		Config: req.GetTaskConfig(),
@@ -286,11 +279,8 @@ func (s *Server) Stop() {
 		}
 	}
 
-	if s.metaKVClient != nil {
-		err := s.metaKVClient.Close()
-		if err != nil {
-			log.L().Warn("failed to close connection to framework metastore", zap.Error(err))
-		}
+	if s.db != nil {
+		s.db.Close()
 	}
 
 	if s.userRawKVClient != nil {
@@ -456,7 +446,6 @@ func (s *Server) startTCPService(ctx context.Context, wg *errgroup.Group) error 
 	return nil
 }
 
-// current the metastore is an embed etcd underlying
 func (s *Server) fetchMetaStore(ctx context.Context) error {
 	// query service discovery metastore to fetch metastore connection endpoint
 	resp, err := s.masterClient.QueryMetaStore(
@@ -511,13 +500,23 @@ func (s *Server) fetchMetaStore(ctx context.Context) error {
 		Endpoints: []string{resp.Address},
 	}
 
-	cliEx, err := kvclient.NewKVClient(&conf)
+	// TODO: check, dsn need to use tenantID as isolation
+	s.db, err = gorm.NewSQLDB("mysql", "root:xxx@127.0.0.1:3306/root?", gorm.NewDefaultDbConfig())
 	if err != nil {
-		log.L().Error("access framework metastore fail", zap.Any("store-conf", conf), zap.Error(err))
+		log.L().Error("failed to connect to framework metastore", zap.Any("store-conf", storeConf), zap.Error(err))
 		return err
 	}
-	// [TODO] use FrameTenantID here if support multi-tenant
-	s.metaKVClient = kvclient.NewPrefixKVClient(cliEx, tenant.DefaultUserTenantID)
+	s.frameMetaClient, err = gorm.NewMetaOpsClient(s.db)
+	if err != nil {
+		log.L().Error("failed to create orm client to framework metastore", zap.Any("store-conf", storeConf), zap.Error(err))
+		return err
+	}
+	// Initialize all tables if neccesary
+	err = s.frameMetaClient.Initialize()
+	if err != nil {
+		log.L().Error("initialize backend tables for framework fail", zap.Error(err))
+		return err
+	}
 
 	// fetch user metastore connection endpoint
 	resp, err = s.masterClient.QueryMetaStore(

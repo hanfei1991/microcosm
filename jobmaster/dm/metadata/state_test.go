@@ -8,7 +8,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/stretchr/testify/require"
 
-	"github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
+	"github.com/hanfei1991/microcosm/pkg/meta/kv/mockclient"
 )
 
 type DummyState struct {
@@ -53,7 +53,7 @@ func (fs *FailedStore) Key() string {
 func TestDefaultStore(t *testing.T) {
 	t.Parallel()
 
-	kvClient := mock.NewMetaMock()
+	kvClient := mockclient.NewMetaMock()
 	dummyState := &DummyState{I: 1}
 	dummyStore := &DummyStore{
 		TomlStore: NewTomlStore(kvClient),

@@ -3,14 +3,14 @@ package servermaster
 import (
 	"testing"
 
-	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
+	metacom "github.com/hanfei1991/microcosm/pkg/meta/common"
 	"github.com/stretchr/testify/require"
 )
 
 func TestMetaStoreManager(t *testing.T) {
 	t.Parallel()
 
-	storeConf := &metaclient.StoreConfigParams{
+	storeConf := &metacom.StoreConfigParams{
 		Endpoints: []string{
 			"127.0.0.1",
 			"127.0.0.2",
@@ -21,7 +21,7 @@ func TestMetaStoreManager(t *testing.T) {
 	err := manager.Register("root", storeConf)
 	require.Nil(t, err)
 
-	err = manager.Register("root", &metaclient.StoreConfigParams{})
+	err = manager.Register("root", &metacom.StoreConfigParams{})
 	require.Error(t, err)
 
 	store := manager.GetMetaStore("default")
@@ -40,10 +40,10 @@ func TestDefaultMetaStoreManager(t *testing.T) {
 	t.Parallel()
 
 	store := NewFrameMetaConfig()
-	require.Equal(t, metaclient.FrameMetaID, store.StoreID)
-	require.Equal(t, metaclient.DefaultFrameMetaEndpoints, store.Endpoints[0])
+	require.Equal(t, metacom.FrameMetaID, store.StoreID)
+	require.Equal(t, metacom.DefaultFrameMetaEndpoints, store.Endpoints[0])
 
 	store = NewDefaultUserMetaConfig()
-	require.Equal(t, metaclient.DefaultUserMetaID, store.StoreID)
-	require.Equal(t, metaclient.DefaultUserMetaEndpoints, store.Endpoints[0])
+	require.Equal(t, metacom.DefaultUserMetaID, store.StoreID)
+	require.Equal(t, metacom.DefaultUserMetaEndpoints, store.Endpoints[0])
 }

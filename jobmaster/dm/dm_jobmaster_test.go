@@ -16,7 +16,6 @@ import (
 	"github.com/hanfei1991/microcosm/jobmaster/dm/runtime"
 	"github.com/hanfei1991/microcosm/lib"
 	libMetadata "github.com/hanfei1991/microcosm/lib/metadata"
-	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/registry"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
@@ -24,9 +23,10 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/deps"
 	dmpkg "github.com/hanfei1991/microcosm/pkg/dm"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
-	extkv "github.com/hanfei1991/microcosm/pkg/meta/extension"
-	kvmock "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
-	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
+	"github.com/hanfei1991/microcosm/pkg/meta/kv/kvclient"
+	kvmock "github.com/hanfei1991/microcosm/pkg/meta/kv/mockclient"
+	dorm "github.com/hanfei1991/microcosm/pkg/meta/orm"
+	libModel "github.com/hanfei1991/microcosm/pkg/meta/orm/model"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 
 	"github.com/stretchr/testify/mock"
@@ -56,8 +56,8 @@ type masterParamListForTest struct {
 
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
-	MetaKVClient          metaclient.KVClient
-	UserRawKVClient       extkv.KVClientEx
+	FrameMetaClient       *dorm.MetaOpsClient
+	UserRawKVClient       kvclient.KVClientEx
 	ExecutorClientManager client.ClientsManager
 	ServerMasterClient    client.MasterClient
 	ResourceBroker        broker.Broker
@@ -67,10 +67,11 @@ type masterParamListForTest struct {
 func (t *testDMJobmasterSuite) TestRunDMJobMaster() {
 	mockServerMasterClient := &client.MockServerMasterClient{}
 	mockExecutorClient := client.NewClientManager()
+	cli, mock, err := dorm.NewMockMetaOpsClient()
 	depsForTest := masterParamListForTest{
 		MessageHandlerManager: p2p.NewMockMessageHandlerManager(),
 		MessageSender:         p2p.NewMockMessageSender(),
-		MetaKVClient:          kvmock.NewMetaMock(),
+		FrameMetaClient:       cli,
 		UserRawKVClient:       kvmock.NewMetaMock(),
 		ExecutorClientManager: mockExecutorClient,
 		ServerMasterClient:    mockServerMasterClient,
@@ -137,7 +138,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	}
 
 	// init
-	mockBaseJobmaster.On("MetaKVClient").Return(metaKVClient)
+	mockBaseJobmaster.On("FrameMetaClient").Return(metaKVClient)
 	mockBaseJobmaster.On("GetWorkers").Return(map[string]lib.WorkerHandle{}).Once()
 	require.NoError(t.T(), jm.InitImpl(context.Background()))
 	// no error if init again
@@ -279,7 +280,7 @@ func (m *MockBaseJobmaster) GetWorkers() map[string]lib.WorkerHandle {
 	return args.Get(0).(map[string]lib.WorkerHandle)
 }
 
-func (m *MockBaseJobmaster) MetaKVClient() metaclient.KVClient {
+func (m *MockBaseJobmaster) FrameMetaClient() metaclient.KVClient {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	args := m.Called()

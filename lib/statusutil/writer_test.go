@@ -6,9 +6,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	libModel "github.com/hanfei1991/microcosm/lib/model"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
-	"github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
+	mock "github.com/hanfei1991/microcosm/pkg/meta/kv/mockclient"
+	libModel "github.com/hanfei1991/microcosm/pkg/meta/orm/model"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 

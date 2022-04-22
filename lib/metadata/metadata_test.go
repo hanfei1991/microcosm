@@ -6,8 +6,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	libModel "github.com/hanfei1991/microcosm/lib/model"
-	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
+	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kv/mockclient"
+	libModel "github.com/hanfei1991/microcosm/pkg/meta/orm/model"
 )
 
 // These constants are only used for unit testing.

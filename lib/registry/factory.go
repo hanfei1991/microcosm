@@ -8,8 +8,8 @@ import (
 	"github.com/pingcap/errors"
 
 	"github.com/hanfei1991/microcosm/lib"
-	libModel "github.com/hanfei1991/microcosm/lib/model"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
+	libModel "github.com/hanfei1991/microcosm/pkg/meta/orm/model"
 )
 
 // WorkerFactory is an interface that should be implemented by the author of

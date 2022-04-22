@@ -17,7 +17,6 @@ import (
 
 	runtime "github.com/hanfei1991/microcosm/executor/worker"
 	"github.com/hanfei1991/microcosm/lib/metadata"
-	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/statusutil"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pkg/clock"
@@ -25,9 +24,9 @@ import (
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
-	extKV "github.com/hanfei1991/microcosm/pkg/meta/extension"
-	"github.com/hanfei1991/microcosm/pkg/meta/kvclient"
-	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
+	"github.com/hanfei1991/microcosm/pkg/meta/kv/kvclient"
+	dorm "github.com/hanfei1991/microcosm/pkg/meta/orm"
+	libModel "github.com/hanfei1991/microcosm/pkg/meta/orm/model"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/pkg/tenant"
 )
@@ -71,10 +70,10 @@ type BaseWorker interface {
 	Poll(ctx context.Context) error
 	Close(ctx context.Context) error
 	ID() runtime.RunnableID
-	MetaKVClient() metaclient.KVClient
+	MetaKVClient() kvclient.KVClient
 	UpdateStatus(ctx context.Context, status libModel.WorkerStatus) error
 	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) (bool, error)
-	OpenStorage(ctx context.Context, resourcePath resourcemeta.ResourceID) (broker.Handle, error)
+	OpenStorage(ctx context.Context, resourcePath libModel.ResourceID) (broker.Handle, error)
 	// Exit should be called when worker (in user logic) wants to exit.
 	// When `err` is not nil, the status code is assigned WorkerStatusError.
 	// Otherwise worker should set its status code to a meaningful value.
@@ -87,9 +86,9 @@ type DefaultBaseWorker struct {
 	messageHandlerManager p2p.MessageHandlerManager
 	messageSender         p2p.MessageSender
 	// framework metastore prefix kvclient
-	metaKVClient metaclient.KVClient
+	frameMetaClient *dorm.MetaOpsClient
 	// user metastore raw kvclient
-	userRawKVClient extKV.KVClientEx
+	userRawKVClient kvclient.KVClientEx
 	resourceBroker  broker.Broker
 
 	masterClient *masterClient
@@ -115,7 +114,7 @@ type DefaultBaseWorker struct {
 
 	// user metastore prefix kvclient
 	// Don't close it. It's just a prefix wrapper for underlying userRawKVClient
-	userMetaKVClient metaclient.KVClient
+	userMetaKVClient kvclient.KVClient
 }
 
 type workerParams struct {
@@ -123,8 +122,8 @@ type workerParams struct {
 
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
-	MetaKVClient          metaclient.KVClient
-	UserRawKVClient       extKV.KVClientEx
+	FrameMetaClient       *dorm.MetaOpsClient
+	UserRawKVClient       kvclient.KVClientEx
 	ResourceBroker        broker.Broker
 }
 
@@ -144,7 +143,7 @@ func NewBaseWorker(
 		Impl:                  impl,
 		messageHandlerManager: params.MessageHandlerManager,
 		messageSender:         params.MessageSender,
-		metaKVClient:          params.MetaKVClient,
+		frameMetaClient:       params.FrameMetaClient,
 		userRawKVClient:       params.UserRawKVClient,
 		resourceBroker:        params.ResourceBroker,
 
@@ -203,7 +202,7 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) error {
 		w.masterID,
 		w.id,
 		w.messageSender,
-		w.metaKVClient,
+		w.frameMetaClient,
 		w.clock.Mono(),
 		func() error {
 			return errors.Trace(w.Impl.OnMasterFailover(MasterFailoverReason{
@@ -212,10 +211,10 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) error {
 			}))
 		})
 
-	w.workerMetaClient = metadata.NewWorkerMetadataClient(w.masterID, w.metaKVClient)
+	w.workerMetaClient = metadata.NewWorkerMetadataClient(w.masterID, w.frameMetaClient)
 
 	w.statusSender = statusutil.NewWriter(
-		w.metaKVClient, w.messageSender, w.masterClient, w.id)
+		w.frameMetaClient, w.messageSender, w.masterClient, w.id)
 	w.messageRouter = NewMessageRouter(w.id, w.pool, defaultMessageRouterBufferSize,
 		func(topic p2p.Topic, msg p2p.MessageValue) error {
 			return w.Impl.OnMasterMessage(topic, msg)
@@ -303,7 +302,7 @@ func (w *DefaultBaseWorker) ID() runtime.RunnableID {
 	return w.id
 }
 
-func (w *DefaultBaseWorker) MetaKVClient() metaclient.KVClient {
+func (w *DefaultBaseWorker) MetaKVClient() kvclient.KVClient {
 	return w.userMetaKVClient
 }
 
@@ -475,7 +474,7 @@ type masterClient struct {
 	workerID libModel.WorkerID
 
 	messageSender           p2p.MessageSender
-	metaKVClient            metaclient.KVClient
+	frameMetaClient         *dorm.MetaOpsClient
 	lastMasterAckedPingTime clock.MonotonicTime
 
 	timeoutConfig config.TimeoutConfig
@@ -487,7 +486,7 @@ func newMasterClient(
 	masterID libModel.MasterID,
 	workerID libModel.WorkerID,
 	messageRouter p2p.MessageSender,
-	metaKV metaclient.KVClient,
+	metaClient *dorm.MetaOpsClient,
 	initTime clock.MonotonicTime,
 	onMasterFailOver func() error,
 ) *masterClient {
@@ -495,7 +494,7 @@ func newMasterClient(
 		masterID:                masterID,
 		workerID:                workerID,
 		messageSender:           messageRouter,
-		metaKVClient:            metaKV,
+		frameMetaClient:         metaClient,
 		lastMasterAckedPingTime: initTime,
 		timeoutConfig:           config.DefaultTimeoutConfig(),
 		onMasterFailOver:        onMasterFailOver,
@@ -503,7 +502,8 @@ func newMasterClient(
 }
 
 func (m *masterClient) InitMasterInfoFromMeta(ctx context.Context) error {
-	metaClient := metadata.NewMasterMetadataClient(m.masterID, m.metaKVClient)
+	// TODO: projectID
+	metaClient := metadata.NewMasterMetadataClient("projectID", m.masterID, m.frameMetaClient)
 	masterMeta, err := metaClient.Load(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -522,7 +522,8 @@ func (m *masterClient) MasterNodeID() p2p.NodeID {
 }
 
 func (m *masterClient) refreshMasterInfo(ctx context.Context, clock clock.Clock) error {
-	metaClient := metadata.NewMasterMetadataClient(m.masterID, m.metaKVClient)
+	// TODO: projectID
+	metaClient := metadata.NewMasterMetadataClient("projectID", m.masterID, m.frameMetaClient)
 	masterMeta, err := metaClient.Load(ctx)
 	if err != nil {
 		return errors.Trace(err)

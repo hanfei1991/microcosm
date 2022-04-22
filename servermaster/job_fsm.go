@@ -4,9 +4,9 @@ import (
 	"sync"
 
 	"github.com/hanfei1991/microcosm/lib"
-	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/errors"
+	libModel "github.com/hanfei1991/microcosm/pkg/meta/orm/model"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
@@ -14,7 +14,7 @@ import (
 
 type jobHolder struct {
 	lib.WorkerHandle
-	*libModel.MasterMetaKVData
+	*libModel.MasterMeta
 	// True means the job is loaded from metastore during jobmanager failover.
 	// Otherwise it is added by SubmitJob.
 	addFromFailover bool
@@ -67,7 +67,7 @@ type JobFsm struct {
 	JobStats
 
 	jobsMu      sync.RWMutex
-	pendingJobs map[libModel.MasterID]*libModel.MasterMetaKVData
+	pendingJobs map[libModel.MasterID]*libModel.MasterMeta
 	waitAckJobs map[libModel.MasterID]*jobHolder
 	onlineJobs  map[libModel.MasterID]*jobHolder
 }
@@ -79,7 +79,7 @@ type JobStats interface {
 
 func NewJobFsm() *JobFsm {
 	return &JobFsm{
-		pendingJobs: make(map[libModel.MasterID]*libModel.MasterMetaKVData),
+		pendingJobs: make(map[libModel.MasterID]*libModel.MasterMeta),
 		waitAckJobs: make(map[libModel.MasterID]*jobHolder),
 		onlineJobs:  make(map[libModel.MasterID]*jobHolder),
 	}
@@ -116,7 +116,7 @@ func (fsm *JobFsm) QueryJob(jobID libModel.MasterID) *pb.QueryJobResponse {
 		if !ok {
 			return nil
 		}
-		meta := job.MasterMetaKVData
+		meta := job.MasterMeta
 		resp := &pb.QueryJobResponse{
 			Tp:     int64(meta.Tp),
 			Config: meta.Config,
@@ -163,16 +163,16 @@ func (fsm *JobFsm) QueryJob(jobID libModel.MasterID) *pb.QueryJobResponse {
 	return checkOnlineJob()
 }
 
-func (fsm *JobFsm) JobDispatched(job *libModel.MasterMetaKVData, addFromFailover bool) {
+func (fsm *JobFsm) JobDispatched(job *libModel.MasterMeta, addFromFailover bool) {
 	fsm.jobsMu.Lock()
 	defer fsm.jobsMu.Unlock()
 	fsm.waitAckJobs[job.ID] = &jobHolder{
-		MasterMetaKVData: job,
-		addFromFailover:  addFromFailover,
+		MasterMeta:      job,
+		addFromFailover: addFromFailover,
 	}
 }
 
-func (fsm *JobFsm) IterPendingJobs(dispatchJobFn func(job *libModel.MasterMetaKVData) (string, error)) error {
+func (fsm *JobFsm) IterPendingJobs(dispatchJobFn func(job *libModel.MasterMeta) (string, error)) error {
 	fsm.jobsMu.Lock()
 	defer fsm.jobsMu.Unlock()
 
@@ -184,7 +184,7 @@ func (fsm *JobFsm) IterPendingJobs(dispatchJobFn func(job *libModel.MasterMetaKV
 		delete(fsm.pendingJobs, oldJobID)
 		job.ID = id
 		fsm.waitAckJobs[id] = &jobHolder{
-			MasterMetaKVData: job,
+			MasterMeta: job,
 		}
 		log.L().Info("job master recovered", zap.Any("job", job))
 	}
@@ -192,7 +192,7 @@ func (fsm *JobFsm) IterPendingJobs(dispatchJobFn func(job *libModel.MasterMetaKV
 	return nil
 }
 
-func (fsm *JobFsm) IterWaitAckJobs(dispatchJobFn func(job *libModel.MasterMetaKVData) (string, error)) error {
+func (fsm *JobFsm) IterWaitAckJobs(dispatchJobFn func(job *libModel.MasterMeta) (string, error)) error {
 	fsm.jobsMu.Lock()
 	defer fsm.jobsMu.Unlock()
 
@@ -200,7 +200,7 @@ func (fsm *JobFsm) IterWaitAckJobs(dispatchJobFn func(job *libModel.MasterMetaKV
 		if !job.addFromFailover {
 			continue
 		}
-		_, err := dispatchJobFn(job.MasterMetaKVData)
+		_, err := dispatchJobFn(job.MasterMeta)
 		if err != nil {
 			return err
 		}
@@ -220,8 +220,8 @@ func (fsm *JobFsm) JobOnline(worker lib.WorkerHandle) error {
 		return errors.ErrWorkerNotFound.GenWithStackByArgs(worker.ID())
 	}
 	fsm.onlineJobs[worker.ID()] = &jobHolder{
-		WorkerHandle:     worker,
-		MasterMetaKVData: job.MasterMetaKVData,
+		WorkerHandle: worker,
+		MasterMeta:   job.MasterMeta,
 	}
 	delete(fsm.waitAckJobs, worker.ID())
 	return nil
@@ -243,7 +243,7 @@ func (fsm *JobFsm) JobOffline(worker lib.WorkerHandle, needFailover bool) {
 		delete(fsm.waitAckJobs, worker.ID())
 	}
 	if needFailover {
-		fsm.pendingJobs[worker.ID()] = job.MasterMetaKVData
+		fsm.pendingJobs[worker.ID()] = job.MasterMeta
 	}
 }
 
@@ -255,7 +255,7 @@ func (fsm *JobFsm) JobDispatchFailed(worker lib.WorkerHandle) error {
 	if !ok {
 		return errors.ErrWorkerNotFound.GenWithStackByArgs(worker.ID())
 	}
-	fsm.pendingJobs[worker.ID()] = job.MasterMetaKVData
+	fsm.pendingJobs[worker.ID()] = job.MasterMeta
 	delete(fsm.waitAckJobs, worker.ID())
 	return nil
 }

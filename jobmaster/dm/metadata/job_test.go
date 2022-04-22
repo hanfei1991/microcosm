@@ -8,7 +8,7 @@ import (
 
 	"github.com/hanfei1991/microcosm/jobmaster/dm/config"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
-	"github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
+	"github.com/hanfei1991/microcosm/pkg/meta/kv/mockclient"
 )
 
 const (
@@ -22,7 +22,7 @@ func TestJobStore(t *testing.T) {
 	)
 	t.Parallel()
 
-	jobStore := NewJobStore("job_test", mock.NewMetaMock())
+	jobStore := NewJobStore("job_test", mockclient.NewMetaMock())
 	key := jobStore.Key()
 	keys, err := adapter.DMJobKeyAdapter.Decode(key)
 	require.NoError(t, err)

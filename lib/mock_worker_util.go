@@ -9,12 +9,13 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/statusutil"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/deps"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
-	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
+	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kv/mockclient"
+	dorm "github.com/hanfei1991/microcosm/pkg/meta/orm"
+	libModel "github.com/hanfei1991/microcosm/pkg/meta/orm/model"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
@@ -31,11 +32,17 @@ func MockBaseWorker(
 	ctx := dcontext.Background()
 	dp := deps.NewDeps()
 
+	// TODO: mock?
+	mcli, mock, err := dorm.NewMockMetaOpsClient()
+	if err != nil {
+		panic(err)
+	}
+
 	resourceBroker := broker.NewBrokerForTesting("executor-1")
 	params := workerParamListForTest{
 		MessageHandlerManager: p2p.NewMockMessageHandlerManager(),
 		MessageSender:         p2p.NewMockMessageSender(),
-		MetaKVClient:          mockkv.NewMetaMock(),
+		FrameMetaClient:       mcli,
 		UserRawKVClient:       mockkv.NewMetaMock(),
 		ResourceBroker:        resourceBroker,
 	}

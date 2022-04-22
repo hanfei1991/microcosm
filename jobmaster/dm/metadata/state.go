@@ -9,7 +9,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 
-	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
+	"github.com/hanfei1991/microcosm/pkg/meta/kv/kvclient"
 )
 
 // State represents the state which need to be stored in metadata.
@@ -27,28 +27,28 @@ type TomlStore struct {
 	Store
 
 	state    State
-	kvClient metaclient.KVClient
+	kvClient kvclient.KVClient
 
 	mu sync.RWMutex
 }
 
-func NewTomlStore(kvClient metaclient.KVClient) *TomlStore {
+func NewTomlStore(kvClient kvclient.KVClient) *TomlStore {
 	return &TomlStore{
 		kvClient: kvClient,
 	}
 }
 
-func (ds *TomlStore) PutOp(state State) (metaclient.Op, error) {
+func (ds *TomlStore) PutOp(state State) (kvclient.Op, error) {
 	var b bytes.Buffer
 	err := toml.NewEncoder(&b).Encode(state)
 	if err != nil {
-		return metaclient.Op{}, errors.Trace(err)
+		return kvclient.Op{}, errors.Trace(err)
 	}
-	return metaclient.OpPut(ds.Key(), b.String()), nil
+	return kvclient.OpPut(ds.Key(), b.String()), nil
 }
 
-func (ds *TomlStore) DeleteOp() metaclient.Op {
-	return metaclient.OpDelete(ds.Key())
+func (ds *TomlStore) DeleteOp() kvclient.Op {
+	return kvclient.OpDelete(ds.Key())
 }
 
 // checkAllFieldsIsPublic check all fields of a state is public.

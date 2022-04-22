@@ -13,8 +13,8 @@ import (
 	"github.com/hanfei1991/microcosm/jobmaster/dm/metadata"
 	"github.com/hanfei1991/microcosm/jobmaster/dm/runtime"
 	"github.com/hanfei1991/microcosm/lib"
-	libModel "github.com/hanfei1991/microcosm/lib/model"
-	"github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
+	mock "github.com/hanfei1991/microcosm/pkg/meta/kv/mockclient"
+	libModel "github.com/hanfei1991/microcosm/pkg/meta/orm/model"
 )
 
 func (t *testDMJobmasterSuite) TestUpdateWorkerStatus() {

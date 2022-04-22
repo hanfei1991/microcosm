@@ -11,11 +11,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/hanfei1991/microcosm/lib"
-	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/registry"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
-	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
+	"github.com/hanfei1991/microcosm/pkg/meta/kv/kvclient"
+	libModel "github.com/hanfei1991/microcosm/pkg/meta/orm/model"
 )
 
 // nolint: unused
@@ -64,7 +64,7 @@ func mockWorkerConfig() []byte {
 func putMasterMeta(
 	ctx context.Context,
 	t *testing.T,
-	metaClient metaclient.KVClient,
+	metaClient kvclient.KVClient,
 	metaData *libModel.MasterMetaKVData,
 ) {
 	masterKey := adapter.MasterInfoKey.Encode(masterID)

@@ -12,7 +12,7 @@ import (
 	"github.com/hanfei1991/microcosm/jobmaster/dm/metadata"
 	"github.com/hanfei1991/microcosm/jobmaster/dm/runtime"
 	"github.com/hanfei1991/microcosm/lib"
-	"github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
+	mock "github.com/hanfei1991/microcosm/pkg/meta/kv/mockclient"
 )
 
 const (

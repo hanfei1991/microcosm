@@ -18,7 +18,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/dataset"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
-	"github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
+	mock "github.com/hanfei1991/microcosm/pkg/meta/kv/mockclient"
 )
 
 type serviceTestSuite struct {

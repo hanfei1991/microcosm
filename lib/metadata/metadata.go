@@ -2,194 +2,130 @@ package metadata
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 
-	libModel "github.com/hanfei1991/microcosm/lib/model"
-	"github.com/hanfei1991/microcosm/pkg/adapter"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
-	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
+	dorm "github.com/hanfei1991/microcosm/pkg/meta/orm"
+	libModel "github.com/hanfei1991/microcosm/pkg/meta/orm/model"
 )
 
 const JobManagerUUID = "dataflow-engine-job-manager"
 
 type MasterMetadataClient struct {
-	masterID     libModel.MasterID
-	metaKVClient metaclient.KVClient
+	projectID  libModel.ProjectID
+	masterID   libModel.MasterID
+	metaClient *dorm.MetaOpsClient
 }
 
-func NewMasterMetadataClient(masterID libModel.MasterID, metaKVClient metaclient.KVClient) *MasterMetadataClient {
+func NewMasterMetadataClient(
+	projectID libModel.ProjectID,
+	masterID libModel.MasterID,
+	metaClient *dorm.MetaOpsClient) *MasterMetadataClient {
 	return &MasterMetadataClient{
-		masterID:     masterID,
-		metaKVClient: metaKVClient,
+		projectID:  projectID,
+		masterID:   masterID,
+		metaClient: metaClient,
 	}
 }
 
-func (c *MasterMetadataClient) Load(ctx context.Context) (*libModel.MasterMetaKVData, error) {
-	key := adapter.MasterMetaKey.Encode(c.masterID)
-	resp, err := c.metaKVClient.Get(ctx, key)
+func (c *MasterMetadataClient) Load(ctx context.Context) (*libModel.MasterMeta, error) {
+	// TODO: what if don't exists
+	// NotfoundErr
+	masterMeta, err := c.metaclient.GetJobByID(ctx, c.masterID)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	if len(resp.Kvs) == 0 {
-		// TODO refine handling the situation where the mata key does not exist at this point
-		masterMeta := &libModel.MasterMetaKVData{
-			ID:         c.masterID,
-			StatusCode: libModel.MasterStatusUninit,
-		}
-		return masterMeta, nil
-	}
-	masterMetaBytes := resp.Kvs[0].Value
-	var masterMeta libModel.MasterMetaKVData
-	if err := json.Unmarshal(masterMetaBytes, &masterMeta); err != nil {
-		// TODO wrap the error
-		return nil, errors.Trace(err)
-	}
-	return &masterMeta, nil
+	return masterMeta, nil
 }
 
-func (c *MasterMetadataClient) Store(ctx context.Context, data *libModel.MasterMetaKVData) error {
-	key := adapter.MasterMetaKey.Encode(c.masterID)
-	dataBytes, err := json.Marshal(data)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	_, err = c.metaKVClient.Put(ctx, key, string(dataBytes))
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	return nil
+func (c *MasterMetadataClient) Store(ctx context.Context, data *libModel.MasterMeta) error {
+	// TODO: Add? Update? data has ID?
+	err := c.metaClient.UpdateJob(ctx, data)
+	return errors.Trace(err)
 }
 
 func (c *MasterMetadataClient) Delete(ctx context.Context) error {
-	key := adapter.MasterMetaKey.Encode(c.masterID)
-	_, err := c.metaKVClient.Delete(ctx, key)
+	err := c.metaClient.DeleteJob(ctx, c.masterID)
 	return errors.Trace(err)
 }
 
 // LoadAllMasters loads all job masters from metastore
-func (c *MasterMetadataClient) LoadAllMasters(ctx context.Context) ([]*libModel.MasterMetaKVData, error) {
-	resp, err := c.metaKVClient.Get(ctx, adapter.MasterMetaKey.Path(), metaclient.WithPrefix())
+func (c *MasterMetadataClient) LoadAllMasters(ctx context.Context) ([]*libModel.MasterMeta, error) {
+	resp, err := c.metaClient.QueryJobsByProjectID(ctx, c.projectID)
 	if err != nil {
 		return nil, errors.Trace(err)
-	}
-	meta := make([]*libModel.MasterMetaKVData, 0, len(resp.Kvs))
-	for _, kv := range resp.Kvs {
-		masterMeta := &libModel.MasterMetaKVData{}
-		if err := json.Unmarshal(kv.Value, masterMeta); err != nil {
-			return nil, errors.Trace(err)
-		}
-		meta = append(meta, masterMeta)
 	}
 	return meta, nil
 }
 
 type WorkerMetadataClient struct {
-	masterID     libModel.MasterID
-	metaKVClient metaclient.KVClient
+	projectID  libModel.ProjectID
+	masterID   libModel.MasterID
+	metaClient metaclient.MetaOpsClient
 }
 
 func NewWorkerMetadataClient(
+	projectID libModel.ProjectID,
 	masterID libModel.MasterID,
-	metaClient metaclient.KVClient,
+	metaClient *dorm.MetaOpsClient,
 ) *WorkerMetadataClient {
 	return &WorkerMetadataClient{
-		masterID:     masterID,
-		metaKVClient: metaClient,
+		projectID:  projectID,
+		masterID:   masterID,
+		metaClient: metaClient,
 	}
 }
 
-func (c *WorkerMetadataClient) LoadAllWorkers(ctx context.Context) (map[libModel.WorkerID]*libModel.WorkerStatus, error) {
-	loadPrefix := adapter.WorkerKeyAdapter.Curry(c.masterID)
-	resp, err := c.metaKVClient.Get(ctx, loadPrefix.Path(), metaclient.WithPrefix())
+func (c *WorkerMetadataClient) LoadAllWorkers(ctx context.Context) (map[libModel.WorkerID]*libModel.WorkerMeta, error) {
+	resp, err := c.metaClient.QueryWorkersByMasterID(ctx, c.masterID)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	ret := make(map[libModel.WorkerID]*libModel.WorkerStatus, len(resp.Kvs))
-	for _, kv := range resp.Kvs {
-		decoded, err := adapter.WorkerKeyAdapter.Decode(string(kv.Key))
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		if len(decoded) != 2 {
-			// TODO add an error type
-			return nil, errors.Errorf("unexpected key: %s", string(kv.Key))
-		}
 
-		// NOTE decoded[0] is the master ID.
-		workerID := decoded[1]
-
-		workerMetaBytes := kv.Value
-		var workerMeta libModel.WorkerStatus
-		if err := json.Unmarshal(workerMetaBytes, &workerMeta); err != nil {
-			// TODO wrap the error
-			return nil, errors.Trace(err)
-		}
-		ret[workerID] = &workerMeta
+	res := make(map[libModel.WorkerID]*libModel.WorkerMeta, len(resp))
+	for _, m := range resp {
+		res[m.ID] = m
 	}
-	return ret, nil
+	return res, nil
 }
 
-func (c *WorkerMetadataClient) Load(ctx context.Context, workerID libModel.WorkerID) (*libModel.WorkerStatus, error) {
-	resp, err := c.metaKVClient.Get(ctx, c.workerMetaKey(workerID))
+func (c *WorkerMetadataClient) Load(ctx context.Context, workerID libModel.WorkerID) (*libModel.WorkerMeta, error) {
+	resp, err := c.metaClient.GetWorkerByID(ctx, c.masterID, workerID)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	if len(resp.Kvs) == 0 {
-		return nil, derror.ErrWorkerNoMeta.GenWithStackByArgs()
-	}
-	workerMetaBytes := resp.Kvs[0].Value
-	var workerMeta libModel.WorkerStatus
-	if err := json.Unmarshal(workerMetaBytes, &workerMeta); err != nil {
-		// TODO wrap the error
-		return nil, errors.Trace(err)
-	}
 
-	return &workerMeta, nil
+	return resp, nil
 }
 
 func (c *WorkerMetadataClient) Remove(ctx context.Context, id libModel.WorkerID) (bool, error) {
-	_, err := c.metaKVClient.Delete(ctx, c.workerMetaKey(id))
+	err := c.metaClient.DeleteWorker(ctx, c.mastersID, id)
 	if err != nil {
 		return false, errors.Trace(err)
 	}
 	return true, nil
 }
 
-func (c *WorkerMetadataClient) Store(ctx context.Context, workerID libModel.WorkerID, data *libModel.WorkerStatus) error {
-	dataBytes, err := json.Marshal(data)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	_, err = c.metaKVClient.Put(ctx, c.workerMetaKey(workerID), string(dataBytes))
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	return nil
+func (c *WorkerMetadataClient) Store(ctx context.Context, workerID libModel.WorkerID, data *libModel.WorkerMeta) error {
+	// TODO add? Update?
+	err = c.metaClient.UpdateWorker(ctx, data)
+	return errors.Trace(err)
 }
 
 func (c *WorkerMetadataClient) MasterID() libModel.MasterID {
 	return c.masterID
 }
 
-func (c *WorkerMetadataClient) workerMetaKey(id libModel.WorkerID) string {
-	return libModel.EncodeWorkerStatusKey(c.masterID, id)
-}
-
 // StoreMasterMeta is exposed to job manager for job master meta persistence
 func StoreMasterMeta(
 	ctx context.Context,
-	metaKVClient metaclient.KVClient,
-	meta *libModel.MasterMetaKVData,
+	metaClient *dorm.MetaOpsClient,
+	meta *libModel.MasterMeta,
 ) error {
-	metaClient := NewMasterMetadataClient(meta.ID, metaKVClient)
+	metaClient := NewMasterMetadataClient(meta.ProjectID, meta.ID, metaClient)
 	masterMeta, err := metaClient.Load(ctx)
 	if err != nil {
 		if !derror.ErrMasterNotFound.Equal(err) {
@@ -204,9 +140,9 @@ func StoreMasterMeta(
 
 func DeleteMasterMeta(
 	ctx context.Context,
-	metaKVClient metaclient.KVClient,
+	metaClient *dorm.MetaOpsClient,
 	masterID libModel.MasterID,
 ) error {
-	metaClient := NewMasterMetadataClient(masterID, metaKVClient)
+	metaClient := NewMasterMetadataClient("", masterID, metaClient)
 	return metaClient.Delete(ctx)
 }

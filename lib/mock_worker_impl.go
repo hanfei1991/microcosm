@@ -8,11 +8,11 @@ import (
 	"go.uber.org/atomic"
 	"go.uber.org/dig"
 
-	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
-	extkv "github.com/hanfei1991/microcosm/pkg/meta/extension"
-	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
-	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
+	"github.com/hanfei1991/microcosm/pkg/meta/kv/kvclient"
+	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kv/mockclient"
+	dorm "github.com/hanfei1991/microcosm/pkg/meta/orm"
+	libModel "github.com/hanfei1991/microcosm/pkg/meta/orm/model"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
@@ -35,8 +35,8 @@ type workerParamListForTest struct {
 
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
-	MetaKVClient          metaclient.KVClient
-	UserRawKVClient       extkv.KVClientEx
+	FrameMetaClient       *dorm.MetaOpsClient
+	UserRawKVClient       kvclient.KVClientEx
 	ResourceBroker        broker.Broker
 }
 

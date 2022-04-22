@@ -19,7 +19,6 @@ import (
 	"github.com/hanfei1991/microcosm/lib/config"
 	"github.com/hanfei1991/microcosm/lib/master"
 	"github.com/hanfei1991/microcosm/lib/metadata"
-	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/statusutil"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
@@ -28,9 +27,9 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/deps"
 	"github.com/hanfei1991/microcosm/pkg/errctx"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
-	extKV "github.com/hanfei1991/microcosm/pkg/meta/extension"
-	"github.com/hanfei1991/microcosm/pkg/meta/kvclient"
-	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
+	"github.com/hanfei1991/microcosm/pkg/meta/kv/kvclient"
+	dorm "github.com/hanfei1991/microcosm/pkg/meta/orm"
+	libModel "github.com/hanfei1991/microcosm/pkg/meta/orm/model"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/pkg/quota"
 	"github.com/hanfei1991/microcosm/pkg/tenant"
@@ -83,10 +82,10 @@ const (
 
 type BaseMaster interface {
 	// MetaKVClient return user metastore kv client
-	MetaKVClient() metaclient.KVClient
+	MetaKVClient() kvclient.KVClient
 	Init(ctx context.Context) error
 	Poll(ctx context.Context) error
-	MasterMeta() *libModel.MasterMetaKVData
+	MasterMeta() *libModel.MasterMeta
 	MasterID() libModel.MasterID
 	GetWorkers() map[libModel.WorkerID]WorkerHandle
 	IsMasterReady() bool
@@ -103,9 +102,9 @@ type DefaultBaseMaster struct {
 	messageHandlerManager p2p.MessageHandlerManager
 	messageSender         p2p.MessageSender
 	// framework metastore prefix kvclient
-	metaKVClient metaclient.KVClient
+	frameMetaClient *dorm.MetaOpsClient
 	// user metastore raw kvclient
-	userRawKVClient       extKV.KVClientEx
+	userRawKVClient       kvclient.KVClientEx
 	executorClientManager client.ClientsManager
 	serverMasterClient    client.MasterClient
 
@@ -127,11 +126,11 @@ type DefaultBaseMaster struct {
 	advertiseAddr string
 	nodeID        p2p.NodeID
 	timeoutConfig config.TimeoutConfig
-	masterMeta    *libModel.MasterMetaKVData
+	masterMeta    *libModel.MasterMeta
 
 	// user metastore prefix kvclient
 	// Don't close it. It's just a prefix wrapper for underlying userRawKVClient
-	userMetaKVClient metaclient.KVClient
+	userMetaKVClient kvclient.KVClient
 
 	// components for easier unit testing
 	uuidGen uuid.Generator
@@ -148,10 +147,10 @@ type masterParams struct {
 
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
-	// framework metastore prefix kvclient
-	MetaKVClient metaclient.KVClient
+	// framework metastore client
+	FrameMetaClient *dorm.MetaOpsClient
 	// user metastore raw kvclient
-	UserRawKVClient       extKV.KVClientEx
+	UserRawKVClient       kvclient.KVClientEx
 	ExecutorClientManager client.ClientsManager
 	ServerMasterClient    client.MasterClient
 }
@@ -164,7 +163,7 @@ func NewBaseMaster(
 	var (
 		nodeID        p2p.NodeID
 		advertiseAddr string
-		masterMeta    = &libModel.MasterMetaKVData{}
+		masterMeta    = &libModel.MasterMeta{}
 		params        masterParams
 	)
 	if ctx != nil {
@@ -186,7 +185,7 @@ func NewBaseMaster(
 		Impl:                  impl,
 		messageHandlerManager: params.MessageHandlerManager,
 		messageSender:         params.MessageSender,
-		metaKVClient:          params.MetaKVClient,
+		frameMetaClient:       params.FrameMetaClient,
 		userRawKVClient:       params.UserRawKVClient,
 		executorClientManager: params.ExecutorClientManager,
 		serverMasterClient:    params.ServerMasterClient,
@@ -212,7 +211,7 @@ func NewBaseMaster(
 	}
 }
 
-func (m *DefaultBaseMaster) MetaKVClient() metaclient.KVClient {
+func (m *DefaultBaseMaster) MetaKVClient() kvclient.KVClient {
 	return m.userMetaKVClient
 }
 
@@ -250,7 +249,7 @@ func (m *DefaultBaseMaster) doInit(ctx context.Context) (isFirstStartUp bool, er
 	m.workerManager = master.NewWorkerManager(
 		m.id,
 		epoch,
-		m.metaKVClient,
+		m.frameMetaClient,
 		m.messageSender,
 		func(_ context.Context, handle master.WorkerHandle) error {
 			return m.Impl.OnWorkerOnline(handle)
@@ -364,7 +363,7 @@ func (m *DefaultBaseMaster) doPoll(ctx context.Context) error {
 	return m.workerManager.Tick(ctx)
 }
 
-func (m *DefaultBaseMaster) MasterMeta() *libModel.MasterMetaKVData {
+func (m *DefaultBaseMaster) MasterMeta() *libModel.MasterMeta {
 	return m.masterMeta
 }
 
@@ -405,14 +404,14 @@ func (m *DefaultBaseMaster) OnError(err error) {
 // master meta is persisted before it is created, in this function we update some
 // fileds to the current value, including epoch, nodeID and advertiseAddr.
 func (m *DefaultBaseMaster) refreshMetadata(ctx context.Context) (isInit bool, epoch libModel.Epoch, err error) {
-	metaClient := metadata.NewMasterMetadataClient(m.id, m.metaKVClient)
+	metaClient := metadata.NewMasterMetadataClient(m.id, m.frameMetaClient)
 
 	masterMeta, err := metaClient.Load(ctx)
 	if err != nil {
 		return false, 0, err
 	}
 
-	epoch, err = m.metaKVClient.GenEpoch(ctx)
+	epoch, err = m.frameMetaClient.GenEpoch(ctx)
 	if err != nil {
 		return false, 0, err
 	}
@@ -436,7 +435,7 @@ func (m *DefaultBaseMaster) refreshMetadata(ctx context.Context) (isInit bool, e
 func (m *DefaultBaseMaster) markStatusCodeInMetadata(
 	ctx context.Context, code libModel.MasterStatusCode,
 ) error {
-	metaClient := metadata.NewMasterMetadataClient(m.id, m.metaKVClient)
+	metaClient := metadata.NewMasterMetadataClient("", m.id, m.frameMetaClient)
 	masterMeta, err := metaClient.Load(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -447,7 +446,7 @@ func (m *DefaultBaseMaster) markStatusCodeInMetadata(
 }
 
 // prepareWorkerConfig extracts information from WorkerConfig into detail fields.
-// - If workerType is master type, the config is a `*MasterMetaKVData` struct and
+// - If workerType is master type, the config is a `*MasterMeta` struct and
 //   contains pre allocated maseter ID, and json marshalled config.
 // - If workerType is worker type, the config is a user defined config struct, we
 //   marshal it to byte slice as returned config, and generate a random WorkerID.
@@ -456,7 +455,7 @@ func (m *DefaultBaseMaster) prepareWorkerConfig(
 ) (rawConfig []byte, workerID libModel.WorkerID, err error) {
 	switch workerType {
 	case CvsJobMaster, FakeJobMaster, DMJobMaster:
-		masterMeta, ok := config.(*libModel.MasterMetaKVData)
+		masterMeta, ok := config.(*libModel.MasterMeta)
 		if !ok {
 			err = derror.ErrMasterInvalidMeta.GenWithStackByArgs(config)
 			return

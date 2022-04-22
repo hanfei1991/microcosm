@@ -18,7 +18,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/ctxmu"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
-	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
+	dorm "github.com/hanfei1991/microcosm/pkg/meta/orm"
 )
 
 // Service implements pb.ResourceManagerServer
@@ -48,7 +48,7 @@ const (
 )
 
 func NewService(
-	metaclient metaclient.KV,
+	metaclient *dorm.MetaOpsClient,
 	executorInfoProvider ExecutorInfoProvider,
 	preRPCHook *rpcutil.PreRPCHook[pb.ResourceManagerClient],
 ) *Service {

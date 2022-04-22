@@ -26,7 +26,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/etcdutils"
-	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
+	metacom "github.com/hanfei1991/microcosm/pkg/meta/common"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.etcd.io/etcd/server/v3/embed"
 	"go.uber.org/zap"
@@ -78,8 +78,8 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.Etcd.Name, "name", "", "human-readable name for this DF-master member")
 	fs.StringVar(&cfg.Etcd.DataDir, "data-dir", "", "data directory for etcd using")
 
-	fs.StringVar(&cfg.FrameMetaConf.Endpoints[0], "frame-meta-endpoints", metaclient.DefaultFrameMetaEndpoints, `framework metastore endpoints`)
-	fs.StringVar(&cfg.UserMetaConf.Endpoints[0], "user-meta-endpoints", metaclient.DefaultUserMetaEndpoints, `user metastore endpoints`)
+	fs.StringVar(&cfg.FrameMetaConf.Endpoints[0], "frame-meta-endpoints", metacom.DefaultFrameMetaEndpoints, `framework metastore endpoints`)
+	fs.StringVar(&cfg.UserMetaConf.Endpoints[0], "user-meta-endpoints", metacom.DefaultUserMetaEndpoints, `user metastore endpoints`)
 
 	fs.StringVar(&cfg.Etcd.InitialCluster, "initial-cluster", "", fmt.Sprintf("initial cluster configuration for bootstrapping, e.g. dm-master=%s", defaultPeerUrls))
 	fs.StringVar(&cfg.Etcd.PeerUrls, "peer-urls", defaultPeerUrls, "URLs for peer traffic")
@@ -107,8 +107,8 @@ type Config struct {
 	// NOTE: more items will be add when adding leader election
 	Etcd *etcdutils.ConfigParams `toml:"etcd" json:"etcd"`
 
-	FrameMetaConf *metaclient.StoreConfigParams `toml:"frame-metastore-conf" json:"frame-metastore-conf"`
-	UserMetaConf  *metaclient.StoreConfigParams `toml:"user-metastore-conf" json:"user-metastore-conf"`
+	FrameMetaConf *metacom.StoreConfigParams `toml:"frame-metastore-conf" json:"frame-metastore-conf"`
+	UserMetaConf  *metacom.StoreConfigParams `toml:"user-metastore-conf" json:"user-metastore-conf"`
 
 	KeepAliveTTLStr string `toml:"keepalive-ttl" json:"keepalive-ttl"`
 	// time interval string to check executor aliveness

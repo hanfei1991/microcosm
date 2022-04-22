@@ -20,15 +20,15 @@ require (
 	github.com/pingcap/log v0.0.0-20211215031037-e024ba4eb0ee
 	github.com/pingcap/tidb v1.1.0-beta.0.20220412180037-d07b66ea638c
 	github.com/pingcap/tidb-tools v6.0.0-alpha.0.20220317013353-dfc5146f4746+incompatible
-	github.com/pingcap/tiflow v0.0.0-20220415071036-480fe3b3d451
+	github.com/pingcap/tiflow v0.0.0-20220422030604-f29084ce1791
 	github.com/prometheus/client_golang v1.12.1
 	github.com/spf13/cobra v1.4.0
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.7.1
-	go.etcd.io/etcd/api/v3 v3.5.2
-	go.etcd.io/etcd/client/pkg/v3 v3.5.2
-	go.etcd.io/etcd/client/v3 v3.5.2
-	go.etcd.io/etcd/server/v3 v3.5.2
+	go.etcd.io/etcd/api/v3 v3.5.3
+	go.etcd.io/etcd/client/pkg/v3 v3.5.3
+	go.etcd.io/etcd/client/v3 v3.5.3
+	go.etcd.io/etcd/server/v3 v3.5.3
 	go.uber.org/atomic v1.9.0
 	go.uber.org/dig v1.13.0
 	go.uber.org/goleak v1.1.12
@@ -197,9 +197,9 @@ require (
 	github.com/xitongsys/parquet-go v1.6.0 // indirect
 	github.com/yusufpapurcu/wmi v1.2.2 // indirect
 	go.etcd.io/bbolt v1.3.6 // indirect
-	go.etcd.io/etcd/client/v2 v2.305.2 // indirect
-	go.etcd.io/etcd/pkg/v3 v3.5.2 // indirect
-	go.etcd.io/etcd/raft/v3 v3.5.2 // indirect
+	go.etcd.io/etcd/client/v2 v2.305.3 // indirect
+	go.etcd.io/etcd/pkg/v3 v3.5.3 // indirect
+	go.etcd.io/etcd/raft/v3 v3.5.3 // indirect
 	go.opencensus.io v0.23.0 // indirect
 	go.opentelemetry.io/contrib v0.20.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.20.0 // indirect
@@ -216,7 +216,7 @@ require (
 	golang.org/x/exp v0.0.0-20200513190911-00229845015e // indirect
 	golang.org/x/net v0.0.0-20220127200216-cd36cc0744dd // indirect
 	golang.org/x/oauth2 v0.0.0-20211104180415-d3ed0bb246c8 // indirect
-	golang.org/x/sys v0.0.0-20220408201424-a24fb2fb8a0f // indirect
+	golang.org/x/sys v0.0.0-20220412211240-33da011f77ad // indirect
 	golang.org/x/text v0.3.7 // indirect
 	golang.org/x/tools v0.1.10 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect

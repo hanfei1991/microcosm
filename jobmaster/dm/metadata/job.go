@@ -6,9 +6,9 @@ import (
 	"github.com/pingcap/errors"
 
 	"github.com/hanfei1991/microcosm/jobmaster/dm/config"
-	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
-	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
+	"github.com/hanfei1991/microcosm/pkg/meta/kv/kvclient"
+	libModel "github.com/hanfei1991/microcosm/pkg/meta/orm/model"
 )
 
 // TODO: use Stage in lib or move Stage to lib.
@@ -65,7 +65,7 @@ type JobStore struct {
 	id libModel.MasterID
 }
 
-func NewJobStore(id libModel.MasterID, kvClient metaclient.KVClient) *JobStore {
+func NewJobStore(id libModel.MasterID, kvClient kvclient.KVClient) *JobStore {
 	jobStore := &JobStore{
 		TomlStore: NewTomlStore(kvClient),
 		id:        id,

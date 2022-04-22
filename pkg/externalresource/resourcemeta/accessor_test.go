@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
+	mock "github.com/hanfei1991/microcosm/pkg/meta/kv/mockclient"
 	"github.com/stretchr/testify/require"
 )
 

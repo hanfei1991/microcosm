@@ -12,20 +12,19 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/hanfei1991/microcosm/lib/config"
-	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/statusutil"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
-	"github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
-	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
+	"github.com/hanfei1991/microcosm/pkg/meta/kv/kvclient"
+	libModel "github.com/hanfei1991/microcosm/pkg/meta/orm/model"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
 type workerManageTestSuite struct {
 	manager       *WorkerManager
 	masterNode    p2p.NodeID
-	meta          metaclient.KVClient
+	meta          kvclient.KVClient
 	messageSender p2p.MessageSender
 	clock         *clock.Mock
 

@@ -11,13 +11,13 @@ import (
 
 	"github.com/hanfei1991/microcosm/lib/config"
 	"github.com/hanfei1991/microcosm/lib/metadata"
-	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/statusutil"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	"github.com/hanfei1991/microcosm/pkg/errctx"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
-	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
+	dorm "github.com/hanfei1991/microcosm/pkg/meta/orm"
+	libModel "github.com/hanfei1991/microcosm/pkg/meta/orm/model"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
@@ -67,7 +67,7 @@ const (
 func NewWorkerManager(
 	masterID libModel.MasterID,
 	epoch libModel.Epoch,
-	meta metaclient.KVClient,
+	meta *dorm.MetaOpsClient,
 	messageSender p2p.MessageSender,
 	onWorkerOnline Callback,
 	onWorkerOffline CallbackWithError,

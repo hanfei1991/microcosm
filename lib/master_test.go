@@ -11,11 +11,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/hanfei1991/microcosm/lib/metadata"
-	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/statusutil"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
-	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
+	"github.com/hanfei1991/microcosm/pkg/meta/kv/kvclient"
+	libModel "github.com/hanfei1991/microcosm/pkg/meta/orm/model"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
 )
 
@@ -32,16 +32,16 @@ type dummyConfig struct {
 	param int
 }
 
-func prepareMeta(ctx context.Context, t *testing.T, metaclient metaclient.KVClient) {
+func prepareMeta(ctx context.Context, t *testing.T, kvclient kvclient.KVClient) {
 	masterKey := adapter.MasterMetaKey.Encode(masterName)
-	masterInfo := &libModel.MasterMetaKVData{
+	masterInfo := &libModel.MasterMeta{
 		ID:         masterName,
 		NodeID:     masterNodeName,
 		StatusCode: libModel.MasterStatusUninit,
 	}
 	masterInfoBytes, err := json.Marshal(masterInfo)
 	require.NoError(t, err)
-	_, err = metaclient.Put(ctx, masterKey, string(masterInfoBytes))
+	_, err = kvclient.Put(ctx, masterKey, string(masterInfoBytes))
 	require.NoError(t, err)
 }
 
@@ -62,7 +62,7 @@ func TestMasterInit(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, resp.Kvs, 1)
 
-	var masterData libModel.MasterMetaKVData
+	var masterData libModel.MasterMeta
 	err = json.Unmarshal(resp.Kvs[0].Value, &masterData)
 	require.NoError(t, err)
 	require.Equal(t, libModel.MasterStatusInit, masterData.StatusCode)
@@ -280,7 +280,7 @@ func TestPrepareWorkerConfig(t *testing.T) {
 		workerID  string
 	}{
 		{
-			FakeJobMaster, &libModel.MasterMetaKVData{ID: "master-1", Config: fakeCfgBytes},
+			FakeJobMaster, &libModel.MasterMeta{ID: "master-1", Config: fakeCfgBytes},
 			fakeCfgBytes, "master-1",
 		},
 		{
