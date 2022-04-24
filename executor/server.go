@@ -5,15 +5,6 @@ import (
 	"strings"
 	"time"
 
-	libModel "github.com/hanfei1991/microcosm/lib/model"
-	"github.com/hanfei1991/microcosm/pkg/deps"
-	"github.com/hanfei1991/microcosm/pkg/externalresource/storagecfg"
-	extkv "github.com/hanfei1991/microcosm/pkg/meta/extension"
-	"github.com/hanfei1991/microcosm/pkg/meta/kvclient"
-	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
-	"github.com/hanfei1991/microcosm/pkg/rpcutil"
-	"github.com/hanfei1991/microcosm/pkg/tenant"
-
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	p2pImpl "github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/security"
@@ -29,15 +20,23 @@ import (
 
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/executor/worker"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/registry"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/config"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
+	"github.com/hanfei1991/microcosm/pkg/deps"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
+	"github.com/hanfei1991/microcosm/pkg/externalresource/storagecfg"
+	extkv "github.com/hanfei1991/microcosm/pkg/meta/extension"
+	"github.com/hanfei1991/microcosm/pkg/meta/kvclient"
+	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
+	"github.com/hanfei1991/microcosm/pkg/rpcutil"
 	"github.com/hanfei1991/microcosm/pkg/serverutils"
+	"github.com/hanfei1991/microcosm/pkg/tenant"
 	"github.com/hanfei1991/microcosm/test"
 	"github.com/hanfei1991/microcosm/test/mock"
 )
@@ -82,21 +81,25 @@ func NewServer(cfg *Config, ctx *test.Context) *Server {
 
 // SubmitBatchTasks implements the pb interface.
 func (s *Server) SubmitBatchTasks(ctx context.Context, req *pb.SubmitBatchTasksRequest) (*pb.SubmitBatchTasksResponse, error) {
+	// TODO modify executor.proto and remove this method.
 	panic("implement me")
 }
 
 // CancelBatchTasks implements pb interface.
 func (s *Server) CancelBatchTasks(ctx context.Context, req *pb.CancelBatchTasksRequest) (*pb.CancelBatchTasksResponse, error) {
+	// TODO modify executor.proto and remove this method.
 	panic("implement me")
 }
 
 // PauseBatchTasks implements pb interface.
 func (s *Server) PauseBatchTasks(ctx context.Context, req *pb.PauseBatchTasksRequest) (*pb.PauseBatchTasksResponse, error) {
+	// TODO modify executor.proto and remove this method.
 	panic("implement me")
 }
 
 // ResumeBatchTasks implements pb interface.
 func (s *Server) ResumeBatchTasks(ctx context.Context, req *pb.PauseBatchTasksRequest) (*pb.PauseBatchTasksResponse, error) {
+	// TODO modify executor.proto and remove this method.
 	panic("implement me")
 }
 
@@ -622,6 +625,7 @@ func getJoinURLs(addrs string) []string {
 
 func (s *Server) reportTaskRescOnce(ctx context.Context) error {
 	// TODO: do we need to report allocated resource to master?
+	// TODO: Implement task-wise workload reporting in TaskRunner.
 	/*
 		rescs := s.workerRtm.Workload()
 		req := &pb.ExecWorkloadRequest{
@@ -642,7 +646,6 @@ func (s *Server) reportTaskRescOnce(ctx context.Context) error {
 		if resp.Err != nil {
 			log.L().Warn("report executor workload error", zap.String("err", resp.Err.String()))
 		}
-
 	*/
 	return nil
 }
