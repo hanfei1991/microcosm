@@ -314,7 +314,6 @@ func (s *Server) ScheduleTask(ctx context.Context, req *pb.ScheduleTaskRequest) 
 	}
 
 	return &pb.ScheduleTaskResponse{
-		Err:          &pb.Error{Code: pb.ErrorCode_None},
 		ExecutorId:   string(schedulerResp.ExecutorID),
 		ExecutorAddr: addr,
 	}, nil

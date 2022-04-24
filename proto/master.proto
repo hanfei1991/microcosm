@@ -159,9 +159,8 @@ message ScheduleTaskRequest {
 }
 
 message ScheduleTaskResponse {
-    Error err = 1;
-    string executor_id = 2;
-    string executor_addr = 3;
+    string executor_id = 1;
+    string executor_addr = 2;
 }
 
 message ExecWorkload {

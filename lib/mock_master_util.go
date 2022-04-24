@@ -74,7 +74,6 @@ func MockBaseMasterCreateWorker(
 		expectedSchedulerReq,
 		mock.Anything).Return(
 		&pb.ScheduleTaskResponse{
-			Err:        &pb.Error{Code: pb.ErrorCode_None},
 			ExecutorId: string(executorID),
 		}, nil)
 
