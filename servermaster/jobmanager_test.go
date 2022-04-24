@@ -30,7 +30,7 @@ func TestJobManagerSubmitJob(t *testing.T) {
 	mockMaster.On("InitImpl", mock.Anything).Return(nil)
 	mockMaster.MasterClient().On(
 		"ScheduleTask", mock.Anything, mock.Anything, mock.Anything).Return(
-		&pb.TaskSchedulerResponse{}, errors.ErrClusterResourceNotEnough.FastGenByArgs(),
+		&pb.ScheduleTaskResponse{}, errors.ErrClusterResourceNotEnough.FastGenByArgs(),
 	)
 	mgr := &JobManagerImplV2{
 		BaseMaster: mockMaster.DefaultBaseMaster,
@@ -195,7 +195,7 @@ func TestJobManagerOnlineJob(t *testing.T) {
 	mockMaster.On("InitImpl", mock.Anything).Return(nil)
 	mockMaster.MasterClient().On(
 		"ScheduleTask", mock.Anything, mock.Anything, mock.Anything).Return(
-		&pb.TaskSchedulerResponse{}, errors.ErrClusterResourceNotEnough.FastGenByArgs(),
+		&pb.ScheduleTaskResponse{}, errors.ErrClusterResourceNotEnough.FastGenByArgs(),
 	)
 	mgr := &JobManagerImplV2{
 		BaseMaster: mockMaster.DefaultBaseMaster,

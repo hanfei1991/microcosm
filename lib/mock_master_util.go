@@ -64,24 +64,18 @@ func MockBaseMasterCreateWorker(
 	executorID model.ExecutorID,
 ) {
 	master.uuidGen = uuid.NewMock()
-
-	expectedSchedulerReq := &pb.TaskSchedulerRequest{Tasks: []*pb.ScheduleTask{{
-		Task: &pb.TaskRequest{
-			Id: 0,
-		},
-		Cost: int64(cost),
-	}}}
+	expectedSchedulerReq := &pb.ScheduleTaskRequest{
+		TaskId: workerID,
+		Cost:   int64(cost),
+	}
 	master.serverMasterClient.(*client.MockServerMasterClient).On(
 		"ScheduleTask",
 		mock.Anything,
 		expectedSchedulerReq,
 		mock.Anything).Return(
-		&pb.TaskSchedulerResponse{
-			Schedule: map[int64]*pb.ScheduleResult{
-				0: {
-					ExecutorId: string(executorID),
-				},
-			},
+		&pb.ScheduleTaskResponse{
+			Err:        &pb.Error{Code: pb.ErrorCode_None},
+			ExecutorId: string(executorID),
 		}, nil)
 
 	mockExecutorClient := &client.MockExecutorClient{}
@@ -118,19 +112,16 @@ func MockBaseMasterCreateWorkerMetScheduleTaskError(
 	executorID model.ExecutorID,
 ) {
 	master.uuidGen = uuid.NewMock()
-
-	expectedSchedulerReq := &pb.TaskSchedulerRequest{Tasks: []*pb.ScheduleTask{{
-		Task: &pb.TaskRequest{
-			Id: 0,
-		},
-		Cost: int64(cost),
-	}}}
+	expectedSchedulerReq := &pb.ScheduleTaskRequest{
+		TaskId: workerID,
+		Cost:   int64(cost),
+	}
 	master.serverMasterClient.(*client.MockServerMasterClient).On(
 		"ScheduleTask",
 		mock.Anything,
 		expectedSchedulerReq,
 		mock.Anything).Return(
-		&pb.TaskSchedulerResponse{}, errors.ErrClusterResourceNotEnough.FastGenByArgs())
+		&pb.ScheduleTaskResponse{}, errors.ErrClusterResourceNotEnough.FastGenByArgs())
 	master.uuidGen.(*uuid.MockGenerator).Push(workerID)
 }
 

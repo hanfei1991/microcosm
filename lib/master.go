@@ -511,12 +511,10 @@ func (m *DefaultBaseMaster) CreateWorker(
 		requestCtx, cancel := context.WithTimeout(ctx, createWorkerTimeout)
 		defer cancel()
 		// This following API should be refined.
-		resp, err := m.serverMasterClient.ScheduleTask(requestCtx, &pb.TaskSchedulerRequest{Tasks: []*pb.ScheduleTask{{
-			Task: &pb.TaskRequest{
-				Id: 0,
-			},
-			Cost: int64(cost),
-		}}},
+		resp, err := m.serverMasterClient.ScheduleTask(requestCtx, &pb.ScheduleTaskRequest{
+			TaskId: workerID,
+			Cost:   int64(cost),
+		},
 			// TODO (zixiong) make the timeout configurable
 			time.Second*10)
 		if err != nil {
@@ -526,15 +524,10 @@ func (m *DefaultBaseMaster) CreateWorker(
 		}
 		log.L().Debug("ScheduleTask succeeded", zap.Any("response", resp))
 
-		schedule := resp.GetSchedule()
-		if len(schedule) != 1 {
-			log.L().Panic("unexpected schedule result", zap.Any("schedule", schedule))
-		}
-		executorID := model.ExecutorID(schedule[0].ExecutorId)
-
+		executorID := model.ExecutorID(resp.ExecutorId)
 		m.workerManager.OnCreatingWorker(workerID, executorID)
 
-		err = m.executorClientManager.AddExecutor(executorID, schedule[0].Addr)
+		err = m.executorClientManager.AddExecutor(executorID, resp.ExecutorAddr)
 		if err != nil {
 			m.workerManager.OnCreatingWorkerFinished(workerID, err)
 			return

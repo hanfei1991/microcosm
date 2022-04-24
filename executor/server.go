@@ -28,7 +28,6 @@ import (
 	"google.golang.org/grpc/backoff"
 
 	"github.com/hanfei1991/microcosm/client"
-	"github.com/hanfei1991/microcosm/executor/runtime"
 	"github.com/hanfei1991/microcosm/executor/worker"
 	"github.com/hanfei1991/microcosm/lib/registry"
 	"github.com/hanfei1991/microcosm/model"
@@ -52,7 +51,6 @@ type Server struct {
 	masterClient   client.MasterClient
 	resourceClient *rpcutil.FailoverRPCClients[pb.ResourceManagerClient]
 	cliUpdateCh    chan cliUpdateInfo
-	sch            *runtime.Runtime
 	workerRtm      *worker.TaskRunner
 	msgServer      *p2p.MessageRPCService
 	info           *model.NodeInfo
@@ -84,64 +82,22 @@ func NewServer(cfg *Config, ctx *test.Context) *Server {
 
 // SubmitBatchTasks implements the pb interface.
 func (s *Server) SubmitBatchTasks(ctx context.Context, req *pb.SubmitBatchTasksRequest) (*pb.SubmitBatchTasksResponse, error) {
-	tasks := make([]*model.Task, 0, len(req.Tasks))
-	for _, pbTask := range req.Tasks {
-		task := &model.Task{
-			ID:   model.ID(pbTask.Id),
-			Op:   pbTask.Op,
-			OpTp: model.OperatorType(pbTask.OpTp),
-		}
-		for _, id := range pbTask.Inputs {
-			task.Inputs = append(task.Inputs, model.ID(id))
-		}
-		for _, id := range pbTask.Outputs {
-			task.Outputs = append(task.Outputs, model.ID(id))
-		}
-		tasks = append(tasks, task)
-	}
-	log.L().Logger.Info("executor receive submit sub job", zap.Int("task", len(tasks)))
-	resp := &pb.SubmitBatchTasksResponse{}
-	err := s.sch.SubmitTasks(tasks)
-	if err != nil {
-		log.L().Logger.Error("submit subjob error", zap.Error(err))
-		resp.Err = errors.ToPBError(err)
-	}
-	return resp, nil
+	panic("implement me")
 }
 
 // CancelBatchTasks implements pb interface.
 func (s *Server) CancelBatchTasks(ctx context.Context, req *pb.CancelBatchTasksRequest) (*pb.CancelBatchTasksResponse, error) {
-	log.L().Info("cancel tasks", zap.String("req", req.String()))
-	err := s.sch.Stop(req.TaskIdList)
-	if err != nil {
-		return &pb.CancelBatchTasksResponse{
-			Err: &pb.Error{
-				Message: err.Error(),
-			},
-		}, nil
-	}
-	return &pb.CancelBatchTasksResponse{}, nil
+	panic("implement me")
 }
 
 // PauseBatchTasks implements pb interface.
 func (s *Server) PauseBatchTasks(ctx context.Context, req *pb.PauseBatchTasksRequest) (*pb.PauseBatchTasksResponse, error) {
-	log.L().Info("pause tasks", zap.String("req", req.String()))
-	err := s.sch.Pause(req.TaskIdList)
-	if err != nil {
-		return &pb.PauseBatchTasksResponse{
-			Err: &pb.Error{
-				Message: err.Error(),
-			},
-		}, nil
-	}
-	return &pb.PauseBatchTasksResponse{}, nil
+	panic("implement me")
 }
 
 // ResumeBatchTasks implements pb interface.
 func (s *Server) ResumeBatchTasks(ctx context.Context, req *pb.PauseBatchTasksRequest) (*pb.PauseBatchTasksResponse, error) {
-	log.L().Info("resume tasks", zap.String("req", req.String()))
-	s.sch.Continue(req.TaskIdList)
-	return &pb.PauseBatchTasksResponse{}, nil
+	panic("implement me")
 }
 
 func (s *Server) buildDeps() (*deps.Deps, error) {
@@ -310,10 +266,6 @@ func (s *Server) startForTest(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
-	s.sch = runtime.NewRuntime(s.testCtx)
-	go func() {
-		s.sch.Run(ctx, 10)
-	}()
 
 	err = s.initClients(ctx)
 	if err != nil {
@@ -358,13 +310,6 @@ func (s *Server) Run(ctx context.Context) error {
 	registerMetrics()
 
 	wg, ctx := errgroup.WithContext(ctx)
-
-	s.sch = runtime.NewRuntime(nil)
-	wg.Go(func() error {
-		s.sch.Run(ctx, 10)
-		return nil
-	})
-
 	s.workerRtm = worker.NewTaskRunner(defaultRuntimeIncomingQueueLen, defaultRuntimeInitConcurrency)
 
 	wg.Go(func() error {
@@ -677,26 +622,28 @@ func getJoinURLs(addrs string) []string {
 
 func (s *Server) reportTaskRescOnce(ctx context.Context) error {
 	// TODO: do we need to report allocated resource to master?
+	/*
+		rescs := s.workerRtm.Workload()
+		req := &pb.ExecWorkloadRequest{
+			// TODO: use which field as ExecutorId is more accurate
+			ExecutorId: s.cfg.WorkerAddr,
+			Workloads:  make([]*pb.ExecWorkload, 0, len(rescs)),
+		}
+		for tp, resc := range rescs {
+			req.Workloads = append(req.Workloads, &pb.ExecWorkload{
+				Tp:    pb.JobType(tp),
+				Usage: int32(resc),
+			})
+		}
+		resp, err := s.masterClient.ReportExecutorWorkload(ctx, req)
+		if err != nil {
+			return err
+		}
+		if resp.Err != nil {
+			log.L().Warn("report executor workload error", zap.String("err", resp.Err.String()))
+		}
 
-	rescs := s.sch.Resource()
-	req := &pb.ExecWorkloadRequest{
-		// TODO: use which field as ExecutorId is more accurate
-		ExecutorId: s.cfg.WorkerAddr,
-		Workloads:  make([]*pb.ExecWorkload, 0, len(rescs)),
-	}
-	for tp, resc := range rescs {
-		req.Workloads = append(req.Workloads, &pb.ExecWorkload{
-			Tp:    pb.JobType(tp),
-			Usage: int32(resc),
-		})
-	}
-	resp, err := s.masterClient.ReportExecutorWorkload(ctx, req)
-	if err != nil {
-		return err
-	}
-	if resp.Err != nil {
-		log.L().Warn("report executor workload error", zap.String("err", resp.Err.String()))
-	}
+	*/
 	return nil
 }
 
