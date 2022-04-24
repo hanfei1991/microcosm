@@ -94,13 +94,14 @@ func TestSubmitTest(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(config.JobNum)
 	for i := 1; i <= config.JobNum; i++ {
-		demoAddr := config.DemoHost[i%len(config.DemoHost)]
+		demoAddr := config.DemoAddrs[i%len(config.DemoAddrs)]
+		demoHost := config.DemoHost[i%len(config.DemoHost)]
 		go func(idx int) {
 			defer wg.Done()
 			cfg := &cvs.Config{
 				DstDir:  fmt.Sprintf(config.DemoDataDir+"/data%d", idx),
-				SrcHost: demoAddr,
-				DstHost: demoAddr,
+				SrcHost: demoHost,
+				DstHost: demoHost,
 			}
 			testSubmitTest(t, cfg, config, demoAddr, flowControl)
 		}(i)
