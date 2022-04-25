@@ -188,6 +188,7 @@ func onlineDDLName(cfg *config.JobCfg) string {
 }
 
 func isLoadFresh(ctx context.Context, taskCfg *config.TaskCfg, db *conn.BaseDB) (bool, error) {
+	// nolint:gosec
 	query := fmt.Sprintf("SELECT status FROM %s WHERE `task_name` = ? AND `source_name` = ?", loadTableName((*config.JobCfg)(taskCfg)))
 	var status string
 	err := db.DB.QueryRowContext(ctx, query, taskCfg.Name, taskCfg.Upstreams[0].SourceID).Scan(&status)
@@ -202,6 +203,7 @@ func isLoadFresh(ctx context.Context, taskCfg *config.TaskCfg, db *conn.BaseDB) 
 }
 
 func isSyncFresh(ctx context.Context, taskCfg *config.TaskCfg, db *conn.BaseDB) (bool, error) {
+	// nolint:gosec
 	query := fmt.Sprintf("SELECT 1 FROM %s WHERE `id` = ? AND `is_global` = true", syncTableName((*config.JobCfg)(taskCfg)))
 	var status string
 	err := db.DB.QueryRowContext(ctx, query, taskCfg.Upstreams[0].SourceID).Scan(&status)
