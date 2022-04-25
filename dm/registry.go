@@ -40,20 +40,3 @@ func (u unitWorkerFactory) DeserializeConfig(configBytes []byte) (registry.Worke
 	err := cfg.Decode(string(configBytes), true)
 	return cfg, err
 }
-
-type jobMasterFactory struct{}
-
-func (j jobMasterFactory) NewWorkerImpl(
-	ctx *context.Context,
-	workerID libModel.WorkerID,
-	masterID libModel.MasterID,
-	config registry.WorkerConfig,
-) (lib.WorkerImpl, error) {
-	return newSubTaskMaster(config), nil
-}
-
-func (j jobMasterFactory) DeserializeConfig(configBytes []byte) (registry.WorkerConfig, error) {
-	cfg := &config.SubTaskConfig{}
-	err := cfg.Decode(string(configBytes), true)
-	return cfg, err
-}
