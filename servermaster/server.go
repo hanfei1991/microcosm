@@ -2,7 +2,6 @@ package servermaster
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -288,20 +287,7 @@ func (s *Server) ScheduleTask(ctx context.Context, req *pb.ScheduleTaskRequest) 
 	}
 	schedulerResp, err := s.scheduler.ScheduleTask(ctx, schedulerReq)
 	if err != nil {
-		var (
-			conflictErr *schedModel.ResourceConflictError
-			notFoundErr *schedModel.ResourceNotFoundError
-		)
-		switch {
-		case errors.As(err, &conflictErr):
-			return nil, status.Error(codes.FailedPrecondition, conflictErr.Error())
-		case errors.As(err, &notFoundErr):
-			return nil, status.Error(codes.NotFound, notFoundErr.Error())
-		case derrors.ErrClusterResourceNotEnough.Equal(err):
-			return nil, status.Error(codes.ResourceExhausted, err.Error())
-		default:
-			return nil, status.Error(codes.Unknown, err.Error())
-		}
+		return nil, schedModel.SchedulerErrorToGRPCError(err)
 	}
 
 	addr, ok := s.executorManager.GetAddr(schedulerResp.ExecutorID)

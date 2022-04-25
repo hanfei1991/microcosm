@@ -59,7 +59,7 @@ func (e *ResourceConflictError) Error() string {
 		e.ConflictingResources[1], e.AssignedExecutors[1])
 }
 
-func SchedulerErrorToGRPCError(errIn error) (error, bool) {
+func SchedulerErrorToGRPCError(errIn error) error {
 	if errIn == nil {
 		log.L().Panic("Invalid input to SchedulerErrorToGRPCError")
 	}
@@ -70,12 +70,12 @@ func SchedulerErrorToGRPCError(errIn error) (error, bool) {
 	)
 	switch {
 	case stdErrors.As(errIn, &conflictErr):
-		return status.Error(codes.FailedPrecondition, conflictErr.Error()), true
+		return status.Error(codes.FailedPrecondition, conflictErr.Error())
 	case stdErrors.As(errIn, &notFoundErr):
-		return status.Error(codes.NotFound, notFoundErr.Error()), true
+		return status.Error(codes.NotFound, notFoundErr.Error())
 	case derrors.ErrClusterResourceNotEnough.Equal(errIn):
-		return status.Error(codes.ResourceExhausted, errIn.Error()), true
+		return status.Error(codes.ResourceExhausted, errIn.Error())
 	default:
 	}
-	return nil, false
+	return errIn
 }

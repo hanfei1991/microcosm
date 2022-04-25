@@ -15,8 +15,7 @@ func TestConflictErrorToGRPCError(t *testing.T) {
 	errIn := NewResourceConflictError(
 		"resource-1", "executor-1",
 		"resource-2", "executor-2")
-	errOut, ok := SchedulerErrorToGRPCError(errors.Trace(errIn))
-	require.True(t, ok)
+	errOut := SchedulerErrorToGRPCError(errors.Trace(errIn))
 	st := status.Convert(errOut)
 	require.Equal(t, codes.FailedPrecondition, st.Code())
 	require.Equal(t, "Scheduler could not assign executor"+
@@ -28,8 +27,7 @@ func TestConflictErrorToGRPCError(t *testing.T) {
 func TestNotFoundErrorToGRPCError(t *testing.T) {
 	errIn := NewResourceNotFoundError("resource-1",
 		derrors.ErrResourceDoesNotExist.GenWithStackByArgs("resource-1"))
-	errOut, ok := SchedulerErrorToGRPCError(errors.Trace(errIn))
-	require.True(t, ok)
+	errOut := SchedulerErrorToGRPCError(errors.Trace(errIn))
 	st := status.Convert(errOut)
 	require.Equal(t, codes.NotFound, st.Code())
 	require.Equal(t, "Scheduler could not find resource resource-1,"+
