@@ -31,7 +31,7 @@ func TestCheckpoint(t *testing.T) {
 	jobCfg := &config.JobCfg{Name: "test", MetaSchema: "meta", TaskMode: dmconfig.ModeAll}
 	db, mock, err := conn.InitMockDBFull()
 	require.NoError(t, err)
-	mock.ExpectExec(regexp.QuoteMeta(fmt.Sprintf(`CREATE DATABASE IF NOT EXISTS %s`,"`meta`"))).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec(regexp.QuoteMeta(fmt.Sprintf(`CREATE DATABASE IF NOT EXISTS %s`, "`meta`"))).WillReturnResult(sqlmock.NewResult(1, 1))
 	require.NoError(t, createMetaDatabase(context.Background(), jobCfg, conn.NewBaseDB(db)))
 
 	mock.ExpectExec(regexp.QuoteMeta(fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
