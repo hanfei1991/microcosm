@@ -108,7 +108,6 @@ func (u *unitHolder) tryUpdateStatus(ctx context.Context, base lib.BaseWorker) e
 			Code:     libModel.WorkerStatusNormal,
 			ExtBytes: statusBytes,
 		}
-		// nolint:errcheck
 		err = base.UpdateStatus(ctx, s)
 		if err == nil {
 			u.lastStage = 0 // 0 represents task is running

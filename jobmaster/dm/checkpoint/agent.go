@@ -135,7 +135,7 @@ func (c *AgentImpl) IsFresh(ctx context.Context, workerType lib.WorkerType, task
 }
 
 func createMetaDatabase(ctx context.Context, cfg *config.JobCfg, db *conn.BaseDB) error {
-	query := fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", cfg.MetaSchema)
+	query := fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", dbutil.ColumnName(cfg.MetaSchema))
 	_, err := db.DB.ExecContext(ctx, query)
 	return err
 }
