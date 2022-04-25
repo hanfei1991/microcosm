@@ -16,6 +16,7 @@ import (
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	"github.com/hanfei1991/microcosm/pkg/errors"
+	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
 	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
 )
@@ -65,7 +66,10 @@ type mockBaseMasterCreateWorkerFailed struct {
 }
 
 func (m *mockBaseMasterCreateWorkerFailed) CreateWorker(
-	workerType lib.WorkerType, config lib.WorkerConfig, cost model.RescUnit,
+	workerType lib.WorkerType,
+	config lib.WorkerConfig,
+	cost model.RescUnit,
+	resources ...resourcemeta.ResourceID,
 ) (libModel.WorkerID, error) {
 	return "", errors.ErrMasterConcurrencyExceeded.FastGenByArgs()
 }

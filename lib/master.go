@@ -28,6 +28,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/deps"
 	"github.com/hanfei1991/microcosm/pkg/errctx"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
+	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
 	extKV "github.com/hanfei1991/microcosm/pkg/meta/extension"
 	"github.com/hanfei1991/microcosm/pkg/meta/kvclient"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
@@ -92,8 +93,16 @@ type BaseMaster interface {
 	IsMasterReady() bool
 	Close(ctx context.Context) error
 	OnError(err error)
-	// CreateWorker registers worker handler and dispatches worker to executor
-	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (libModel.WorkerID, error)
+
+	// CreateWorker requires the framework to dispatch a new worker.
+	// If the worker needs to access certain file system resources,
+	// their ID's must be passed by `resources`.
+	CreateWorker(
+		workerType WorkerType,
+		config WorkerConfig,
+		cost model.RescUnit,
+		resources ...resourcemeta.ResourceID,
+	) (libModel.WorkerID, error)
 }
 
 type DefaultBaseMaster struct {
@@ -485,10 +494,13 @@ func (m *DefaultBaseMaster) CreateWorker(
 	workerType libModel.WorkerType,
 	config WorkerConfig,
 	cost model.RescUnit,
+	resources ...resourcemeta.ResourceID,
 ) (libModel.WorkerID, error) {
 	log.L().Info("CreateWorker",
 		zap.Int64("worker-type", int64(workerType)),
 		zap.Any("worker-config", config),
+		zap.Int("cost", int(cost)),
+		zap.Any("resources", resources),
 		zap.String("master-id", m.id))
 
 	ctx := m.errCenter.WithCancelOnFirstError(context.Background())
@@ -512,8 +524,9 @@ func (m *DefaultBaseMaster) CreateWorker(
 		defer cancel()
 		// This following API should be refined.
 		resp, err := m.serverMasterClient.ScheduleTask(requestCtx, &pb.ScheduleTaskRequest{
-			TaskId: workerID,
-			Cost:   int64(cost),
+			TaskId:               workerID,
+			Cost:                 int64(cost),
+			ResourceRequirements: resources,
 		},
 			// TODO (zixiong) make the timeout configurable
 			time.Second*10)

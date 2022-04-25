@@ -21,6 +21,7 @@ import (
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/deps"
 	"github.com/hanfei1991/microcosm/pkg/errors"
+	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
 	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
@@ -62,11 +63,13 @@ func MockBaseMasterCreateWorker(
 	masterID libModel.MasterID,
 	workerID libModel.WorkerID,
 	executorID model.ExecutorID,
+	resources []resourcemeta.ResourceID,
 ) {
 	master.uuidGen = uuid.NewMock()
 	expectedSchedulerReq := &pb.ScheduleTaskRequest{
-		TaskId: workerID,
-		Cost:   int64(cost),
+		TaskId:               workerID,
+		Cost:                 int64(cost),
+		ResourceRequirements: resources,
 	}
 	master.serverMasterClient.(*client.MockServerMasterClient).On(
 		"ScheduleTask",
