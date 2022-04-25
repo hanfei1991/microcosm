@@ -26,6 +26,9 @@ const (
 	workerEntryTombstone
 )
 
+// The following is the state-transition diagram.
+// Refer to ../doc/worker_entry_fsm.puml for a UML version.
+//
 // workerEntryCreated            workerEntryWait
 //      │  │                            │  │
 //      │  │                            │  │
@@ -82,10 +85,8 @@ func newWaitingWorkerEntry(
 	return newWorkerEntry(id, "", time.Time{}, workerEntryWait, lastStatus)
 }
 
+// String implements fmt.Stringer, note the implementation is not thread safe
 func (e *workerEntry) String() string {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
 	return fmt.Sprintf("{worker-id:%s, executor-id:%s, state:%d}",
 		e.id, e.executorID, e.state)
 }

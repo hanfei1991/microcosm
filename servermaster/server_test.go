@@ -14,6 +14,8 @@ import (
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
+	"github.com/hanfei1991/microcosm/servermaster/scheduler"
+
 	"github.com/phayes/freeport"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/require"
@@ -245,11 +247,15 @@ type mockExecutorManager struct {
 	count      map[model.ExecutorStatus]int
 }
 
-func (m *mockExecutorManager) HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
-	panic("not implemented")
+func (m *mockExecutorManager) GetAddr(executorID model.ExecutorID) (string, bool) {
+	panic("implement me")
 }
 
-func (m *mockExecutorManager) Allocate(tasks []*pb.ScheduleTask) (bool, *pb.TaskSchedulerResponse) {
+func (m *mockExecutorManager) CapacityProvider() scheduler.CapacityProvider {
+	panic("implement me")
+}
+
+func (m *mockExecutorManager) HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
 	panic("not implemented")
 }
 

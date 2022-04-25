@@ -38,8 +38,8 @@ func (s *workerManageTestSuite) AdvanceClockBy(duration time.Duration) {
 
 func (s *workerManageTestSuite) SimulateHeartbeat(
 	workerID libModel.WorkerID, epoch libModel.Epoch, node p2p.NodeID,
-) error {
-	return s.manager.HandleHeartbeat(&libModel.HeartbeatPingMessage{
+) {
+	s.manager.HandleHeartbeat(&libModel.HeartbeatPingMessage{
 		SendTime:     s.clock.Mono(),
 		FromWorkerID: workerID,
 		Epoch:        epoch,
@@ -155,6 +155,7 @@ func (s *workerManageTestSuite) WaitForEvent(t *testing.T, workerID libModel.Wor
 			err := rl.Wait(timeoutCtx)
 			require.NoError(t, err)
 
+			s.AdvanceClockBy(1 * time.Second)
 			continue
 		}
 
@@ -227,12 +228,9 @@ func NewWorkerManageTestSuite(isInit bool) *workerManageTestSuite {
 func TestCreateWorkerAndWorkerOnline(t *testing.T) {
 	suite := NewWorkerManageTestSuite(true)
 	suite.manager.OnCreatingWorker("worker-1", "executor-1")
-	err := suite.SimulateHeartbeat("worker-1", 1, "executor-1")
-	require.NoError(t, err)
-	err = suite.SimulateHeartbeat("worker-1", 1, "executor-1")
-	require.NoError(t, err)
-	err = suite.SimulateHeartbeat("worker-1", 1, "executor-1")
-	require.NoError(t, err)
+	suite.SimulateHeartbeat("worker-1", 1, "executor-1")
+	suite.SimulateHeartbeat("worker-1", 1, "executor-1")
+	suite.SimulateHeartbeat("worker-1", 1, "executor-1")
 
 	event := suite.WaitForEvent(t, "worker-1")
 	require.Equal(t, workerOnlineEvent, event.Tp)
@@ -258,13 +256,12 @@ func TestCreateWorkerAndWorkerStatusUpdatedAndTimesOut(t *testing.T) {
 	suite := NewWorkerManageTestSuite(true)
 	suite.manager.OnCreatingWorker("worker-1", "executor-1")
 
-	err := suite.SimulateHeartbeat("worker-1", 1, "executor-1")
-	require.NoError(t, err)
+	suite.SimulateHeartbeat("worker-1", 1, "executor-1")
 
 	event := suite.WaitForEvent(t, "worker-1")
 	require.Equal(t, workerOnlineEvent, event.Tp)
 
-	err = suite.SimulateWorkerUpdateStatus("worker-1", &libModel.WorkerStatus{
+	err := suite.SimulateWorkerUpdateStatus("worker-1", &libModel.WorkerStatus{
 		Code: libModel.WorkerStatusFinished,
 	}, 1)
 	require.NoError(t, err)
@@ -314,12 +311,9 @@ func TestRecoverAfterFailover(t *testing.T) {
 	}()
 
 	time.Sleep(10 * time.Millisecond)
-	err = suite.SimulateHeartbeat("worker-1", 1, "executor-1")
-	require.NoError(t, err)
-	err = suite.SimulateHeartbeat("worker-2", 1, "executor-2")
-	require.NoError(t, err)
-	err = suite.SimulateHeartbeat("worker-3", 1, "executor-3")
-	require.NoError(t, err)
+	suite.SimulateHeartbeat("worker-1", 1, "executor-1")
+	suite.SimulateHeartbeat("worker-2", 1, "executor-2")
+	suite.SimulateHeartbeat("worker-3", 1, "executor-3")
 
 	require.Eventually(t, func() bool {
 		select {
@@ -362,8 +356,7 @@ func TestRecoverAfterFailoverFast(t *testing.T) {
 	}()
 
 	time.Sleep(10 * time.Millisecond)
-	err = suite.SimulateHeartbeat("worker-1", 1, "executor-1")
-	require.NoError(t, err)
+	suite.SimulateHeartbeat("worker-1", 1, "executor-1")
 
 	require.Eventually(t, func() bool {
 		select {
@@ -377,5 +370,21 @@ func TestRecoverAfterFailoverFast(t *testing.T) {
 	require.True(t, suite.manager.IsInitialized())
 	require.Len(t, suite.manager.GetWorkers(), 1)
 	require.Contains(t, suite.manager.GetWorkers(), "worker-1")
+	suite.Close()
+}
+
+func TestRecoverWithNoWorker(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	suite := NewWorkerManageTestSuite(false)
+
+	// Since there is no worker info in the metastore,
+	// recovering should be very fast.
+	// Since we are using a mock clock, and we are NOT advancing it,
+	// InitAfterRecover returning at all would indicate a successful test.
+	err := suite.manager.InitAfterRecover(ctx)
+	require.NoError(t, err)
+
 	suite.Close()
 }

@@ -30,14 +30,14 @@ func TestDiscoveryRunner(t *testing.T) {
 		require.Nil(t, err)
 		return NewDiscoveryRunnerImpl(
 			client,
-			3,
+			5,
 			time.Millisecond*50,
 			adapter.NodeInfoKeyAdapter.Encode(string(res.ID)),
 			resStr,
 		)
 	}
 
-	runnerN := 20
+	runnerN := 5
 	runners := make([]DiscoveryRunner, 0, runnerN)
 	for i := 0; i < runnerN; i++ {
 		runners = append(runners, newNodeOnline(i))
@@ -70,9 +70,8 @@ func TestDiscoveryRunner(t *testing.T) {
 					break check
 				}
 			case <-time.After(time.Second):
-				require.Fail(t,
-					"not enough peer update received, received: %d, expected: %d",
-					nodesOn, runnerN-i-1)
+				require.Failf(t, "not enough peer update received",
+					"received: %d, expected: %d", nodesOn, runnerN-i-1)
 			}
 		}
 	}
@@ -101,9 +100,8 @@ func TestDiscoveryRunner(t *testing.T) {
 					break check2
 				}
 			case <-time.After(time.Second):
-				require.Fail(t,
-					"not enough peer update received, received: %d, expected: %d",
-					nodesOn, runnerN)
+				require.Failf(t, "not enough peer update received",
+					"received: %d, expected: %d", nodesOn, runnerN)
 			}
 		}
 	}

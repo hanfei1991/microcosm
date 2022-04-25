@@ -26,7 +26,9 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/deps"
+	"github.com/hanfei1991/microcosm/pkg/errctx"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
+	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
 	extKV "github.com/hanfei1991/microcosm/pkg/meta/extension"
 	"github.com/hanfei1991/microcosm/pkg/meta/kvclient"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
@@ -91,8 +93,16 @@ type BaseMaster interface {
 	IsMasterReady() bool
 	Close(ctx context.Context) error
 	OnError(err error)
-	// CreateWorker registers worker handler and dispatches worker to executor
-	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (libModel.WorkerID, error)
+
+	// CreateWorker requires the framework to dispatch a new worker.
+	// If the worker needs to access certain file system resources,
+	// their ID's must be passed by `resources`.
+	CreateWorker(
+		workerType WorkerType,
+		config WorkerConfig,
+		cost model.RescUnit,
+		resources ...resourcemeta.ResourceID,
+	) (libModel.WorkerID, error)
 }
 
 type DefaultBaseMaster struct {
@@ -116,8 +126,8 @@ type DefaultBaseMaster struct {
 
 	currentEpoch atomic.Int64
 
-	wg    sync.WaitGroup
-	errCh chan error
+	wg        sync.WaitGroup
+	errCenter *errctx.ErrCenter
 
 	// closeCh is closed when the BaseMaster is exiting
 	closeCh chan struct{}
@@ -195,8 +205,9 @@ func NewBaseMaster(
 		timeoutConfig: config.DefaultTimeoutConfig(),
 		masterMeta:    masterMeta,
 
-		errCh:   make(chan error, 1),
 		closeCh: make(chan struct{}),
+
+		errCenter: errctx.NewErrCenter(),
 
 		uuidGen: uuid.NewGenerator(),
 
@@ -215,6 +226,8 @@ func (m *DefaultBaseMaster) MetaKVClient() metaclient.KVClient {
 }
 
 func (m *DefaultBaseMaster) Init(ctx context.Context) error {
+	ctx = m.errCenter.WithCancelOnFirstError(ctx)
+
 	isInit, err := m.doInit(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -300,9 +313,7 @@ func (m *DefaultBaseMaster) registerMessageHandlers(ctx context.Context) error {
 				// TODO add a retry mechanism
 				return nil
 			}
-			if err := m.workerManager.HandleHeartbeat(msg, sender); err != nil {
-				return errors.Trace(err)
-			}
+			m.workerManager.HandleHeartbeat(msg, sender)
 			return nil
 		})
 	if err != nil {
@@ -332,6 +343,8 @@ func (m *DefaultBaseMaster) registerMessageHandlers(ctx context.Context) error {
 }
 
 func (m *DefaultBaseMaster) Poll(ctx context.Context) error {
+	ctx = m.errCenter.WithCancelOnFirstError(ctx)
+
 	if err := m.doPoll(ctx); err != nil {
 		return errors.Trace(err)
 	}
@@ -344,11 +357,11 @@ func (m *DefaultBaseMaster) Poll(ctx context.Context) error {
 }
 
 func (m *DefaultBaseMaster) doPoll(ctx context.Context) error {
+	if err := m.errCenter.CheckError(); err != nil {
+		return err
+	}
+
 	select {
-	case err := <-m.errCh:
-		if err != nil {
-			return errors.Trace(err)
-		}
 	case <-m.closeCh:
 		return derror.ErrMasterClosed.GenWithStackByArgs()
 	default:
@@ -394,15 +407,7 @@ func (m *DefaultBaseMaster) Close(ctx context.Context) error {
 }
 
 func (m *DefaultBaseMaster) OnError(err error) {
-	if errors.Cause(err) == context.Canceled {
-		// TODO think about how to gracefully handle cancellation here.
-		log.L().Warn("BaseMaster is being canceled", zap.String("id", m.id), zap.Error(err))
-		return
-	}
-	select {
-	case m.errCh <- err:
-	default:
-	}
+	m.errCenter.OnError(err)
 }
 
 // refreshMetadata load and update metadata by current epoch, nodeID, advertiseAddr, etc.
@@ -489,13 +494,17 @@ func (m *DefaultBaseMaster) CreateWorker(
 	workerType libModel.WorkerType,
 	config WorkerConfig,
 	cost model.RescUnit,
+	resources ...resourcemeta.ResourceID,
 ) (libModel.WorkerID, error) {
 	log.L().Info("CreateWorker",
 		zap.Int64("worker-type", int64(workerType)),
 		zap.Any("worker-config", config),
+		zap.Int("cost", int(cost)),
+		zap.Any("resources", resources),
 		zap.String("master-id", m.id))
 
-	quotaCtx, cancel := context.WithTimeout(context.Background(), createWorkerWaitQuotaTimeout)
+	ctx := m.errCenter.WithCancelOnFirstError(context.Background())
+	quotaCtx, cancel := context.WithTimeout(ctx, createWorkerWaitQuotaTimeout)
 	defer cancel()
 	if err := m.createWorkerQuota.Consume(quotaCtx); err != nil {
 		return "", derror.ErrMasterConcurrencyExceeded.Wrap(err)
@@ -511,31 +520,27 @@ func (m *DefaultBaseMaster) CreateWorker(
 			m.createWorkerQuota.Release()
 		}()
 
-		requestCtx, cancel := context.WithTimeout(context.Background(), createWorkerTimeout)
+		requestCtx, cancel := context.WithTimeout(ctx, createWorkerTimeout)
 		defer cancel()
 		// This following API should be refined.
-		resp, err := m.serverMasterClient.ScheduleTask(requestCtx, &pb.TaskSchedulerRequest{Tasks: []*pb.ScheduleTask{{
-			Task: &pb.TaskRequest{
-				Id: 0,
-			},
-			Cost: int64(cost),
-		}}},
+		resp, err := m.serverMasterClient.ScheduleTask(requestCtx, &pb.ScheduleTaskRequest{
+			TaskId:               workerID,
+			Cost:                 int64(cost),
+			ResourceRequirements: resources,
+		},
 			// TODO (zixiong) make the timeout configurable
 			time.Second*10)
 		if err != nil {
+			log.L().Warn("ScheduleTask returned error", zap.Error(err))
 			m.workerManager.OnCreatingWorkerFinished(workerID, err)
 			return
 		}
+		log.L().Debug("ScheduleTask succeeded", zap.Any("response", resp))
 
-		schedule := resp.GetSchedule()
-		if len(schedule) != 1 {
-			log.L().Panic("unexpected schedule result", zap.Any("schedule", schedule))
-		}
-		executorID := model.ExecutorID(schedule[0].ExecutorId)
-
+		executorID := model.ExecutorID(resp.ExecutorId)
 		m.workerManager.OnCreatingWorker(workerID, executorID)
 
-		err = m.executorClientManager.AddExecutor(executorID, schedule[0].Addr)
+		err = m.executorClientManager.AddExecutor(executorID, resp.ExecutorAddr)
 		if err != nil {
 			m.workerManager.OnCreatingWorkerFinished(workerID, err)
 			return
