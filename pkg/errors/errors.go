@@ -98,6 +98,7 @@ var (
 	ErrExecutorEtcdConnFail       = errors.Normalize("executor conn inner etcd fail", errors.RFCCodeText("DFLOW:ErrExecutorEtcdConnFail"))
 	ErrExecutorNotFoundForMessage = errors.Normalize("cannot find the executor for p2p messaging", errors.RFCCodeText("DFLOW:ErrExecutorNotFoundForMessage"))
 	ErrMasterTooManyPendingEvents = errors.Normalize("master has too many pending events", errors.RFCCodeText("DFLOW:ErrMasterTooManyPendingEvents"))
+	ErrExecutorPreDispatchFailed  = errors.Normalize("PreDispatchTask failed", errors.RFCCodeText("DFLOW:ErrExecutorPreDispatchFailed"))
 
 	// planner related errors
 	ErrPlannerDAGDepthExceeded = errors.Normalize("dag depth exceeded: %d", errors.RFCCodeText("DFLOW:ErrPlannerDAGDepthExceeded"))
