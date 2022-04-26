@@ -30,6 +30,7 @@ type Config struct {
 	SrcDir  string `toml:"srcDir" json:"srcDir"`
 	DstHost string `toml:"dstHost" json:"dstHost"`
 	DstDir  string `toml:"dstDir" json:"dstDir"`
+	FileNum int    `toml:"fileNum" json:"fileNum"`
 }
 
 type SyncFileInfo struct {
@@ -93,10 +94,7 @@ func NewCVSJobMaster(ctx *dcontext.Context, workerID libModel.WorkerID, masterID
 func (jm *JobMaster) InitImpl(ctx context.Context) (err error) {
 	log.L().Info("initializing the cvs jobmaster  ", zap.Any("id :", jm.workerID))
 	jm.setStatusCode(libModel.WorkerStatusInit)
-	filesNum, err := jm.listSrcFiles(ctx)
-	if err != nil {
-		return err
-	}
+	filesNum := jm.jobStatus.Config.FileNum
 	if filesNum == 0 {
 		return errors.New("no file found under the folder")
 	}
@@ -392,24 +390,6 @@ func (jm *JobMaster) Status() libModel.WorkerStatus {
 
 func (jm *JobMaster) IsJobMasterImpl() {
 	panic("unreachable")
-}
-
-func (jm *JobMaster) listSrcFiles(ctx context.Context) (int, error) {
-	//conn, err := grpc.Dial(jm.jobStatus.SrcHost, grpc.WithInsecure())
-	//if err != nil {
-	//	log.L().Info("cann't connect with the host  ", zap.Any("message", jm.jobStatus.SrcHost))
-	//	return -1, err
-	//}
-	//client := pb.NewDataRWServiceClient(conn)
-	//defer conn.Close()
-	//reply, err := client.ListFiles(ctx, &pb.ListFilesReq{})
-	//if err != nil {
-	//	log.L().Info(" list the directory failed ", zap.String("id", jm.ID()), zap.Error(err))
-	//	return -1, err
-	//}
-	//return int(reply.FileNum), nil
-
-	return 50, nil
 }
 
 func (jm *JobMaster) setStatusCode(code libModel.WorkerStatusCode) {

@@ -102,6 +102,7 @@ func TestSubmitTest(t *testing.T) {
 				DstDir:  fmt.Sprintf(config.DemoDataDir+"/data%d", idx),
 				SrcHost: demoHost,
 				DstHost: demoHost,
+				FileNum: config.FileNum,
 			}
 			testSubmitTest(t, cfg, config, demoAddr, flowControl)
 		}(i)
