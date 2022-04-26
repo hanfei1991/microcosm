@@ -282,12 +282,7 @@ func (m *Master) Tick(ctx context.Context) error {
 	if err := m.tickedCheckWorkers(ctx); err != nil {
 		return err
 	}
-
-	if err := m.tickedCheckStatus(ctx); err != nil {
-		return err
-	}
-
-	return nil
+	return m.tickedCheckStatus(ctx)
 }
 
 func (m *Master) OnMasterRecovered(ctx context.Context) error {
@@ -417,7 +412,7 @@ func parseExtBytes(data []byte) (*dummyWorkerStatus, error) {
 }
 
 func (m *Master) checkpointKey() string {
-	return strings.Join([]string{"fake-master", "checkpoint", string(m.workerID)}, "/")
+	return strings.Join([]string{"fake-master", "checkpoint", m.workerID}, "/")
 }
 
 func (m *Master) genCheckpoint() *checkpoint {
