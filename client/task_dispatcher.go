@@ -71,7 +71,9 @@ func (d *TaskDispatcher) DispatchTask(
 		return derrors.ErrExecutorPreDispatchFailed.Wrap(err)
 	}
 
-	// The timer must be started before invoking ConfirmDispatchTask.
+	// The timer should be started before invoking ConfirmDispatchTask
+	// because we are expecting heartbeats once the worker is started,
+	// and we need to call startWorkerTimer before the first heartbeat.
 	startWorkerTimer()
 
 	guaranteedFailure, err := d.confirmDispatchTask(ctx, requestID, args.WorkerID)
@@ -169,7 +171,6 @@ func (d *TaskDispatcher) preDispatchTaskOnce(
 		case codes.AlreadyExists:
 			// Since we are generating unique UUIDs, this should not happen.
 			log.L().Panic("Unexpected error", zap.Error(err))
-			panic("unreachable")
 		default:
 			log.L().Warn("PreDispatchTask encountered error, retrying", zap.Error(err))
 			return "", true, errors.Trace(err)
