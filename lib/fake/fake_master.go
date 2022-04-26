@@ -131,7 +131,6 @@ func (m *Master) InitImpl(ctx context.Context) error {
 }
 
 func (m *Master) createWorker(wcfg *WorkerConfig) error {
-	// wcfg := &WorkerConfig{ID: index, TargetTick: int64(m.config.TargetTick)}
 	workerID, err := m.CreateWorker(lib.FakeTask, wcfg, 1)
 	if err != nil {
 		return errors.Trace(err)
