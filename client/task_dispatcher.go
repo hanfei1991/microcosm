@@ -24,7 +24,6 @@ const preDispatchTaskRetryInterval = 1 * time.Second
 type TaskDispatcher struct {
 	client baseExecutorClient
 
-	timeout       time.Duration
 	retryInterval time.Duration
 }
 
@@ -67,9 +66,6 @@ func (d *TaskDispatcher) DispatchTask(
 	startWorkerTimer StartWorkerCallback,
 	abortWorker AbortWorkerCallback,
 ) error {
-	ctx, cancel := context.WithTimeout(ctx, d.timeout)
-	defer cancel()
-
 	requestID, err := d.preDispatchTaskWithRetry(ctx, args)
 	if err != nil {
 		return derrors.ErrExecutorPreDispatchFailed.Wrap(err)
