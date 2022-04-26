@@ -16,6 +16,35 @@ import (
 )
 
 type ExecutorClient interface {
+	baseExecutorClient
+
+	DispatchTask(
+		ctx context.Context,
+		args *DispatchTaskArgs,
+		startWorkerTimer StartWorkerCallback,
+		abortWorker AbortWorkerCallback,
+	) error
+}
+
+func newExecutorClient(addr string) (ExecutorClient, error) {
+	base, err := newBaseExecutorClient(addr)
+	if err != nil {
+		return nil, err
+	}
+
+	taskDispatcher := newTaskDispatcher(base)
+	return &executorClientImpl{
+		baseExecutorClientImpl: base,
+		TaskDispatcher:         taskDispatcher,
+	}, nil
+}
+
+type executorClientImpl struct {
+	*baseExecutorClientImpl
+	*TaskDispatcher
+}
+
+type baseExecutorClient interface {
 	Send(context.Context, *ExecutorRequest) (*ExecutorResponse, error)
 }
 
@@ -23,12 +52,12 @@ type closeableConnIface interface {
 	Close() error
 }
 
-type executorClient struct {
+type baseExecutorClientImpl struct {
 	conn   closeableConnIface
 	client pb.ExecutorClient
 }
 
-func (c *executorClient) Send(ctx context.Context, req *ExecutorRequest) (*ExecutorResponse, error) {
+func (c *baseExecutorClientImpl) Send(ctx context.Context, req *ExecutorRequest) (*ExecutorResponse, error) {
 	resp := &ExecutorResponse{}
 	var err error
 	switch req.Cmd {
@@ -51,18 +80,18 @@ func (c *executorClient) Send(ctx context.Context, req *ExecutorRequest) (*Execu
 	return resp, err
 }
 
-func newExecutorClientForTest(addr string) (*executorClient, error) {
+func newExecutorClientForTest(addr string) (*baseExecutorClientImpl, error) {
 	conn, err := mock.Dial(addr)
 	if err != nil {
 		return nil, errors.ErrGrpcBuildConn.GenWithStackByArgs(addr)
 	}
-	return &executorClient{
+	return &baseExecutorClientImpl{
 		conn:   conn,
 		client: mock.NewExecutorClient(conn),
 	}, nil
 }
 
-func newExecutorClient(addr string) (*executorClient, error) {
+func newBaseExecutorClient(addr string) (*baseExecutorClientImpl, error) {
 	if test.GetGlobalTestFlag() {
 		return newExecutorClientForTest(addr)
 	}
@@ -78,7 +107,7 @@ func newExecutorClient(addr string) (*executorClient, error) {
 		return nil, errors.ErrGrpcBuildConn.GenWithStackByArgs(addr)
 	}
 
-	return &executorClient{
+	return &baseExecutorClientImpl{
 		conn:   conn,
 		client: pb.NewExecutorClient(conn),
 	}, nil
