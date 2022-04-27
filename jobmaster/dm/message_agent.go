@@ -12,6 +12,8 @@ import (
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	dmpkg "github.com/hanfei1991/microcosm/pkg/dm"
+	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
+	config2 "github.com/pingcap/tiflow/dm/dm/config"
 
 	"github.com/pingcap/errors"
 )
@@ -23,7 +25,12 @@ var (
 
 type Master interface {
 	// for create worker
-	CreateWorker(workerType lib.WorkerType, config lib.WorkerConfig, cost model.RescUnit) (libModel.WorkerID, error)
+	CreateWorker(
+		workerType lib.WorkerType,
+		config lib.WorkerConfig,
+		cost model.RescUnit,
+		resources ...resourcemeta.ResourceID,
+	) (libModel.WorkerID, error)
 	// for operate-task
 	CurrentEpoch() libModel.Epoch
 }
@@ -73,7 +80,14 @@ func (agent *MessageAgent) CreateWorker(ctx context.Context, taskID string, work
 	}
 	// TODO: deprecated subtask cfg
 	subTaskCfg := taskCfg.ToDMSubTaskCfg()
-	return agent.master.CreateWorker(workerType, subTaskCfg, 1)
+
+	var resourceConstraints []resourcemeta.ResourceID
+	if subTaskCfg.Mode == config2.ModeAll {
+		if workerType != lib.WorkerDMDump {
+			resourceConstraints = append(resourceConstraints, resourcemeta.NewDMResourceID(subTaskCfg.Name, subTaskCfg.SourceID))
+		}
+	}
+	return agent.master.CreateWorker(workerType, subTaskCfg, 1, resourceConstraints...)
 }
 
 func (agent *MessageAgent) StopWorker(ctx context.Context, taskID libModel.WorkerID, workerID libModel.WorkerID) error {
