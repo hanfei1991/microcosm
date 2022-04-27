@@ -283,6 +283,10 @@ func (m *WorkerManager) Tick(ctx context.Context) error {
 			return nil
 		}
 
+		if event.beforeHook != nil {
+			event.beforeHook()
+		}
+
 		switch event.Tp {
 		case workerOnlineEvent:
 			if err := m.onWorkerOnlined(ctx, event.Handle); err != nil {
@@ -300,10 +304,6 @@ func (m *WorkerManager) Tick(ctx context.Context) error {
 			if err := m.onWorkerDispatched(ctx, event.Handle, event.Err); err != nil {
 				return err
 			}
-		}
-
-		if event.beforeHook != nil {
-			event.beforeHook()
 		}
 	}
 }
@@ -384,7 +384,8 @@ func (m *WorkerManager) OnWorkerStatusUpdateMessage(msg *statusutil.WorkerStatus
 		if err != nil {
 			log.L().Warn("Error encountered when processing status update",
 				zap.String("master-id", m.masterID),
-				zap.Any("message", msg))
+				zap.Any("message", msg),
+				zap.Error(err))
 		}
 		return
 	}
