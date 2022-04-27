@@ -533,7 +533,7 @@ func (m *DefaultBaseMaster) CreateWorker(
 		if err != nil {
 			// TODO log the gRPC errors from a lower level such as by an interceptor.
 			log.L().Warn("ScheduleTask returned error", zap.Error(err))
-			m.workerManager.OnCreatingWorkerFinished(workerID, err)
+			m.workerManager.AbortCreatingWorker(workerID, err)
 			return
 		}
 		log.L().Debug("ScheduleTask succeeded", zap.Any("response", resp))
@@ -542,7 +542,7 @@ func (m *DefaultBaseMaster) CreateWorker(
 
 		err = m.executorClientManager.AddExecutor(executorID, resp.ExecutorAddr)
 		if err != nil {
-			m.workerManager.OnCreatingWorkerFinished(workerID, err)
+			m.workerManager.AbortCreatingWorker(workerID, err)
 			return
 		}
 
@@ -555,9 +555,9 @@ func (m *DefaultBaseMaster) CreateWorker(
 		}
 
 		err = executorClient.DispatchTask(requestCtx, dispatchArgs, func() {
-			m.workerManager.OnCreatingWorker(workerID, executorID)
+			m.workerManager.BeforeStartingWorker(workerID, executorID)
 		}, func(err error) {
-			m.workerManager.OnCreatingWorkerFinished(workerID, err)
+			m.workerManager.AbortCreatingWorker(workerID, err)
 		})
 
 		if err != nil {
@@ -567,7 +567,8 @@ func (m *DefaultBaseMaster) CreateWorker(
 			return
 		}
 
-		m.workerManager.OnCreatingWorkerFinished(workerID, nil)
+		log.L().Info("Dispatch Worker succeeded",
+			zap.Any("args", dispatchArgs))
 	}()
 
 	return workerID, nil
