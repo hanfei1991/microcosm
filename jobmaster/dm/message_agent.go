@@ -13,8 +13,6 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	dmpkg "github.com/hanfei1991/microcosm/pkg/dm"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
-	config2 "github.com/pingcap/tiflow/dm/dm/config"
-
 	"github.com/pingcap/errors"
 )
 
@@ -74,20 +72,20 @@ func (agent *MessageAgent) UpdateWorkerHandle(taskID string, sendHandle SendHand
 
 // Manage all interactions with workers in the message agent
 // Though we can create worker in jobmaster directly
-func (agent *MessageAgent) CreateWorker(ctx context.Context, taskID string, workerType lib.WorkerType, taskCfg *config.TaskCfg) (libModel.WorkerID, error) {
+func (agent *MessageAgent) CreateWorker(
+	ctx context.Context,
+	taskID string,
+	workerType lib.WorkerType,
+	taskCfg *config.TaskCfg,
+	resources ...resourcemeta.ResourceID,
+) (libModel.WorkerID, error) {
 	if _, ok := agent.sendHandles.Load(taskID); ok {
 		return "", errors.Errorf("worker for task %s already exist", taskID)
 	}
 	// TODO: deprecated subtask cfg
 	subTaskCfg := taskCfg.ToDMSubTaskCfg()
 
-	var resourceConstraints []resourcemeta.ResourceID
-	if subTaskCfg.Mode == config2.ModeAll {
-		if workerType != lib.WorkerDMDump {
-			resourceConstraints = append(resourceConstraints, NewDMResourceID(subTaskCfg.Name, subTaskCfg.SourceID))
-		}
-	}
-	return agent.master.CreateWorker(workerType, subTaskCfg, 1, resourceConstraints...)
+	return agent.master.CreateWorker(workerType, subTaskCfg, 1, resources...)
 }
 
 func (agent *MessageAgent) StopWorker(ctx context.Context, taskID libModel.WorkerID, workerID libModel.WorkerID) error {
