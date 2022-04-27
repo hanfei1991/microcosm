@@ -85,8 +85,3 @@ func ParseResourcePath(rpath ResourceID) (ResourceType, string, error) {
 	suffix := path.Join(segments[1:]...)
 	return resourceType, suffix, nil
 }
-
-// NewDMResourceID returns a ResourceID in DM's style.
-func NewDMResourceID(taskName, sourceName string) ResourceID {
-	return "/local/" + taskName + "/" + sourceName
-}

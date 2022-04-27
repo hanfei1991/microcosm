@@ -84,7 +84,7 @@ func (agent *MessageAgent) CreateWorker(ctx context.Context, taskID string, work
 	var resourceConstraints []resourcemeta.ResourceID
 	if subTaskCfg.Mode == config2.ModeAll {
 		if workerType != lib.WorkerDMDump {
-			resourceConstraints = append(resourceConstraints, resourcemeta.NewDMResourceID(subTaskCfg.Name, subTaskCfg.SourceID))
+			resourceConstraints = append(resourceConstraints, NewDMResourceID(subTaskCfg.Name, subTaskCfg.SourceID))
 		}
 	}
 	return agent.master.CreateWorker(workerType, subTaskCfg, 1, resourceConstraints...)
