@@ -186,7 +186,7 @@ func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metad
 		var resources []resourcemeta.ResourceID
 		// we can assure only first worker don't need local resource.
 		if workerIdxInSeq(persistentTask.Cfg.TaskMode, nextUnit) != 0 {
-			resources = append(resources, NewDMResourceID(persistentTask.Cfg.TaskMode, persistentTask.Cfg.Upstreams[0].SourceID))
+			resources = append(resources, NewDMResourceID(persistentTask.Cfg.Name, persistentTask.Cfg.Upstreams[0].SourceID))
 		}
 
 		// createWorker should be an asynchronous operation
