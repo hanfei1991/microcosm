@@ -46,6 +46,17 @@ func (m *ResourceMeta) ToQueryResourceResponse() *pb.QueryResourceResponse {
 	}
 }
 
+func (m *ResourceMeta) Map() map[string]interface{} {
+	return map[string]interface{}{
+		"project_id":  m.ProjectID,
+		"id":          m.ID,
+		"job_id":      m.Job,
+		"worker_id":   m.Worker,
+		"executor_id": m.Executor,
+		"deleted":     m.Deleted,
+	}
+}
+
 // GCTodoEntry records a future need for GC'ing a resource.
 type GCTodoEntry struct {
 	ID           ResourceID `json:"id"`
