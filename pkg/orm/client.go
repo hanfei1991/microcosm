@@ -73,6 +73,7 @@ type JobClient interface {
 	UpsertJob(ctx context.Context, job *libModel.MasterMetaKVData) error
 	UpdateJob(ctx context.Context, job *libModel.MasterMetaKVData) error
 	DeleteJob(ctx context.Context, jobID string) (Result, error)
+
 	GetJobByID(ctx context.Context, jobID string) (*libModel.MasterMetaKVData, error)
 	QueryJobs(ctx context.Context) ([]*libModel.MasterMetaKVData, error)
 	QueryJobsByProjectID(ctx context.Context, projectID string) ([]*libModel.MasterMetaKVData, error)
