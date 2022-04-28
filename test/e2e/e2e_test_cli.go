@@ -143,7 +143,7 @@ func (cli *utCli) CheckFakeJobTick(
 		return errors.Errorf("job %d not found in checkpoint %v", jobIndex, ckpt)
 	}
 	if tick < target {
-		return errors.Errorf("tick %d not reaches target %d", tick, target)
+		return errors.Errorf("tick %d not reaches target %d, checkpoint %v", tick, target, ckpt)
 	}
 	return nil
 }
@@ -160,10 +160,14 @@ func (cli *utCli) CheckFakeJobKey(
 		return errors.Errorf("job %d not found in checkpoint %v", jobIndex, checkpoint)
 	}
 	if ckpt.Value != expectedValue {
-		return errors.Errorf("value not equals, expected: '%s', actual: '%s'", expectedValue, ckpt.Value)
+		return errors.Errorf(
+			"value not equals, expected: '%s', actual: '%s', checkpoint %v",
+			expectedValue, ckpt.Value, ckpt)
 	}
 	if ckpt.Mvcc != expectedMvcc {
-		return errors.Errorf("mvcc not equals, expected: '%d', actual: '%d'", expectedMvcc, ckpt.Mvcc)
+		return errors.Errorf(
+			"mvcc not equals, expected: '%d', actual: '%d', checkpoint %v",
+			expectedMvcc, ckpt.Mvcc, ckpt)
 	}
 
 	return nil

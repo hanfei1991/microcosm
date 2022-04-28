@@ -26,7 +26,7 @@ func TestNodeFailure(t *testing.T) {
 	ctx := context.Background()
 	cfg := &fake.Config{
 		JobName:     "test-node-failure",
-		WorkerCount: 5,
+		WorkerCount: 4,
 		// use a large enough target tick to ensure the fake job long running
 		TargetTick:      10000000,
 		EtcdWatchEnable: true,
@@ -58,7 +58,7 @@ func TestNodeFailure(t *testing.T) {
 			}
 		}
 		return true
-	}, time.Second*30, time.Second)
+	}, time.Second*60, time.Second*2)
 
 	sourceUpdateCount := 10
 	sourceValue := "value"
@@ -78,7 +78,7 @@ func TestNodeFailure(t *testing.T) {
 			}
 		}
 		return true
-	}, time.Second*30, time.Second)
+	}, time.Second*60, time.Second*2)
 
 	err = cli.PauseJob(ctx, jobID)
 	require.NoError(t, err)
@@ -94,5 +94,5 @@ func TestNodeFailure(t *testing.T) {
 			return false
 		}
 		return true
-	}, time.Second*30, time.Second)
+	}, time.Second*60, time.Second*2)
 }
