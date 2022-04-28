@@ -203,6 +203,10 @@ func (m *Master) tickedCheckWorkers(ctx context.Context) error {
 			if _, ok := m.workerID2BusinessID[worker.ID()]; ok {
 				businessID = m.workerID2BusinessID[worker.ID()]
 			} else {
+				// worker status could have not been updated
+				if worker.Status().ExtBytes == nil {
+					continue
+				}
 				ws, err := parseExtBytes(worker.Status().ExtBytes)
 				if err != nil {
 					return errors.Trace(err)
@@ -313,28 +317,24 @@ func (m *Master) OnWorkerDispatched(worker lib.WorkerHandle, result error) error
 		return errors.Trace(result)
 	}
 
-	log.L().Info("FakeMaster: OnWorkerDispatched",
-		zap.String("worker-id", worker.ID()),
-		zap.Error(result))
-
-	m.workerListMu.Lock()
-	defer m.workerListMu.Unlock()
-
-	idx, ok := m.pendingWorkerSet[worker.ID()]
-	if !ok {
-		log.L().Panic("OnWorkerDispatched is called with an unknown workerID",
-			zap.String("worker-id", worker.ID()))
-	}
-	delete(m.pendingWorkerSet, worker.ID())
-	m.workerList[idx] = worker
-	m.workerID2BusinessID[worker.ID()] = idx
-
 	return nil
 }
 
 func (m *Master) OnWorkerOnline(worker lib.WorkerHandle) error {
 	log.L().Info("FakeMaster: OnWorkerOnline",
 		zap.String("worker-id", worker.ID()))
+
+	m.workerListMu.Lock()
+	defer m.workerListMu.Unlock()
+
+	idx, ok := m.pendingWorkerSet[worker.ID()]
+	if !ok {
+		log.L().Panic("OnWorkerOnline is called with an unknown workerID",
+			zap.String("worker-id", worker.ID()))
+	}
+	delete(m.pendingWorkerSet, worker.ID())
+	m.workerList[idx] = worker
+	m.workerID2BusinessID[worker.ID()] = idx
 
 	return nil
 }
