@@ -125,7 +125,7 @@ func (s *workerManageTestSuite) onWorkerDispatched(ctx context.Context, handle W
 		return errors.New("unexpected event already exists")
 	}
 	s.events[handle.ID()] = &masterEvent{
-		Tp:     workerDispatchedEvent,
+		Tp:     workerDispatchFailedEvent,
 		Handle: handle,
 		Err:    err,
 	}

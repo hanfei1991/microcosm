@@ -561,8 +561,8 @@ func (m *DefaultBaseMaster) CreateWorker(
 		})
 
 		if err != nil {
+			// All cleaning up should have been done in AbortCreatingWorker.
 			log.L().Info("DispatchTask failed",
-				zap.Any("args", dispatchArgs),
 				zap.Error(err))
 			return
 		}

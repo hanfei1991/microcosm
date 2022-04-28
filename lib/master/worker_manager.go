@@ -301,7 +301,7 @@ func (m *WorkerManager) Tick(ctx context.Context) error {
 			if err := m.onWorkerStatusUpdated(ctx, event.Handle); err != nil {
 				return err
 			}
-		case workerDispatchedEvent:
+		case workerDispatchFailedEvent:
 			if err := m.onWorkerDispatched(ctx, event.Handle, event.Err); err != nil {
 				return err
 			}
@@ -337,7 +337,7 @@ func (m *WorkerManager) AbortCreatingWorker(workerID libModel.WorkerID, errIn er
 	defer m.mu.Unlock()
 
 	event := &masterEvent{
-		Tp:       workerDispatchedEvent,
+		Tp:       workerDispatchFailedEvent,
 		WorkerID: workerID,
 		Handle: &tombstoneHandleImpl{
 			workerID: workerID,
