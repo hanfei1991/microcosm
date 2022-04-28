@@ -149,6 +149,7 @@ func (m *Master) InitImpl(ctx context.Context) error {
 	return m.createWorkers()
 }
 
+// This function is not thread safe, it must be called with m.workerListMu locked
 func (m *Master) createWorker(wcfg *WorkerConfig) error {
 	workerID, err := m.CreateWorker(lib.FakeTask, wcfg, 1)
 	if err != nil {
@@ -158,6 +159,7 @@ func (m *Master) createWorker(wcfg *WorkerConfig) error {
 		zap.Int("BusinessID", wcfg.ID),
 		zap.String("worker-id", workerID))
 	m.pendingWorkerSet[workerID] = wcfg.ID
+	m.workerID2BusinessID[workerID] = wcfg.ID
 	return nil
 }
 
@@ -334,7 +336,6 @@ func (m *Master) OnWorkerOnline(worker lib.WorkerHandle) error {
 	}
 	delete(m.pendingWorkerSet, worker.ID())
 	m.workerList[idx] = worker
-	m.workerID2BusinessID[worker.ID()] = idx
 
 	return nil
 }
@@ -369,6 +370,8 @@ func (m *Master) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
 		}
 	}
 	wcfg := m.genWorkerConfig(index, startTick, startRevision)
+	m.workerListMu.Lock()
+	defer m.workerListMu.Unlock()
 	return m.createWorker(wcfg)
 }
 
