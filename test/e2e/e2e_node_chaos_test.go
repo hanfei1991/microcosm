@@ -3,6 +3,7 @@ package e2e_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -14,6 +15,27 @@ import (
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/test/e2e"
 )
+
+func updateKeyAndCheckOnce(
+	ctx context.Context, t *testing.T, cli *e2e.ChaosCli,
+	jobID string, workerCount int, updateValue string, expectedMvcc int,
+) {
+	for j := 0; j < workerCount; j++ {
+		err := cli.UpdateFakeJobKey(ctx, j, updateValue)
+		require.NoError(t, err)
+	}
+
+	require.Eventually(t, func() bool {
+		for jobIdx := 0; jobIdx < workerCount; jobIdx++ {
+			err := cli.CheckFakeJobKey(ctx, jobID, jobIdx, expectedMvcc, updateValue)
+			if err != nil {
+				log.L().Warn("check fake job failed", zap.Error(err))
+				return false
+			}
+		}
+		return true
+	}, time.Second*60, time.Second*2)
+}
 
 func TestNodeFailure(t *testing.T) {
 	// TODO: make the following variables configurable
@@ -60,25 +82,23 @@ func TestNodeFailure(t *testing.T) {
 		return true
 	}, time.Second*60, time.Second*2)
 
-	sourceUpdateCount := 3
-	sourceValue := "value"
-	for i := 0; i < sourceUpdateCount; i++ {
-		for j := 0; j < cfg.WorkerCount; j++ {
-			err := cli.UpdateFakeJobKey(ctx, j, sourceValue)
-			require.NoError(t, err)
-		}
+	mvccCount := 1
+	updateKeyAndCheckOnce(ctx, t, cli, jobID, cfg.WorkerCount, "random-value-1", mvccCount)
+
+	nodeCount := 3
+	for i := 0; i < nodeCount; i++ {
+		name := fmt.Sprintf("sample_server-master-%d_1", i)
+		cli.ContainerRestart(name)
+		mvccCount++
+		updateKeyAndCheckOnce(ctx, t, cli, jobID, cfg.WorkerCount, "random-value-2", mvccCount)
 	}
 
-	require.Eventually(t, func() bool {
-		for jobIdx := 0; jobIdx < cfg.WorkerCount; jobIdx++ {
-			err := cli.CheckFakeJobKey(ctx, jobID, jobIdx, sourceUpdateCount, sourceValue)
-			if err != nil {
-				log.L().Warn("check fake job failed", zap.Error(err))
-				return false
-			}
-		}
-		return true
-	}, time.Second*60, time.Second*2)
+	for i := 0; i < nodeCount; i++ {
+		name := fmt.Sprintf("sample_server-executor-%d_1", i)
+		cli.ContainerRestart(name)
+		mvccCount++
+		updateKeyAndCheckOnce(ctx, t, cli, jobID, cfg.WorkerCount, "random-value-2", mvccCount)
+	}
 
 	err = cli.PauseJob(ctx, jobID)
 	require.NoError(t, err)
