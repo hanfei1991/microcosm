@@ -60,7 +60,7 @@ func TestNodeFailure(t *testing.T) {
 		return true
 	}, time.Second*60, time.Second*2)
 
-	sourceUpdateCount := 10
+	sourceUpdateCount := 3
 	sourceValue := "value"
 	for i := 0; i < sourceUpdateCount; i++ {
 		for j := 0; j < cfg.WorkerCount; j++ {

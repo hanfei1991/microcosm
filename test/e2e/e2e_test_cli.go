@@ -162,12 +162,12 @@ func (cli *utCli) CheckFakeJobKey(
 	if ckpt.Value != expectedValue {
 		return errors.Errorf(
 			"value not equals, expected: '%s', actual: '%s', checkpoint %v",
-			expectedValue, ckpt.Value, ckpt)
+			expectedValue, ckpt.Value, checkpoint)
 	}
 	if ckpt.Mvcc != expectedMvcc {
 		return errors.Errorf(
 			"mvcc not equals, expected: '%d', actual: '%d', checkpoint %v",
-			expectedMvcc, ckpt.Mvcc, ckpt)
+			expectedMvcc, ckpt.Mvcc, checkpoint)
 	}
 
 	return nil
