@@ -90,14 +90,16 @@ func TestNodeFailure(t *testing.T) {
 		name := fmt.Sprintf("sample_server-master-%d_1", i)
 		cli.ContainerRestart(name)
 		mvccCount++
-		updateKeyAndCheckOnce(ctx, t, cli, jobID, cfg.WorkerCount, "random-value-2", mvccCount)
+		value := fmt.Sprintf("restart-server-master-value-%d", i)
+		updateKeyAndCheckOnce(ctx, t, cli, jobID, cfg.WorkerCount, value, mvccCount)
 	}
 
 	for i := 0; i < nodeCount; i++ {
 		name := fmt.Sprintf("sample_server-executor-%d_1", i)
 		cli.ContainerRestart(name)
 		mvccCount++
-		updateKeyAndCheckOnce(ctx, t, cli, jobID, cfg.WorkerCount, "random-value-2", mvccCount)
+		value := fmt.Sprintf("restart-executor-value-%d", i)
+		updateKeyAndCheckOnce(ctx, t, cli, jobID, cfg.WorkerCount, value, mvccCount)
 	}
 
 	err = cli.PauseJob(ctx, jobID)
