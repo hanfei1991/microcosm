@@ -43,7 +43,7 @@ func TestNewMetaOpsClient(t *testing.T) {
 
 	var store metaclient.StoreConfigParams
 	store.SetEndpoints("127.0.0.1:3306")
-	cli, err := NewClient(store, "", NewDefaultDBConfig())
+	cli, err := NewClient(store, NewDefaultDBConfig())
 	require.Nil(t, cli)
 	require.Error(t, err)
 

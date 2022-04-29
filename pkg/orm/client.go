@@ -99,13 +99,13 @@ type ResourceClient interface {
 }
 
 // NewClient return the client to operate framework metastore
-func NewClient(mc metaclient.StoreConfigParams, projectID tenant.ProjectID, conf DBConfig) (Client, error) {
-	err := createDatabaseForProject(mc, projectID, conf)
+func NewClient(mc metaclient.StoreConfigParams, conf DBConfig) (Client, error) {
+	err := createDatabaseForProject(mc, tenant.FrameTenantID, conf)
 	if err != nil {
 		return nil, err
 	}
 
-	dsn := generateDSNByParams(mc, projectID, conf, true)
+	dsn := generateDSNByParams(mc, tenant.FrameTenantID, conf, true)
 	sqlDB, err := newSQLDB("mysql", dsn, conf)
 	if err != nil {
 		return nil, err
@@ -276,7 +276,7 @@ func (c *metaOpsClient) GenEpoch(ctx context.Context) (libModel.Epoch, error) {
 		if err := tx.First(&logicEp, defaultEpochPK).Error; err != nil {
 			return err
 		}
-		epoch = libModel.Epoch(logicEp.Epoch)
+		epoch = logicEp.Epoch
 
 		// return nil will commit the whole transaction
 		return nil
@@ -611,17 +611,4 @@ func (c *metaOpsClient) QueryResourcesByExecutorID(ctx context.Context, executor
 	}
 
 	return resources, nil
-}
-
-// isDuplicateEntryErr check if the mysql error is duplicate primary key or unique key
-func isDuplicateEntryErr(err error) bool {
-	if errMy, ok := err.(*dmysql.MySQLError); ok {
-		if errMy.Number == 1062 {
-			return true
-		}
-
-		return false
-	}
-
-	return false
 }

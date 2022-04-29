@@ -11,11 +11,8 @@ import (
 	gsql "github.com/dolthub/go-mysql-server/sql"
 	"github.com/dolthub/go-mysql-server/sql/information_schema"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
+	"github.com/hanfei1991/microcosm/pkg/tenant"
 	"github.com/phayes/freeport"
-)
-
-const (
-	testDbName = "dfe_test"
 )
 
 func NewMockClient() (Client, error) {
@@ -28,7 +25,7 @@ func NewMockClient() (Client, error) {
 	store.SetEndpoints(addr)
 	store.Auth.User = "root"
 
-	cli, err := NewClient(store, testDbName, NewDefaultDBConfig())
+	cli, err := NewClient(store, NewDefaultDBConfig())
 	if err != nil {
 		svr.Close()
 		return nil, err
@@ -101,5 +98,5 @@ func mockBackendDB(address string) (*server.Server, error) {
 }
 
 func createTestDatabase() *memory.Database {
-	return memory.NewDatabase(testDbName)
+	return memory.NewDatabase(tenant.FrameTenantID)
 }
