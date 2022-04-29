@@ -13,8 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TODO: go-mysql-server concurrent transaction may cause data race
-// need mutex protection
 func TestGenEpochMock(t *testing.T) {
 	t.Parallel()
 
@@ -31,6 +29,8 @@ func TestGenEpochMock(t *testing.T) {
 	}
 	require.Equal(t, int64(11), epoch)
 
+	// FIXME: go-mysql-server concurrent transaction may cause data race
+	// need mutex protection
 	/*
 		var wg sync.WaitGroup
 		for i := 0; i < 10; i++ {
@@ -278,27 +278,25 @@ func TestJobMock(t *testing.T) {
 	updatedAt := tm.Add(time.Duration(1))
 
 	testCases := []mCase{
-		/*
-			{
-				fn: "AddJob",
-				inputs: []interface{}{
-					&libModel.MasterMetaKVData{
-						Model: model.Model{
-							CreatedAt: createdAt,
-							UpdatedAt: updatedAt,
-						},
-						ProjectID:  "p111",
-						ID:         "j111",
-						Tp:         1,
-						NodeID:     "n111",
-						Epoch:      1,
-						StatusCode: 1,
-						Addr:       "127.0.0.1",
-						Config:     []byte{0x11, 0x22},
+		{
+			fn: "UpsertJob",
+			inputs: []interface{}{
+				&libModel.MasterMetaKVData{
+					Model: model.Model{
+						CreatedAt: createdAt,
+						UpdatedAt: updatedAt,
 					},
+					ProjectID:  "p111",
+					ID:         "j111",
+					Tp:         1,
+					NodeID:     "n111",
+					Epoch:      1,
+					StatusCode: 1,
+					Addr:       "127.0.0.1",
+					Config:     []byte{0x11, 0x22},
 				},
 			},
-		*/
+		},
 		// go-mysql-server not support unique index
 		// ref: https://github.com/dolthub/go-mysql-server/issues/571
 		/*
@@ -317,46 +315,19 @@ func TestJobMock(t *testing.T) {
 			inputs: []interface{}{
 				&libModel.MasterMetaKVData{
 					Model: model.Model{
+						// using duplicate primary key error to replace duplicate unique key
 						SeqID: 1,
 					},
-					ID: "j111",
+					ProjectID:  "p111",
+					ID:         "j111",
+					Tp:         1,
+					NodeID:     "n111",
+					Epoch:      1,
+					StatusCode: 2,
+					Addr:       "127.0.0.1",
 				},
 			},
 		},
-		{
-			fn: "UpsertJob",
-			inputs: []interface{}{
-				&libModel.MasterMetaKVData{
-					Model: model.Model{
-						SeqID: 1,
-					},
-					ID: "j112",
-				},
-			},
-		},
-		/*
-			{
-				// INSERT INTO `master_meta_kv_data` (`created_at`,`updated_at`,`project_id`,`job_id`,`job_type`,`job_status`,`job_addr`,
-				// `job_config`,`id`) VALUES ('2022-04-14 10:56:50.557','2022-04-14 10:56:50.557','111-222-333','111',1,1,'127.0.0.1','<binary>',1)
-				fn: "AddJob",
-				inputs: []interface{}{
-					&libModel.MasterMetaKVData{
-						Model: model.Model{
-							CreatedAt: createdAt,
-							UpdatedAt: updatedAt,
-						},
-						ProjectID:  "p111",
-						ID:         "j112",
-						Tp:         1,
-						NodeID:     "n111",
-						Epoch:      1,
-						StatusCode: 1,
-						Addr:       "127.0.0.1",
-						Config:     []byte{0x11, 0x22},
-					},
-				},
-			},
-		*/
 		{
 			fn: "DeleteJob",
 			inputs: []interface{}{
@@ -387,7 +358,7 @@ func TestJobMock(t *testing.T) {
 				Tp:         1,
 				NodeID:     "n111",
 				Epoch:      1,
-				StatusCode: 1,
+				StatusCode: 2,
 				Addr:       "127.0.0.1",
 				Config:     []byte{0x11, 0x22},
 			},
@@ -417,7 +388,7 @@ func TestJobMock(t *testing.T) {
 					Tp:         1,
 					NodeID:     "n111",
 					Epoch:      1,
-					StatusCode: 1,
+					StatusCode: 2,
 					Addr:       "1.1.1.1",
 					Config:     []byte{0x11, 0x22},
 				},
@@ -435,7 +406,7 @@ func TestJobMock(t *testing.T) {
 			fn: "QueryJobsByStatus",
 			inputs: []interface{}{
 				"j111",
-				1,
+				2,
 			},
 			output: []*libModel.MasterMetaKVData{
 				{
@@ -449,7 +420,7 @@ func TestJobMock(t *testing.T) {
 					Tp:         1,
 					NodeID:     "n111",
 					Epoch:      1,
-					StatusCode: 1,
+					StatusCode: 2,
 					Addr:       "127.0.0.1",
 					Config:     []byte{0x11, 0x22},
 				},

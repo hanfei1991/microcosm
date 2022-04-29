@@ -434,7 +434,7 @@ func (c *metaOpsClient) QueryJobsByStatus(ctx context.Context,
 }
 
 /////////////////////////////// Worker Operation
-// AddWorker insert the workerInfo
+// UpsertWorker insert the workerInfo
 // TODO: refine me
 func (c *metaOpsClient) UpsertWorker(ctx context.Context, worker *libModel.WorkerStatus) error {
 	if worker == nil {
@@ -513,7 +513,7 @@ func (c *metaOpsClient) QueryWorkersByStatus(ctx context.Context, masterID strin
 }
 
 /////////////////////////////// Resource Operation
-// UpsertResource insert the model.libModel.resourcemeta.ResourceMeta
+// UpsertResource upsert the ResourceMeta
 // TODO: refine me
 func (c *metaOpsClient) UpsertResource(ctx context.Context, resource *resourcemeta.ResourceMeta) error {
 	if resource == nil {
@@ -533,6 +533,7 @@ func (c *metaOpsClient) UpsertResource(ctx context.Context, resource *resourceme
 	return nil
 }
 
+// UpdateResource update the resourcemeta
 func (c *metaOpsClient) UpdateResource(ctx context.Context, resource *resourcemeta.ResourceMeta) error {
 	if resource == nil {
 		return cerrors.ErrMetaOpFail.GenWithStackByArgs("input resource meta is nil")
@@ -597,6 +598,7 @@ func (c *metaOpsClient) QueryResourcesByExecutorID(ctx context.Context, executor
 	return resources, nil
 }
 
+// isDuplicateEntryErr check if the mysql error is duplicate primary key or unique key
 func isDuplicateEntryErr(err error) bool {
 	if errMy, ok := err.(*dmysql.MySQLError); ok {
 		if errMy.Number == 1062 {
