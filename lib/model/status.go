@@ -66,6 +66,20 @@ func (s *WorkerStatus) Unmarshal(bytes []byte) error {
 	return nil
 }
 
+// Columns is used for updating the orm model
+func (s *WorkerStatus) Columns() []string {
+	return []string{
+		"updated_at",
+		"project_id",
+		"job_id",
+		"id",
+		"type",
+		"status",
+		"errmsg",
+		"ext_bytes",
+	}
+}
+
 // Map is used for update the orm model
 func (s *WorkerStatus) Map() map[string]interface{} {
 	return map[string]interface{}{

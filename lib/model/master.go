@@ -36,6 +36,21 @@ func (m *MasterMetaKVData) Unmarshal(data []byte) error {
 	return json.Unmarshal(data, m)
 }
 
+// Columns is used for upsert the orm model
+func (m *MasterMetaKVData) Columns() []string {
+	return []string{
+		"updated_at",
+		"project_id",
+		"id",
+		"type",
+		"status",
+		"node_id",
+		"address",
+		"epoch",
+		"config",
+	}
+}
+
 // Map is used for update the orm model
 func (m *MasterMetaKVData) Map() map[string]interface{} {
 	return map[string]interface{}{

@@ -46,6 +46,19 @@ func (m *ResourceMeta) ToQueryResourceResponse() *pb.QueryResourceResponse {
 	}
 }
 
+// Columns is used for updating the orm model
+func (m *ResourceMeta) Columns() []string {
+	return []string{
+		"updated_at",
+		"project_id",
+		"id",
+		"job_id",
+		"worker_id",
+		"executor_id",
+		"deleted",
+	}
+}
+
 func (m *ResourceMeta) Map() map[string]interface{} {
 	return map[string]interface{}{
 		"project_id":  m.ProjectID,

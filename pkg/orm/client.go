@@ -17,6 +17,7 @@ import (
 	"go.uber.org/zap"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 var globalModels = []interface{}{
@@ -371,19 +372,16 @@ func (c *metaOpsClient) QueryProjectOperationsByTimeRange(ctx context.Context,
 
 /////////////////////////////// Job Operation
 // UpsertJob upsert the jobInfo
-// TODO: refine me
 func (c *metaOpsClient) UpsertJob(ctx context.Context, job *libModel.MasterMetaKVData) error {
 	if job == nil {
 		return cerrors.ErrMetaOpFail.GenWithStackByArgs("input master meta is nil")
 	}
 
-	if err := c.db.Create(job).Error; err != nil {
-		if !isDuplicateEntryErr(err) {
-			return cerrors.ErrMetaOpFail.Wrap(err)
-		}
-		if err := c.UpdateJob(ctx, job); err != nil {
-			return err
-		}
+	if err := c.db.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "id"}},
+		DoUpdates: clause.AssignmentColumns(job.Columns()),
+	}).Create(job).Error; err != nil {
+		return cerrors.ErrMetaOpFail.Wrap(err)
 	}
 
 	return nil
@@ -460,20 +458,16 @@ func (c *metaOpsClient) QueryJobsByStatus(ctx context.Context,
 
 /////////////////////////////// Worker Operation
 // UpsertWorker insert the workerInfo
-// TODO: refine me
 func (c *metaOpsClient) UpsertWorker(ctx context.Context, worker *libModel.WorkerStatus) error {
 	if worker == nil {
 		return cerrors.ErrMetaOpFail.GenWithStackByArgs("input worker meta is nil")
 	}
 
-	if err := c.db.Create(worker).Error; err != nil {
-		if !isDuplicateEntryErr(err) {
-			return cerrors.ErrMetaOpFail.Wrap(err)
-		}
-
-		if err := c.UpdateWorker(ctx, worker); err != nil {
-			return err
-		}
+	if err := c.db.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "id"}, {Name: "job_id"}},
+		DoUpdates: clause.AssignmentColumns(worker.Columns()),
+	}).Create(worker).Error; err != nil {
+		return cerrors.ErrMetaOpFail.Wrap(err)
 	}
 
 	return nil
@@ -539,20 +533,16 @@ func (c *metaOpsClient) QueryWorkersByStatus(ctx context.Context, masterID strin
 
 /////////////////////////////// Resource Operation
 // UpsertResource upsert the ResourceMeta
-// TODO: refine me
 func (c *metaOpsClient) UpsertResource(ctx context.Context, resource *resourcemeta.ResourceMeta) error {
 	if resource == nil {
 		return cerrors.ErrMetaOpFail.GenWithStackByArgs("input resource meta is nil")
 	}
 
-	if err := c.db.Create(resource).Error; err != nil {
-		if !isDuplicateEntryErr(err) {
-			return cerrors.ErrMetaOpFail.Wrap(err)
-		}
-
-		if err := c.UpdateResource(ctx, resource); err != nil {
-			return err
-		}
+	if err := c.db.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "id"}},
+		DoUpdates: clause.AssignmentColumns(resource.Columns()),
+	}).Create(resource).Error; err != nil {
+		return cerrors.ErrMetaOpFail.Wrap(err)
 	}
 
 	return nil

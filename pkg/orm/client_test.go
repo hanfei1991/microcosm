@@ -385,11 +385,6 @@ func TestJob(t *testing.T) {
 			fn: "UpsertJob",
 			inputs: []interface{}{
 				&libModel.MasterMetaKVData{
-					Model: model.Model{
-						SeqID:     1,
-						CreatedAt: createdAt,
-						UpdatedAt: updatedAt,
-					},
 					ProjectID:  "p111",
 					ID:         "j111",
 					Tp:         1,
@@ -401,35 +396,7 @@ func TestJob(t *testing.T) {
 				},
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
-				mock.ExpectExec("INSERT INTO `master_meta_kv_data` [(]`created_at`,`updated_at`,`project_id`,`id`,"+
-					"`type`,`status`,`node_id`,`address`,`epoch`,`config`,`seq_id`[)]").WithArgs(createdAt, updatedAt, "p111",
-					"j111", 1, 1, "n111", "127.0.0.1", 1, []byte{0x11, 0x22}, 1).WillReturnResult(sqlmock.NewResult(1, 1))
-			},
-		},
-		{
-			fn: "UpsertJob",
-			inputs: []interface{}{
-				&libModel.MasterMetaKVData{
-					Model: model.Model{
-						SeqID:     1,
-						CreatedAt: createdAt,
-						UpdatedAt: updatedAt,
-					},
-					ProjectID:  "p112",
-					ID:         "j111",
-					Tp:         1,
-					NodeID:     "n111",
-					Epoch:      1,
-					StatusCode: 1,
-					Addr:       "127.0.0.1",
-					Config:     []byte{0x11, 0x22},
-				},
-			},
-			mockExpectResFn: func(mock sqlmock.Sqlmock) {
-				mock.ExpectExec("INSERT INTO `master_meta_kv_data` [(]`created_at`,`updated_at`,`project_id`,`id`,"+
-					"`type`,`status`,`node_id`,`address`,`epoch`,`config`,`seq_id`[)]").WithArgs(createdAt, updatedAt, "p112",
-					"j111", 1, 1, "n111", "127.0.0.1", 1, []byte{0x11, 0x22}, 1).WillReturnError(&mysql.MySQLError{Number: 1062, Message: "error"})
-				mock.ExpectExec("UPDATE `master_meta_kv_data` SET").WillReturnResult(sqlmock.NewResult(1, 1))
+				mock.ExpectExec("ON DUPLICATE KEY UPDATE").WillReturnResult(sqlmock.NewResult(1, 1))
 			},
 		},
 		{
@@ -626,14 +593,14 @@ func TestWorker(t *testing.T) {
 
 	testCases := []tCase{
 		{
-			// INSERT INTO `worker_statuses` (`created_at`,`updated_at`,`project_id`,`job_id`,`worker_id`,`worker_type`,
-			// `worker_statuses`,`worker_err_msg`,`worker_config`,`id`) VALUES ('2022-04-14 11:35:06.119','2022-04-14 11:35:06.119',
-			// '111-222-333','111','222',1,1,'error','<binary>',1)
+			// INSERT INTO `worker_statuses` (`created_at`,`updated_at`,`project_id`,`job_id`,`id`,`type`,`status`,`errmsg`,`ext_bytes`)
+			// VALUES ('2022-04-29 18:49:40.932','2022-04-29 18:49:40.932','p111','j111','w222',1,'1','error','<binary>') ON DUPLICATE KEY
+			// UPDATE `updated_at`=VALUES(`updated_at`),`project_id`=VALUES(`project_id`),`job_id`=VALUES(`job_id`),`id`=VALUES(`id`),
+			// `type`=VALUES(`type`),`status`=VALUES(`status`),`errmsg`=VALUES(`errmsg`),`ext_bytes`=VALUES(`ext_bytes`)
 			fn: "UpsertWorker",
 			inputs: []interface{}{
 				&libModel.WorkerStatus{
 					Model: model.Model{
-						SeqID:     1,
 						CreatedAt: createdAt,
 						UpdatedAt: updatedAt,
 					},
@@ -647,9 +614,7 @@ func TestWorker(t *testing.T) {
 				},
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
-				mock.ExpectExec("INSERT INTO `worker_statuses` [(]`created_at`,`updated_at`,`project_id`,`job_id`,"+
-					"`id`,`type`,`status`,`errmsg`,`ext_bytes`,`seq_id`[)]").WithArgs(
-					createdAt, updatedAt, "p111", "j111", "w222", 1, 1, "error", []byte{0x11, 0x22}, 1).WillReturnResult(sqlmock.NewResult(1, 1))
+				mock.ExpectExec("ON DUPLICATE KEY UPDATE").WillReturnResult(sqlmock.NewResult(1, 1))
 			},
 		},
 		{
@@ -670,11 +635,10 @@ func TestWorker(t *testing.T) {
 					ExtBytes:     []byte{0x11, 0x22},
 				},
 			},
+			err: cerrors.ErrMetaOpFail.GenWithStackByArgs(),
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
-				mock.ExpectExec("INSERT INTO `worker_statuses` [(]`created_at`,`updated_at`,`project_id`,`job_id`,"+
-					"`id`,`type`,`status`,`errmsg`,`ext_bytes`,`seq_id`[)]").WithArgs(
-					createdAt, updatedAt, "p111", "j111", "w222", 1, 1, "error", []byte{0x11, 0x22}, 1).WillReturnError(&mysql.MySQLError{Number: 1062, Message: "error"})
-				mock.ExpectExec("UPDATE `worker_statuses` SET").WillReturnResult(sqlmock.NewResult(0, 1))
+				mock.ExpectExec("INSERT INTO `worker_statuses` [(]`created_at`,`updated_at`,`project_id`,`job_id`," +
+					"`id`,`type`,`status`,`errmsg`,`ext_bytes`,`seq_id`[)]").WillReturnError(&mysql.MySQLError{Number: 1062, Message: "error"})
 			},
 		},
 		{
@@ -872,9 +836,6 @@ func TestResource(t *testing.T) {
 
 	testCases := []tCase{
 		{
-			// INSERT INTO `resource_meta` (`created_at`,`updated_at`,`project_id`,`job_id`,
-			// `id`,`worker_id`,`executor_id`,`deleted`,`id`) VALUES ('2022-04-14 12:16:53.353',
-			// '2022-04-14 12:16:53.353','111-222-333','j111','r333','w222','e444',true,1)
 			fn: "UpsertResource",
 			inputs: []interface{}{
 				&resourcemeta.ResourceMeta{
@@ -892,9 +853,7 @@ func TestResource(t *testing.T) {
 				},
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
-				mock.ExpectExec("INSERT INTO `resource_meta` [(]`created_at`,`updated_at`,`project_id`,`id`,`job_id`,"+
-					"`worker_id`,`executor_id`,`deleted`,`seq_id`[)]").WithArgs(
-					createdAt, updatedAt, "111-222-333", "r333", "j111", "w222", "e444", true, 1).WillReturnResult(sqlmock.NewResult(1, 1))
+				mock.ExpectExec("ON DUPLICATE KEY UPDATE").WillReturnResult(sqlmock.NewResult(1, 1))
 			},
 		},
 		{
@@ -914,11 +873,11 @@ func TestResource(t *testing.T) {
 					Deleted:   true,
 				},
 			},
+			err: cerrors.ErrMetaOpFail.GenWithStackByArgs(),
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
 				mock.ExpectExec("INSERT INTO `resource_meta` [(]`created_at`,`updated_at`,`project_id`,`id`,`job_id`,"+
 					"`worker_id`,`executor_id`,`deleted`,`seq_id`[)]").WithArgs(
 					createdAt, updatedAt, "111-222-333", "r333", "j111", "w222", "e444", true, 1).WillReturnError(&mysql.MySQLError{Number: 1062, Message: "error"})
-				mock.ExpectExec("UPDATE `resource_meta` SET").WillReturnResult(sqlmock.NewResult(0, 1))
 			},
 		},
 		{
