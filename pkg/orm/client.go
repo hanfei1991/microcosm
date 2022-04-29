@@ -379,7 +379,7 @@ func (c *metaOpsClient) UpsertJob(ctx context.Context, job *libModel.MasterMetaK
 
 	if err := c.db.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "id"}},
-		DoUpdates: clause.AssignmentColumns(job.Columns()),
+		DoUpdates: clause.AssignmentColumns(libModel.MasterUpdateColumns),
 	}).Create(job).Error; err != nil {
 		return cerrors.ErrMetaOpFail.Wrap(err)
 	}
@@ -465,7 +465,7 @@ func (c *metaOpsClient) UpsertWorker(ctx context.Context, worker *libModel.Worke
 
 	if err := c.db.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "id"}, {Name: "job_id"}},
-		DoUpdates: clause.AssignmentColumns(worker.Columns()),
+		DoUpdates: clause.AssignmentColumns(libModel.WorkerUpdateColumns),
 	}).Create(worker).Error; err != nil {
 		return cerrors.ErrMetaOpFail.Wrap(err)
 	}
@@ -540,7 +540,7 @@ func (c *metaOpsClient) UpsertResource(ctx context.Context, resource *resourceme
 
 	if err := c.db.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "id"}},
-		DoUpdates: clause.AssignmentColumns(resource.Columns()),
+		DoUpdates: clause.AssignmentColumns(resourcemeta.ResourceUpdateColumns),
 	}).Create(resource).Error; err != nil {
 		return cerrors.ErrMetaOpFail.Wrap(err)
 	}

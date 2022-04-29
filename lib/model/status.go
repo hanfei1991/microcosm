@@ -24,6 +24,19 @@ const (
 	WorkerStatusStopped
 )
 
+// TODO: using reflect to generate it more generally
+// related to some implement of gorm
+var WorkerUpdateColumns = []string{
+	"updated_at",
+	"project_id",
+	"job_id",
+	"id",
+	"type",
+	"status",
+	"errmsg",
+	"ext_bytes",
+}
+
 type WorkerStatus struct {
 	ormModel.Model
 	ProjectID    string           `json:"project-id" gorm:"column:project_id;type:varchar(64) not null"`
@@ -64,20 +77,6 @@ func (s *WorkerStatus) Unmarshal(bytes []byte) error {
 		return errors.Trace(err)
 	}
 	return nil
-}
-
-// Columns is used for updating the orm model
-func (s *WorkerStatus) Columns() []string {
-	return []string{
-		"updated_at",
-		"project_id",
-		"job_id",
-		"id",
-		"type",
-		"status",
-		"errmsg",
-		"ext_bytes",
-	}
 }
 
 // Map is used for update the orm model
