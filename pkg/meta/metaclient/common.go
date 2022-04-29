@@ -150,11 +150,12 @@ func (resp *TxnResponse) OpResponse() OpResponse {
 	return OpResponse{txn: resp}
 }
 
+// TODO: we can add epoch if we need in the future
 type KeyValue struct {
 	// Key is the key in bytes. An empty key is not allowed.
-	Key []byte
+	Key []byte `gorm:"primaryKey;column:key;type:varbinary(128) not null"`
 	// Value is the value held by the key, in bytes.
-	Value []byte
+	Value []byte `gorm:"column:value;type:varbinary(2048)"`
 }
 
 // String only for debug
