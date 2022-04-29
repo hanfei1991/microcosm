@@ -174,7 +174,7 @@ OUT:
 					continue OUT
 				}
 			}
-			wcfg := m.genWorkerConfig(i, 0, 0)
+			wcfg := m.genWorkerConfig(i, 0, 0, 0)
 			err := m.createWorker(wcfg)
 			if err != nil {
 				return err
@@ -235,14 +235,18 @@ func (m *Master) tickedCheckWorkers(ctx context.Context) error {
 		for i, worker := range m.workerList {
 			// create new worker for non-active worker
 			if worker == nil {
-				var startTick, startRevision int64
+				var (
+					startTick, startRevision int64
+					etcdMvccCount            int
+				)
 				if tick, ok := ckpt.Ticks[i]; ok {
 					startTick = tick
 				}
 				if etcdCkpt, ok := ckpt.EtcdCheckpoints[i]; ok {
 					startRevision = etcdCkpt.Revision
+					etcdMvccCount = etcdCkpt.Mvcc
 				}
-				wcfg := m.genWorkerConfig(i, startTick, startRevision)
+				wcfg := m.genWorkerConfig(i, startTick, startRevision, etcdMvccCount)
 				if err := m.createWorker(wcfg); err != nil {
 					return errors.Trace(err)
 				}
@@ -360,16 +364,20 @@ func (m *Master) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
 
 	log.L().Info("FakeMaster: OnWorkerOffline",
 		zap.String("worker-id", worker.ID()), zap.Error(reason))
-	var startTick, startRevision int64
+	var (
+		startTick, startRevision int64
+		mvccCount                int
+	)
 	if ws, err := parseExtBytes(worker.Status().ExtBytes); err != nil {
 		log.L().Warn("failed to parse worker ext bytes", zap.Error(err))
 	} else {
 		startTick = ws.Tick
 		if ws.EtcdCheckpoint != nil {
 			startRevision = ws.EtcdCheckpoint.Revision
+			mvccCount = ws.EtcdCheckpoint.Mvcc
 		}
 	}
-	wcfg := m.genWorkerConfig(index, startTick, startRevision)
+	wcfg := m.genWorkerConfig(index, startTick, startRevision, mvccCount)
 	m.workerListMu.Lock()
 	defer m.workerListMu.Unlock()
 	return m.createWorker(wcfg)
@@ -454,15 +462,20 @@ func (m *Master) genCheckpoint() *Checkpoint {
 	return cp
 }
 
-func (m *Master) genWorkerConfig(index int, startTick, startRevision int64) *WorkerConfig {
+func (m *Master) genWorkerConfig(index int, startTick, startRevision int64, etcdMvccCount int) *WorkerConfig {
 	return &WorkerConfig{
-		ID:                index,
+		ID: index,
+
+		// generated from fake master config
+		TargetTick:      int64(m.config.TargetTick),
+		EtcdWatchEnable: m.config.EtcdWatchEnable,
+		EtcdEndpoints:   m.config.EtcdEndpoints,
+		EtcdWatchPrefix: m.config.EtcdWatchPrefix,
+
+		// loaded from checkpoint if exists
 		StartTick:         startTick,
-		TargetTick:        int64(m.config.TargetTick),
-		EtcdWatchEnable:   m.config.EtcdWatchEnable,
-		EtcdEndpoints:     m.config.EtcdEndpoints,
-		EtcdWatchPrefix:   m.config.EtcdWatchPrefix,
 		EtcdWatchRevision: startRevision,
+		EtcdMvccCount:     etcdMvccCount,
 	}
 }
 

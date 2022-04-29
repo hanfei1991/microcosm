@@ -32,12 +32,15 @@ type (
 	WorkerConfig struct {
 		ID         int   `json:"id"`
 		TargetTick int64 `json:"target-tick"`
-		StartTick  int64 `json:"start-tick"`
 
-		EtcdWatchEnable   bool     `json:"etcd-watch-enable"`
-		EtcdEndpoints     []string `json:"etcd-endpoints"`
-		EtcdWatchPrefix   string   `json:"etcd-watch-prefix"`
-		EtcdWatchRevision int64    `json:"etcd-watch-revision"`
+		EtcdWatchEnable bool     `json:"etcd-watch-enable"`
+		EtcdEndpoints   []string `json:"etcd-endpoints"`
+		EtcdWatchPrefix string   `json:"etcd-watch-prefix"`
+
+		// The following fields should be loaded from checkpoint if exits
+		StartTick         int64 `json:"start-tick"`
+		EtcdWatchRevision int64 `json:"etcd-watch-revision"`
+		EtcdMvccCount     int   `json:"etcd-mvcc-count"`
 	}
 
 	EtcdCheckpoint struct {
@@ -268,9 +271,12 @@ func NewDummyWorker(
 ) lib.WorkerImpl {
 	wcfg := cfg.(*WorkerConfig)
 	status := &dummyWorkerStatus{
-		BusinessID:     wcfg.ID,
-		Tick:           wcfg.StartTick,
-		EtcdCheckpoint: &EtcdCheckpoint{Revision: wcfg.EtcdWatchRevision},
+		BusinessID: wcfg.ID,
+		Tick:       wcfg.StartTick,
+		EtcdCheckpoint: &EtcdCheckpoint{
+			Revision: wcfg.EtcdWatchRevision,
+			Mvcc:     wcfg.EtcdMvccCount,
+		},
 	}
 	return &dummyWorker{
 		statusRateLimiter: rate.NewLimiter(rate.Every(time.Second*3), 1),
