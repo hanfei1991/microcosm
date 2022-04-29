@@ -19,6 +19,15 @@ import (
 	"gorm.io/gorm"
 )
 
+var globalModels = []interface{}{
+	&model.ProjectInfo{},
+	&model.ProjectOperation{},
+	&libModel.MasterMetaKVData{},
+	&libModel.WorkerStatus{},
+	&resourcemeta.ResourceMeta{},
+	&model.LogicEpoch{},
+}
+
 // TODO: retry and idempotent??
 // TODO: context control??
 
@@ -88,7 +97,7 @@ type ResourceClient interface {
 	QueryResourcesByExecutorID(ctx context.Context, executorID string) ([]*resourcemeta.ResourceMeta, error)
 }
 
-// NewMetaOpsClient return the client to operate framework metastore
+// NewClient return the client to operate framework metastore
 func NewClient(mc metaclient.StoreConfigParams, projectID tenant.ProjectID, conf DBConfig) (Client, error) {
 	err := createDatabaseForProject(mc, projectID, conf)
 	if err != nil {
@@ -214,8 +223,7 @@ func (c *metaOpsClient) Close() error {
 // Initialize will create all related tables in SQL backend
 // TODO: What if we change the definition of orm??
 func (c *metaOpsClient) Initialize(ctx context.Context) error {
-	if err := c.db.AutoMigrate(&model.ProjectInfo{}, &model.ProjectOperation{}, &libModel.MasterMetaKVData{},
-		&libModel.WorkerStatus{}, &resourcemeta.ResourceMeta{}, &model.LogicEpoch{}); err != nil {
+	if err := c.db.AutoMigrate(globalModels...); err != nil {
 		return cerrors.ErrMetaOpFail.Wrap(err)
 	}
 

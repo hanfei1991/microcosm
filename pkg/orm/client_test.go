@@ -84,7 +84,7 @@ func testInitialize(t *testing.T) {
 				mock.ExpectExec("CREATE TABLE `master_meta_kv_data` [(]`seq_id` bigint unsigned AUTO_INCREMENT,`created_at` datetime[(]3[)] NULL," +
 					"`updated_at` datetime[(]3[)] NULL,`project_id` varchar[(]64[)] not null,`id` varchar[(]64[)] not null,`type` tinyint not null," +
 					"`status` tinyint not null,`node_id` varchar[(]64[)] not null,`address` varchar[(]64[)] not null,`epoch` bigint not null," +
-					"`config` longblob,PRIMARY KEY [(]`seq_id`[)],INDEX idx_st [(]`project_id`,`status`[)],UNIQUE INDEX uidx_id [(`id`))]").WillReturnResult(sqlmock.NewResult(1, 1))
+					"`config` blob,PRIMARY KEY [(]`seq_id`[)],INDEX idx_st [(]`project_id`,`status`[)],UNIQUE INDEX uidx_id [(`id`))]").WillReturnResult(sqlmock.NewResult(1, 1))
 				mock.ExpectExec("CREATE TABLE `worker_statuses` [(]`seq_id` bigint unsigned AUTO_INCREMENT," +
 					"`created_at` datetime[(]3[)] NULL,`updated_at` datetime[(]3[)] NULL," +
 					"`project_id` varchar[(]64[)] not null,`job_id` varchar[(]64[)] not null,`id` varchar[(]64[)] not null," +
