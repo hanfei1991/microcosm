@@ -73,16 +73,23 @@ type Master struct {
 	workerID2BusinessID map[libModel.WorkerID]int
 	pendingWorkerSet    map[libModel.WorkerID]int
 	statusRateLimiter   *rate.Limiter
-	status              map[libModel.WorkerID]*dummyWorkerStatus
-	finishedSet         map[libModel.WorkerID]int
-	config              *Config
-	statusCode          struct {
+
+	bStatus     *businessStatus
+	finishedSet map[libModel.WorkerID]int
+
+	config     *Config
+	statusCode struct {
 		sync.RWMutex
 		code libModel.WorkerStatusCode
 	}
 	ctx         context.Context
 	clocker     clock.Clock
 	initialized bool
+}
+
+type businessStatus struct {
+	sync.RWMutex
+	status map[libModel.WorkerID]*dummyWorkerStatus
 }
 
 func (m *Master) OnJobManagerFailover(reason lib.MasterFailoverReason) error {
@@ -266,7 +273,9 @@ func (m *Master) tickedCheckWorkers(ctx context.Context) error {
 					return err
 				}
 			}
-			m.status[worker.ID()] = dws
+			m.bStatus.Lock()
+			m.bStatus.status[worker.ID()] = dws
+			m.bStatus.Unlock()
 		}
 	}
 
@@ -275,7 +284,9 @@ func (m *Master) tickedCheckWorkers(ctx context.Context) error {
 
 func (m *Master) tickedCheckStatus(ctx context.Context) error {
 	if m.statusRateLimiter.Allow() {
-		log.L().Info("FakeMaster: Tick", zap.Any("status", m.status))
+		m.bStatus.RLock()
+		log.L().Info("FakeMaster: Tick", zap.Any("status", m.bStatus.status))
+		m.bStatus.RUnlock()
 		// save checkpoint, which is used in business only
 		_, metaErr := m.MetaKVClient().Put(ctx, CheckpointKey(m.workerID), m.genCheckpoint().String())
 		if metaErr != nil {
@@ -356,6 +367,10 @@ func (m *Master) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
 		return errors.Errorf("worker(%s) is not found in worker list", worker.ID())
 	}
 
+	m.bStatus.Lock()
+	delete(m.bStatus.status, worker.ID())
+	m.bStatus.Unlock()
+
 	if derrors.ErrWorkerFinish.Equal(reason) {
 		log.L().Info("FakeMaster: OnWorkerOffline: worker finished", zap.String("worker-id", worker.ID()))
 		m.finishedSet[worker.ID()] = index
@@ -410,7 +425,9 @@ func (m *Master) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) erro
 }
 
 func (m *Master) Status() libModel.WorkerStatus {
-	bytes, err := json.Marshal(m.status)
+	m.bStatus.RLock()
+	defer m.bStatus.RUnlock()
+	bytes, err := json.Marshal(m.bStatus.status)
 	if err != nil {
 		log.L().Panic("unexpected marshal error", zap.Error(err))
 	}
@@ -449,7 +466,9 @@ func (m *Master) genCheckpoint() *Checkpoint {
 		Ticks:           make(map[int]int64),
 		EtcdCheckpoints: make(map[int]EtcdCheckpoint),
 	}
-	for wid, status := range m.status {
+	m.bStatus.RLock()
+	defer m.bStatus.RUnlock()
+	for wid, status := range m.bStatus.status {
 		if businessID, ok := m.workerID2BusinessID[wid]; ok {
 			cp.Ticks[businessID] = status.Tick
 			if status.EtcdCheckpoint != nil {
@@ -489,7 +508,7 @@ func NewFakeMaster(ctx *dcontext.Context, workerID libModel.WorkerID, masterID l
 		workerID2BusinessID: make(map[libModel.WorkerID]int),
 		config:              masterConfig,
 		statusRateLimiter:   rate.NewLimiter(rate.Every(time.Second*3), 1),
-		status:              make(map[libModel.WorkerID]*dummyWorkerStatus),
+		bStatus:             &businessStatus{status: make(map[libModel.WorkerID]*dummyWorkerStatus)},
 		finishedSet:         make(map[libModel.WorkerID]int),
 		ctx:                 ctx.Context,
 		clocker:             clock.New(),
