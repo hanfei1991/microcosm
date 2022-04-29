@@ -29,22 +29,37 @@ type TimeRange struct {
 
 type Client interface {
 	metaclient.Client
+	// project
+	ProjectClient
+	// project operation
+	ProjectOperationClient
+	// job info
+	JobClient
+	// worker status
+	WorkerClient
+	// resource meta
+	ResourceClient
 
 	// Initialize will create all tables for backend operation
 	Initialize(ctx context.Context) error
+}
 
-	// project
-	AddProject(ctx context.Context, project *model.ProjectInfo) error
+type ProjectClient interface {
+	CreateProject(ctx context.Context, project *model.ProjectInfo) error
 	DeleteProject(ctx context.Context, projectID string) error
 	QueryProjects(ctx context.Context) ([]*model.ProjectInfo, error)
 	GetProjectByID(ctx context.Context, projectID string) (*model.ProjectInfo, error)
+}
 
-	// project operation
-	AddProjectOperation(ctx context.Context, op *model.ProjectOperation) error
+// TODO: support pagination and cursor here
+// support `order by time desc limit N`
+type ProjectOperationClient interface {
+	CreateProjectOperation(ctx context.Context, op *model.ProjectOperation) error
 	QueryProjectOperations(ctx context.Context, projectID string) ([]*model.ProjectOperation, error)
 	QueryProjectOperationsByTimeRange(ctx context.Context, projectID string, tr TimeRange) ([]*model.ProjectOperation, error)
+}
 
-	// job info
+type JobClient interface {
 	UpsertJob(ctx context.Context, job *libModel.MasterMetaKVData) error
 	UpdateJob(ctx context.Context, job *libModel.MasterMetaKVData) error
 	DeleteJob(ctx context.Context, jobID string) error
@@ -52,16 +67,18 @@ type Client interface {
 	QueryJobs(ctx context.Context) ([]*libModel.MasterMetaKVData, error)
 	QueryJobsByProjectID(ctx context.Context, projectID string) ([]*libModel.MasterMetaKVData, error)
 	QueryJobsByStatus(ctx context.Context, jobID string, status int) ([]*libModel.MasterMetaKVData, error)
+}
 
-	// worker status
+type WorkerClient interface {
 	UpsertWorker(ctx context.Context, worker *libModel.WorkerStatus) error
 	UpdateWorker(ctx context.Context, worker *libModel.WorkerStatus) error
 	DeleteWorker(ctx context.Context, masterID string, workerID string) error
 	GetWorkerByID(ctx context.Context, masterID string, workerID string) (*libModel.WorkerStatus, error)
 	QueryWorkersByMasterID(ctx context.Context, masterID string) ([]*libModel.WorkerStatus, error)
 	QueryWorkersByStatus(ctx context.Context, masterID string, status int) ([]*libModel.WorkerStatus, error)
+}
 
-	// resource meta
+type ResourceClient interface {
 	UpsertResource(ctx context.Context, resource *resourcemeta.ResourceMeta) error
 	UpdateResource(ctx context.Context, resource *resourcemeta.ResourceMeta) error
 	DeleteResource(ctx context.Context, resourceID string) error
@@ -169,7 +186,7 @@ func newClient(sqlDB *sql.DB) (*metaOpsClient, error) {
 	})
 	if err != nil {
 		log.L().Error("create gorm client fail", zap.Error(err))
-		return nil, err
+		return nil, cerrors.ErrMetaNewClientFail.Wrap(err)
 	}
 
 	return &metaOpsClient{
@@ -187,7 +204,7 @@ type metaOpsClient struct {
 
 func (c *metaOpsClient) Close() error {
 	if c.impl != nil {
-		return c.impl.Close()
+		return cerrors.ErrMetaOpFail.Wrap(c.impl.Close())
 	}
 
 	return nil
@@ -263,8 +280,8 @@ func (c *metaOpsClient) GenEpoch(ctx context.Context) (libModel.Epoch, error) {
 }
 
 ///////////////////////// Project Operation
-// AddProject insert the model.ProjectInfo
-func (c *metaOpsClient) AddProject(ctx context.Context, project *model.ProjectInfo) error {
+// CreateProject insert the model.ProjectInfo
+func (c *metaOpsClient) CreateProject(ctx context.Context, project *model.ProjectInfo) error {
 	if project == nil {
 		return cerrors.ErrMetaOpFail.GenWithStackByArgs("input project info is nil")
 	}
@@ -308,8 +325,8 @@ func (c *metaOpsClient) GetProjectByID(ctx context.Context, projectID string) (*
 	return &project, nil
 }
 
-// AddProjectOperation insert the operation
-func (c *metaOpsClient) AddProjectOperation(ctx context.Context, op *model.ProjectOperation) error {
+// CreateProjectOperation insert the operation
+func (c *metaOpsClient) CreateProjectOperation(ctx context.Context, op *model.ProjectOperation) error {
 	if op == nil {
 		return cerrors.ErrMetaOpFail.GenWithStackByArgs("input project operation is nil")
 	}

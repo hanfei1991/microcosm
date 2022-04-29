@@ -91,7 +91,7 @@ func TestProjectMock(t *testing.T) {
 
 	testCases := []mCase{
 		{
-			fn: "AddProject",
+			fn: "CreateProject",
 			inputs: []interface{}{
 				&model.ProjectInfo{
 					Model: model.Model{
@@ -104,7 +104,7 @@ func TestProjectMock(t *testing.T) {
 			},
 		},
 		{
-			fn: "AddProject",
+			fn: "CreateProject",
 			inputs: []interface{}{
 				&model.ProjectInfo{
 					Model: model.Model{
@@ -193,7 +193,7 @@ func TestProjectOperationMock(t *testing.T) {
 
 	testCases := []mCase{
 		{
-			fn: "AddProjectOperation",
+			fn: "CreateProjectOperation",
 			inputs: []interface{}{
 				&model.ProjectOperation{
 					ProjectID: "p111",
@@ -204,7 +204,7 @@ func TestProjectOperationMock(t *testing.T) {
 			},
 		},
 		{
-			fn: "AddProjectOperation",
+			fn: "CreateProjectOperation",
 			inputs: []interface{}{
 				&model.ProjectOperation{
 					ProjectID: "p111",

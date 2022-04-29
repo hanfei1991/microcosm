@@ -123,7 +123,7 @@ func TestProject(t *testing.T) {
 
 	testCases := []tCase{
 		{
-			fn: "AddProject",
+			fn: "CreateProject",
 			inputs: []interface{}{
 				&model.ProjectInfo{
 					Model: model.Model{
@@ -140,7 +140,7 @@ func TestProject(t *testing.T) {
 			},
 		},
 		{
-			fn: "AddProject",
+			fn: "CreateProject",
 			inputs: []interface{}{
 				&model.ProjectInfo{
 					Model: model.Model{
@@ -919,7 +919,6 @@ func TestResource(t *testing.T) {
 					"`worker_id`,`executor_id`,`deleted`,`seq_id`[)]").WithArgs(
 					createdAt, updatedAt, "111-222-333", "r333", "j111", "w222", "e444", true, 1).WillReturnError(&mysql.MySQLError{Number: 1062, Message: "error"})
 				mock.ExpectExec("UPDATE `resource_meta` SET").WillReturnResult(sqlmock.NewResult(0, 1))
-
 			},
 		},
 		{
