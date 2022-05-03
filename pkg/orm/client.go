@@ -72,7 +72,7 @@ type ProjectOperationClient interface {
 type JobClient interface {
 	UpsertJob(ctx context.Context, job *libModel.MasterMetaKVData) error
 	UpdateJob(ctx context.Context, job *libModel.MasterMetaKVData) error
-	DeleteJob(ctx context.Context, jobID string) error
+	DeleteJob(ctx context.Context, jobID string) (Result, error)
 	GetJobByID(ctx context.Context, jobID string) (*libModel.MasterMetaKVData, error)
 	QueryJobs(ctx context.Context) ([]*libModel.MasterMetaKVData, error)
 	QueryJobsByProjectID(ctx context.Context, projectID string) ([]*libModel.MasterMetaKVData, error)
@@ -82,7 +82,7 @@ type JobClient interface {
 type WorkerClient interface {
 	UpsertWorker(ctx context.Context, worker *libModel.WorkerStatus) error
 	UpdateWorker(ctx context.Context, worker *libModel.WorkerStatus) error
-	DeleteWorker(ctx context.Context, masterID string, workerID string) error
+	DeleteWorker(ctx context.Context, masterID string, workerID string) (Result, error)
 	GetWorkerByID(ctx context.Context, masterID string, workerID string) (*libModel.WorkerStatus, error)
 	QueryWorkersByMasterID(ctx context.Context, masterID string) ([]*libModel.WorkerStatus, error)
 	QueryWorkersByStatus(ctx context.Context, masterID string, status int) ([]*libModel.WorkerStatus, error)
@@ -91,7 +91,7 @@ type WorkerClient interface {
 type ResourceClient interface {
 	UpsertResource(ctx context.Context, resource *resourcemeta.ResourceMeta) error
 	UpdateResource(ctx context.Context, resource *resourcemeta.ResourceMeta) error
-	DeleteResource(ctx context.Context, resourceID string) error
+	DeleteResource(ctx context.Context, resourceID string) (Result, error)
 	GetResourceByID(ctx context.Context, resourceID string) (*resourcemeta.ResourceMeta, error)
 	QueryResources(ctx context.Context) ([]*resourcemeta.ResourceMeta, error)
 	QueryResourcesByJobID(ctx context.Context, jobID string) ([]*resourcemeta.ResourceMeta, error)
@@ -402,12 +402,13 @@ func (c *metaOpsClient) UpdateJob(ctx context.Context, job *libModel.MasterMetaK
 }
 
 // DeleteJob delete the specified jobInfo
-func (c *metaOpsClient) DeleteJob(ctx context.Context, jobID string) error {
-	if result := c.db.Where("id = ?", jobID).Delete(&libModel.MasterMetaKVData{}); result.Error != nil {
-		return cerrors.ErrMetaOpFail.Wrap(result.Error)
+func (c *metaOpsClient) DeleteJob(ctx context.Context, jobID string) (Result, error) {
+	result := c.db.Where("id = ?", jobID).Delete(&libModel.MasterMetaKVData{})
+	if result.Error != nil {
+		return nil, cerrors.ErrMetaOpFail.Wrap(result.Error)
 	}
 
-	return nil
+	return &OrmResult{rowsAffected: result.RowsAffected}, nil
 }
 
 // GetJobByID query job by `jobID`
@@ -486,13 +487,13 @@ func (c *metaOpsClient) UpdateWorker(ctx context.Context, worker *libModel.Worke
 }
 
 // DeleteWorker delete the specified workInfo
-func (c *metaOpsClient) DeleteWorker(ctx context.Context, masterID string, workerID string) error {
-	if result := c.db.Where("job_id = ? AND id = ?", masterID,
-		workerID).Delete(&libModel.WorkerStatus{}); result.Error != nil {
-		return cerrors.ErrMetaOpFail.Wrap(result.Error)
+func (c *metaOpsClient) DeleteWorker(ctx context.Context, masterID string, workerID string) (Result, error) {
+	result := c.db.Where("job_id = ? AND id = ?", masterID, workerID).Delete(&libModel.WorkerStatus{})
+	if result.Error != nil {
+		return nil, cerrors.ErrMetaOpFail.Wrap(result.Error)
 	}
 
-	return nil
+	return &OrmResult{rowsAffected: result.RowsAffected}, nil
 }
 
 // GetWorkerByID query worker info by workerID
@@ -562,12 +563,13 @@ func (c *metaOpsClient) UpdateResource(ctx context.Context, resource *resourceme
 }
 
 // DeleteResource delete the specified model.libModel.resourcemeta.ResourceMeta
-func (c *metaOpsClient) DeleteResource(ctx context.Context, resourceID string) error {
-	if result := c.db.Where("id = ?", resourceID).Delete(&resourcemeta.ResourceMeta{}); result.Error != nil {
-		return cerrors.ErrMetaOpFail.Wrap(result.Error)
+func (c *metaOpsClient) DeleteResource(ctx context.Context, resourceID string) (Result, error) {
+	result := c.db.Where("id = ?", resourceID).Delete(&resourcemeta.ResourceMeta{})
+	if result.Error != nil {
+		return nil, cerrors.ErrMetaOpFail.Wrap(result.Error)
 	}
 
-	return nil
+	return &OrmResult{rowsAffected: result.RowsAffected}, nil
 }
 
 // GetResourceByID query resource of the resource_id
@@ -611,4 +613,16 @@ func (c *metaOpsClient) QueryResourcesByExecutorID(ctx context.Context, executor
 	}
 
 	return resources, nil
+}
+
+type Result interface {
+	RowsAffected() int64
+}
+
+type OrmResult struct {
+	rowsAffected int64
+}
+
+func (r *OrmResult) RowsAffected() int64 {
+	return r.rowsAffected
 }

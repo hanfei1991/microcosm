@@ -416,6 +416,9 @@ func TestJob(t *testing.T) {
 			inputs: []interface{}{
 				"j112",
 			},
+			output: &OrmResult{
+				rowsAffected: 1,
+			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
 				mock.ExpectExec("DELETE FROM `master_meta_kv_data` WHERE id").WithArgs(
 					"j112").WillReturnResult(sqlmock.NewResult(0, 1))
@@ -660,6 +663,9 @@ func TestWorker(t *testing.T) {
 				"j112",
 				"w223",
 			},
+			output: &OrmResult{
+				rowsAffected: 1,
+			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
 				mock.ExpectExec("DELETE FROM `worker_statuses` WHERE job_id").WithArgs(
 					"j112", "w223").WillReturnResult(sqlmock.NewResult(0, 1))
@@ -895,6 +901,9 @@ func TestResource(t *testing.T) {
 			fn: "DeleteResource",
 			inputs: []interface{}{
 				"r223",
+			},
+			output: &OrmResult{
+				rowsAffected: 1,
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
 				mock.ExpectExec("DELETE FROM `resource_meta` WHERE id").WithArgs(
