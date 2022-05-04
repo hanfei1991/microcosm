@@ -74,6 +74,6 @@ func TestGenEpoch(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectExec("UPDATE `logic_epoches` SET").WillReturnError(errors.New("gen epoch error"))
 	mock.ExpectRollback()
-	epoch, err = GenEpoch(ctx, gdb)
+	_, err = GenEpoch(ctx, gdb)
 	require.Error(t, err)
 }
