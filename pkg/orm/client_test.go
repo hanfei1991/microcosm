@@ -416,7 +416,7 @@ func TestJob(t *testing.T) {
 			inputs: []interface{}{
 				"j112",
 			},
-			output: &OrmResult{
+			output: &ormResult{
 				rowsAffected: 1,
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
@@ -663,7 +663,7 @@ func TestWorker(t *testing.T) {
 				"j112",
 				"w223",
 			},
-			output: &OrmResult{
+			output: &ormResult{
 				rowsAffected: 1,
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
@@ -902,7 +902,7 @@ func TestResource(t *testing.T) {
 			inputs: []interface{}{
 				"r223",
 			},
-			output: &OrmResult{
+			output: &ormResult{
 				rowsAffected: 1,
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
@@ -1094,45 +1094,7 @@ func TestLogicEpoch(t *testing.T) {
 	require.Nil(t, err)
 	require.NotNil(t, cli)
 
-	tm := time.Now()
-	createdAt := tm.Add(time.Duration(1))
-	updatedAt := tm.Add(time.Duration(1))
-
 	testCases := []tCase{
-		{
-			// SELECT * FROM `logic_epoches` ORDER BY `logic_epoches`.`seq_id` LIMIT 1
-			fn:     "InitializeEpoch",
-			inputs: []interface{}{},
-			mockExpectResFn: func(mock sqlmock.Sqlmock) {
-				mock.ExpectQuery("SELECT [*] FROM `logic_epoches`").WillReturnRows(
-					sqlmock.NewRows([]string{
-						"created_at", "updated_at", "epoch", "seq_id",
-					}).AddRow(createdAt, updatedAt, 1, 1))
-			},
-		},
-		/* we can't control the time.Time in this case
-		{
-			fn:     "InitializeEpoch",
-			inputs: []interface{}{},
-			mockExpectResFn: func(mock sqlmock.Sqlmock) {
-				mock.ExpectQuery("SELECT [*] FROM `logic_epoches`").WillReturnRows(
-					sqlmock.NewRows([]string{
-						"created_at", "updated_at", "epoch", "seq_id",
-					}))
-				mock.ExpectExec("INSERT INTO `logic_epoches` [(]`created_at`,`updated_at`,`epoch`,`seq_id`[)]").WithArgs(
-					createdAt, updatedAt, 1, 1).WillReturnResult(sqlmock.NewResult(1, 1))
-			},
-		},
-		*/
-		{
-			fn:     "InitializeEpoch",
-			inputs: []interface{}{},
-			err:    cerrors.ErrMetaOpFail.GenWithStackByArgs(),
-			mockExpectResFn: func(mock sqlmock.Sqlmock) {
-				mock.ExpectQuery("SELECT [*] FROM `logic_epoches`").WillReturnError(
-					errors.New("InitializeEpoch error"))
-			},
-		},
 		{
 			fn:     "GenEpoch",
 			inputs: []interface{}{},

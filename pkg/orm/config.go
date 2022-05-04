@@ -2,11 +2,6 @@ package orm
 
 import "time"
 
-const (
-	defaultEpochPK  = 1
-	defaultMinEpoch = 1
-)
-
 // TODO: split the config file
 const (
 	DefaultFrameMetaEndpoints = "127.0.0.1:3336"

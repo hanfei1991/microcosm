@@ -229,63 +229,12 @@ func (c *metaOpsClient) Initialize(ctx context.Context) error {
 	}
 
 	// check first record in logic_epochs
-	return c.InitializeEpoch(ctx)
+	return model.InitializeEpoch(ctx, c.db)
 }
 
 /////////////////////////////// Logic Epoch
-// TODO: what if the record is deleted manually??
-func (c *metaOpsClient) InitializeEpoch(ctx context.Context) error {
-	var logicEp model.LogicEpoch
-	// first check and add first record if not exists
-	if result := c.db.First(&logicEp, defaultEpochPK); result.Error != nil {
-		if result.Error == gorm.ErrRecordNotFound {
-			if res := c.db.Create(&model.LogicEpoch{
-				Model: model.Model{
-					SeqID: defaultEpochPK,
-				},
-				Epoch: defaultMinEpoch,
-			}); res.Error != nil {
-				return cerrors.ErrMetaOpFail.Wrap(res.Error)
-			}
-
-			return nil
-		}
-
-		return cerrors.ErrMetaOpFail.Wrap(result.Error)
-	}
-
-	// already exists, do nothing
-	return nil
-}
-
 func (c *metaOpsClient) GenEpoch(ctx context.Context) (libModel.Epoch, error) {
-	var epoch libModel.Epoch
-	err := c.db.Transaction(func(tx *gorm.DB) error {
-		//(1)update epoch = epoch + 1
-		if err := tx.Model(&model.LogicEpoch{
-			Model: model.Model{
-				SeqID: defaultEpochPK,
-			},
-		}).Update("epoch", gorm.Expr("epoch + ?", 1)).Error; err != nil {
-			// return any error will rollback
-			return err
-		}
-
-		//(2)select epoch
-		var logicEp model.LogicEpoch
-		if err := tx.First(&logicEp, defaultEpochPK).Error; err != nil {
-			return err
-		}
-		epoch = logicEp.Epoch
-
-		// return nil will commit the whole transaction
-		return nil
-	})
-	if err != nil {
-		return libModel.Epoch(0), cerrors.ErrMetaOpFail.Wrap(err)
-	}
-
-	return epoch, nil
+	return model.GenEpoch(ctx, c.db)
 }
 
 ///////////////////////// Project Operation
@@ -408,7 +357,7 @@ func (c *metaOpsClient) DeleteJob(ctx context.Context, jobID string) (Result, er
 		return nil, cerrors.ErrMetaOpFail.Wrap(result.Error)
 	}
 
-	return &OrmResult{rowsAffected: result.RowsAffected}, nil
+	return &ormResult{rowsAffected: result.RowsAffected}, nil
 }
 
 // GetJobByID query job by `jobID`
@@ -493,7 +442,7 @@ func (c *metaOpsClient) DeleteWorker(ctx context.Context, masterID string, worke
 		return nil, cerrors.ErrMetaOpFail.Wrap(result.Error)
 	}
 
-	return &OrmResult{rowsAffected: result.RowsAffected}, nil
+	return &ormResult{rowsAffected: result.RowsAffected}, nil
 }
 
 // GetWorkerByID query worker info by workerID
@@ -569,7 +518,7 @@ func (c *metaOpsClient) DeleteResource(ctx context.Context, resourceID string) (
 		return nil, cerrors.ErrMetaOpFail.Wrap(result.Error)
 	}
 
-	return &OrmResult{rowsAffected: result.RowsAffected}, nil
+	return &ormResult{rowsAffected: result.RowsAffected}, nil
 }
 
 // GetResourceByID query resource of the resource_id
@@ -619,10 +568,10 @@ type Result interface {
 	RowsAffected() int64
 }
 
-type OrmResult struct {
+type ormResult struct {
 	rowsAffected int64
 }
 
-func (r *OrmResult) RowsAffected() int64 {
+func (r *ormResult) RowsAffected() int64 {
 	return r.rowsAffected
 }
