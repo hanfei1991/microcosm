@@ -28,6 +28,7 @@ type sqlImpl struct {
 	impl *sql.DB
 }
 
+// TODO: interface definition and isolation
 func NewSQLImpl(mc *metaclient.StoreConfigParams, projectID tenant.ProjectID, sqlConf sqlutil.DBConfig) (*sqlImpl, error) {
 	err := sqlutil.CreateDatabaseForProject(*mc, projectID, sqlConf)
 	if err != nil {
