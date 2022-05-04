@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	dmysql "github.com/go-sql-driver/mysql"
 	cerrors "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/tenant"
@@ -15,7 +16,7 @@ import (
 
 // TODO: check the projectID
 func CreateDatabaseForProject(mc metaclient.StoreConfigParams, projectID tenant.ProjectID, conf DBConfig) error {
-	dsn := generateDSNByParams(mc, projectID, conf, false)
+	dsn := GenerateDSNByParams(mc, projectID, conf, false)
 	log.L().Info("mysql connection", zap.String("dsn", dsn))
 
 	db, err := sql.Open("mysql", dsn)
@@ -44,8 +45,8 @@ func GenerateDSNByParams(mc metaclient.StoreConfigParams, projectID tenant.Proje
 	if dsnCfg.Params == nil {
 		dsnCfg.Params = make(map[string]string, 1)
 	}
-	dsnCfg.User = mc.User
-	dsnCfg.Passwd = mc.Password
+	dsnCfg.User = mc.Auth.User
+	dsnCfg.Passwd = mc.Auth.Passwd
 	dsnCfg.Net = "tcp"
 	dsnCfg.Addr = mc.Endpoints[0]
 	if withDB {
