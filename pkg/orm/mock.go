@@ -17,7 +17,7 @@ import (
 
 func NewMockClient() (Client, error) {
 	addr := allocTempURL()
-	svr, err := mockBackendDB(addr)
+	svr, err := MockBackendDB(addr, tenant.FrameTenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -70,10 +70,10 @@ func allocTempURL() string {
 // https://github.com/dolthub/go-mysql-server
 // go-mysql-server not support unique index
 // ref: https://github.com/dolthub/go-mysql-server/issues/571
-func mockBackendDB(address string) (*server.Server, error) {
+func MockBackendDB(address string, db string) (*server.Server, error) {
 	engine := sqle.NewDefault(
 		gsql.NewDatabaseProvider(
-			createTestDatabase(),
+			createTestDatabase(db),
 			information_schema.NewInformationSchemaDatabase(),
 		))
 
@@ -97,6 +97,6 @@ func mockBackendDB(address string) (*server.Server, error) {
 	return s, err
 }
 
-func createTestDatabase() *memory.Database {
-	return memory.NewDatabase(tenant.FrameTenantID)
+func createTestDatabase(db string) *memory.Database {
+	return memory.NewDatabase(db)
 }
