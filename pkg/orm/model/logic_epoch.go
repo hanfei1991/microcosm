@@ -18,6 +18,7 @@ type LogicEpoch struct {
 	Epoch int64 `gorm:"type:bigint not null default 1"`
 }
 
+// InitializeEpoch insert the only record into the backend table `logic_epoches`
 func InitializeEpoch(ctx context.Context, db *gorm.DB) error {
 	// Do nothing on conflict
 	// INSERT INTO `logic_epoches` (`created_at`,`updated_at`,`epoch`,`seq_id`) VALUES
@@ -30,6 +31,7 @@ func InitializeEpoch(ctx context.Context, db *gorm.DB) error {
 	}).Error
 }
 
+// GenEpoch will increasing the backend epoch by 1 and return the new epoch
 func GenEpoch(ctx context.Context, db *gorm.DB) (int64, error) {
 	var epoch int64
 	err := db.Transaction(func(tx *gorm.DB) error {

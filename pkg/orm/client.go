@@ -572,6 +572,6 @@ type ormResult struct {
 	rowsAffected int64
 }
 
-func (r *ormResult) RowsAffected() int64 {
+func (r ormResult) RowsAffected() int64 {
 	return r.rowsAffected
 }
