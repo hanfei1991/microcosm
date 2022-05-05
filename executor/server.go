@@ -533,8 +533,6 @@ func (s *Server) selfRegister(ctx context.Context) (err error) {
 			return err2
 		}
 		if resp.Err != nil {
-			log.L().Info("register failed",
-				zap.String("error", resp.Err.Code.String()), zap.String("error2", pb.ErrorCode_MasterNotReady.String()))
 			return pcErrors.New(resp.Err.Code.String())
 		}
 		return nil
