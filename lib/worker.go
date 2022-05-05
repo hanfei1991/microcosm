@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"go.uber.org/atomic"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/pkg/workerpool"
@@ -79,6 +81,14 @@ type BaseWorker interface {
 	Exit(ctx context.Context, status libModel.WorkerStatus, err error) error
 }
 
+type workerExitFsmState = int32
+
+const (
+	workerNormal = workerExitFsmState(iota + 1)
+	workerHalfExit
+	workerExited
+)
+
 type DefaultBaseWorker struct {
 	Impl WorkerImpl
 
@@ -108,6 +118,8 @@ type DefaultBaseWorker struct {
 	cancelMu      sync.Mutex
 	cancelBgTasks context.CancelFunc
 	cancelPool    context.CancelFunc
+
+	workerExitFsm atomic.Int32
 
 	clock clock.Clock
 
@@ -156,6 +168,8 @@ func NewBaseWorker(
 		clock:     clock.New(),
 		// [TODO] use tenantID if support multi-tenant
 		userMetaKVClient: kvclient.NewPrefixKVClient(params.UserRawKVClient, tenant.DefaultUserTenantID),
+
+		workerExitFsm: *atomic.NewInt32(workerNormal),
 	}
 }
 
@@ -254,7 +268,25 @@ func (w *DefaultBaseWorker) doPoll(ctx context.Context) error {
 	}
 
 	if err := w.errCenter.CheckError(); err != nil {
-		return err
+		if derror.ErrWorkerSuicide.Equal(err) {
+			// Suicides should result in an immediate exit.
+			w.workerExitFsm.Store(workerExited)
+			return err
+		}
+
+		switch w.workerExitFsm.Load() {
+		case workerNormal:
+			w.workerExitFsm.Store(workerHalfExit)
+		case workerHalfExit:
+			if w.masterClient.IsMasterSideClosed() {
+				w.workerExitFsm.Store(workerExited)
+				return err
+			}
+		case workerExited:
+			fallthrough
+		default:
+			log.L().Panic("unreachable")
+		}
 	}
 
 	return w.messageRouter.Tick(ctx)
@@ -268,7 +300,7 @@ func (w *DefaultBaseWorker) Poll(ctx context.Context) error {
 	}
 
 	if err := w.Impl.Tick(ctx); err != nil {
-		return errors.Trace(err)
+		w.errCenter.OnError(err)
 	}
 	return nil
 }
@@ -387,7 +419,14 @@ func (w *DefaultBaseWorker) runHeartbeatWorker(ctx context.Context) error {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case <-ticker.C:
-			if err := w.masterClient.SendHeartBeat(ctx, w.clock); err != nil {
+			isFinished := false
+			if w.workerExitFsm.Load() == workerHalfExit {
+				// If we are in the state workerHalfExit,
+				// we need to notify the master so that the master
+				// marks us as exited.
+				isFinished = true
+			}
+			if err := w.masterClient.SendHeartBeat(ctx, w.clock, isFinished); err != nil {
 				return errors.Trace(err)
 			}
 		}
@@ -482,6 +521,10 @@ type masterClient struct {
 	messageSender           p2p.MessageSender
 	metaKVClient            metaclient.KVClient
 	lastMasterAckedPingTime clock.MonotonicTime
+
+	// masterSideClosed records whether the master
+	// has marked us as closed
+	masterSideClosed atomic.Bool
 
 	timeoutConfig config.TimeoutConfig
 
@@ -589,6 +632,10 @@ func (m *masterClient) HandleHeartbeat(sender p2p.NodeID, msg *libModel.Heartbea
 		m.masterEpoch = msg.Epoch
 		m.masterNode = sender
 	}
+
+	if msg.IsFinished {
+		m.masterSideClosed.Store(true)
+	}
 	m.lastMasterAckedPingTime = msg.SendTime
 }
 
@@ -614,7 +661,7 @@ func (m *masterClient) CheckMasterTimeout(ctx context.Context, clock clock.Clock
 	return false, nil
 }
 
-func (m *masterClient) SendHeartBeat(ctx context.Context, clock clock.Clock) error {
+func (m *masterClient) SendHeartBeat(ctx context.Context, clock clock.Clock, isFinished bool) error {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -627,6 +674,7 @@ func (m *masterClient) SendHeartBeat(ctx context.Context, clock clock.Clock) err
 		SendTime:     sendTime,
 		FromWorkerID: m.workerID,
 		Epoch:        m.masterEpoch,
+		IsFinished:   isFinished,
 	}
 
 	log.L().Debug("sending heartbeat", zap.String("worker", m.workerID))
@@ -640,6 +688,10 @@ func (m *masterClient) SendHeartBeat(ctx context.Context, clock clock.Clock) err
 		log.L().Warn("sending heartbeat ping encountered ErrPeerMessageSendTryAgain")
 	}
 	return nil
+}
+
+func (m *masterClient) IsMasterSideClosed() bool {
+	return m.masterSideClosed.Load()
 }
 
 // used in unit test only

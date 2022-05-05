@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"go.uber.org/atomic"
+
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 
@@ -53,6 +55,8 @@ type workerEntry struct {
 	mu       sync.Mutex
 	expireAt time.Time
 	state    workerEntryState
+
+	receivedFinish atomic.Bool
 
 	statusReaderMu sync.RWMutex
 	statusReader   *statusutil.Reader
@@ -175,4 +179,12 @@ func (e *workerEntry) ExpireTime() time.Time {
 	defer e.mu.Unlock()
 
 	return e.expireAt
+}
+
+func (e *workerEntry) SetFinished() {
+	e.receivedFinish.Store(true)
+}
+
+func (e *workerEntry) IsFinished() bool {
+	return e.receivedFinish.Load()
 }

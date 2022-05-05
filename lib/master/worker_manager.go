@@ -216,6 +216,10 @@ func (m *WorkerManager) HandleHeartbeat(msg *libModel.HeartbeatPingMessage, from
 		return
 	}
 
+	if msg.IsFinished {
+		entry.SetFinished()
+	}
+
 	entry.SetExpireTime(m.nextExpireTime())
 
 	if m.state == workerManagerWaitingHeartbeat {
@@ -433,7 +437,8 @@ func (m *WorkerManager) checkWorkerEntriesOnce() error {
 			continue
 		}
 
-		if entry.ExpireTime().After(m.clock.Now()) {
+		// TODO complex condition needs simplification.
+		if entry.ExpireTime().After(m.clock.Now()) && !entry.IsFinished() {
 			// Not timed out
 			if reader := entry.StatusReader(); reader != nil {
 				if _, ok := reader.Receive(); ok {
@@ -455,7 +460,8 @@ func (m *WorkerManager) checkWorkerEntriesOnce() error {
 			continue
 		}
 
-		// The worker has timed out.
+		// The worker has timed out, or has received a heartbeat
+		// with IsFinished == true.
 		entry.MarkAsOffline()
 
 		var offlineError error
