@@ -542,6 +542,7 @@ func (s *Server) selfRegister(ctx context.Context) (err error) {
 		retry.WithMaxTries(15 /* fail after 33 seconds, TODO: make it configurable */),
 		retry.WithIsRetryableErr(func(err error) bool {
 			if err.Error() == pb.ErrorCode_MasterNotReady.String() {
+				log.L().Info("server master leader is not ready, retry later")
 				return true
 			}
 			return false
