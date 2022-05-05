@@ -158,7 +158,7 @@ func (cli *ChaosCli) CheckFakeJobKey(
 	if err != nil {
 		return err
 	}
-	ckpt, ok := checkpoint.EtcdCheckpoints[jobIndex]
+	ckpt, ok := checkpoint.Checkpoints[jobIndex]
 	if !ok {
 		return errors.Errorf("job %d not found in checkpoint %v", jobIndex, checkpoint)
 	}
@@ -167,10 +167,10 @@ func (cli *ChaosCli) CheckFakeJobKey(
 			"value not equals, expected: '%s', actual: '%s', checkpoint %v",
 			expectedValue, ckpt.Value, checkpoint)
 	}
-	if ckpt.Mvcc != expectedMvcc {
+	if ckpt.MvccCount != expectedMvcc {
 		return errors.Errorf(
 			"mvcc not equals, expected: '%d', actual: '%d', checkpoint %v",
-			expectedMvcc, ckpt.Mvcc, checkpoint)
+			expectedMvcc, ckpt.MvccCount, checkpoint)
 	}
 
 	return nil

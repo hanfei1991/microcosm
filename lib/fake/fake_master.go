@@ -432,16 +432,21 @@ func (m *Master) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) erro
 	return nil
 }
 
-func (m *Master) Status() libModel.WorkerStatus {
+func (m *Master) marshalBusinessStatus() []byte {
 	m.bStatus.RLock()
 	defer m.bStatus.RUnlock()
 	bytes, err := json.Marshal(m.bStatus.status)
 	if err != nil {
 		log.L().Panic("unexpected marshal error", zap.Error(err))
 	}
+	return bytes
+}
+
+func (m *Master) Status() libModel.WorkerStatus {
+	extBytes := m.marshalBusinessStatus()
 	return libModel.WorkerStatus{
 		Code:     m.getStatusCode(),
-		ExtBytes: bytes,
+		ExtBytes: extBytes,
 	}
 }
 
