@@ -231,7 +231,11 @@ watchLoop:
 			return errors.Trace(ctx.Err())
 		default:
 		}
-		ch := cli.Watch(ctx, key, clientv3.WithRev(d.status.getEtcdCheckpoint().Revision+1))
+		opts := make([]clientv3.OpOption, 0)
+		if d.status.getEtcdCheckpoint().Revision > 0 {
+			opts = append(opts, clientv3.WithRev(d.status.getEtcdCheckpoint().Revision+1))
+		}
+		ch := cli.Watch(ctx, key, opts...)
 		for resp := range ch {
 			if resp.Err() != nil {
 				log.L().Warn("watch met error", zap.Error(resp.Err()))
