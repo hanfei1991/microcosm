@@ -91,7 +91,7 @@ services:
         frame-mysql-standalone:
                 image: mysql:5.7
                 platform: linux/amd64
-                container_name: frame_mysql_standalone
+                container_name: frame-mysql-standalone
                 environment:
                         MYSQL_ROOT_PASSWORD: 123456
                 volumes:

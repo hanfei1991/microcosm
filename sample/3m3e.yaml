@@ -23,7 +23,7 @@ services:
                         - "--initial-cluster"
                         - "master0=http://server-master-0:8291,master1=http://server-master-1:8291,master2=http://server-master-2:8291"
                         - "--frame-meta-endpoint"
-                        - "frame-etcd-standalone:3306"
+                        - "frame-mysql-standalone:3306"
                         - "--user-meta-endpoint"
                         - "user-etcd-standalone:2379"
                 depends_on:
@@ -54,7 +54,7 @@ services:
                         - "--initial-cluster"
                         - "master0=http://server-master-0:8291,master1=http://server-master-1:8291,master2=http://server-master-2:8291"
                         - "--frame-meta-endpoint"
-                        - "frame-etcd-standalone:3306"
+                        - "frame-mysql-standalone:3306"
                         - "--user-meta-endpoint"
                         - "user-etcd-standalone:2379"
                 depends_on:
@@ -83,7 +83,7 @@ services:
                         - "--initial-cluster"
                         - "master0=http://server-master-0:8291,master1=http://server-master-1:8291,master2=http://server-master-2:8291"
                         - "--frame-meta-endpoint"
-                        - "frame-etcd-standalone:3306"
+                        - "frame-mysql-standalone:3306"
                         - "--user-meta-endpoint"
                         - "user-etcd-standalone:2379"
                 depends_on:
