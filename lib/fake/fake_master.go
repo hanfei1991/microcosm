@@ -48,7 +48,6 @@ type Config struct {
 }
 
 type Checkpoint struct {
-	Ticks       map[int]int64            `json:"ticks"`
 	Checkpoints map[int]workerCheckpoint `json:"checkpoints"`
 }
 
@@ -257,12 +256,8 @@ func (m *Master) tickedCheckWorkers(ctx context.Context) error {
 			// create new worker for non-active worker
 			if worker == nil {
 				workerCkpt := zeroWorkerCheckpoint()
-				if tick, ok := ckpt.Ticks[i]; ok {
-					workerCkpt.Tick = tick
-				}
 				if etcdCkpt, ok := ckpt.Checkpoints[i]; ok {
-					workerCkpt.Revision = etcdCkpt.Revision
-					workerCkpt.MvccCount = etcdCkpt.MvccCount
+					workerCkpt = etcdCkpt
 				}
 				wcfg := m.genWorkerConfig(i, workerCkpt)
 				if err := m.createWorker(wcfg); err != nil {
@@ -476,14 +471,12 @@ func (m *Master) genCheckpoint() *Checkpoint {
 	m.workerListMu.Lock()
 	defer m.workerListMu.Unlock()
 	cp := &Checkpoint{
-		Ticks:       make(map[int]int64),
 		Checkpoints: make(map[int]workerCheckpoint),
 	}
 	m.bStatus.RLock()
 	defer m.bStatus.RUnlock()
 	for wid, status := range m.bStatus.status {
 		if businessID, ok := m.workerID2BusinessID[wid]; ok {
-			cp.Ticks[businessID] = status.Tick
 			if status.Checkpoint != nil {
 				cp.Checkpoints[businessID] = *status.Checkpoint
 			} else {

@@ -141,12 +141,12 @@ func (cli *ChaosCli) CheckFakeJobTick(
 	if err != nil {
 		return err
 	}
-	tick, ok := ckpt.Ticks[jobIndex]
+	checkpoint, ok := ckpt.Checkpoints[jobIndex]
 	if !ok {
 		return errors.Errorf("job %d not found in checkpoint %v", jobIndex, ckpt)
 	}
-	if tick < target {
-		return errors.Errorf("tick %d not reaches target %d, checkpoint %v", tick, target, ckpt)
+	if checkpoint.Tick < target {
+		return errors.Errorf("tick %d not reaches target %d, checkpoint %v", checkpoint.Tick, target, ckpt)
 	}
 	return nil
 }
