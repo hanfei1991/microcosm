@@ -48,8 +48,8 @@ type Config struct {
 }
 
 type Checkpoint struct {
-	Ticks           map[int]int64          `json:"ticks"`
-	EtcdCheckpoints map[int]EtcdCheckpoint `json:"etcd-checkpoints"`
+	Ticks       map[int]int64            `json:"ticks"`
+	Checkpoints map[int]workerCheckpoint `json:"checkpoints"`
 }
 
 func (cp *Checkpoint) String() string {
@@ -60,10 +60,25 @@ func (cp *Checkpoint) String() string {
 	return string(data)
 }
 
+// workerCheckpoint is used to resume a new worker from old checkpoint
+type workerCheckpoint struct {
+	Tick      int64  `json:"tick"`
+	Revision  int64  `json:"revision"`
+	MvccCount int    `json:"mvcc-count"`
+	Value     string `json:"value"`
+}
+
+func zeroWorkerCheckpoint() workerCheckpoint {
+	return workerCheckpoint{}
+}
+
 var _ lib.BaseJobMaster = (*Master)(nil)
 
 type Master struct {
 	lib.BaseJobMaster
+
+	config  *Config
+	bStatus *businessStatus
 
 	// workerID stores the ID of the Master AS A WORKER.
 	workerID libModel.WorkerID
@@ -72,16 +87,15 @@ type Master struct {
 	workerList          []lib.WorkerHandle
 	workerID2BusinessID map[libModel.WorkerID]int
 	pendingWorkerSet    map[libModel.WorkerID]int
-	statusRateLimiter   *rate.Limiter
+	finishedSet         map[libModel.WorkerID]int
 
-	bStatus     *businessStatus
-	finishedSet map[libModel.WorkerID]int
-
-	config     *Config
-	statusCode struct {
+	// worker status
+	statusRateLimiter *rate.Limiter
+	statusCode        struct {
 		sync.RWMutex
 		code libModel.WorkerStatusCode
 	}
+
 	ctx         context.Context
 	clocker     clock.Clock
 	initialized bool
@@ -153,7 +167,7 @@ func (m *Master) Workload() model.RescUnit {
 
 func (m *Master) InitImpl(ctx context.Context) error {
 	log.L().Info("FakeMaster: Init", zap.Any("config", m.config))
-	return m.createWorkers()
+	return m.initWorkers()
 }
 
 // This function is not thread safe, it must be called with m.workerListMu locked
@@ -170,7 +184,7 @@ func (m *Master) createWorker(wcfg *WorkerConfig) error {
 	return nil
 }
 
-func (m *Master) createWorkers() error {
+func (m *Master) initWorkers() error {
 	m.workerListMu.Lock()
 	defer m.workerListMu.Unlock()
 OUT:
@@ -181,7 +195,7 @@ OUT:
 					continue OUT
 				}
 			}
-			wcfg := m.genWorkerConfig(i, 0, 0, 0)
+			wcfg := m.genWorkerConfig(i, zeroWorkerCheckpoint())
 			err := m.createWorker(wcfg)
 			if err != nil {
 				return err
@@ -242,18 +256,15 @@ func (m *Master) tickedCheckWorkers(ctx context.Context) error {
 		for i, worker := range m.workerList {
 			// create new worker for non-active worker
 			if worker == nil {
-				var (
-					startTick, startRevision int64
-					etcdMvccCount            int
-				)
+				workerCkpt := zeroWorkerCheckpoint()
 				if tick, ok := ckpt.Ticks[i]; ok {
-					startTick = tick
+					workerCkpt.Tick = tick
 				}
-				if etcdCkpt, ok := ckpt.EtcdCheckpoints[i]; ok {
-					startRevision = etcdCkpt.Revision
-					etcdMvccCount = etcdCkpt.Mvcc
+				if etcdCkpt, ok := ckpt.Checkpoints[i]; ok {
+					workerCkpt.Revision = etcdCkpt.Revision
+					workerCkpt.MvccCount = etcdCkpt.MvccCount
 				}
-				wcfg := m.genWorkerConfig(i, startTick, startRevision, etcdMvccCount)
+				wcfg := m.genWorkerConfig(i, workerCkpt)
 				if err := m.createWorker(wcfg); err != nil {
 					return errors.Trace(err)
 				}
@@ -379,20 +390,17 @@ func (m *Master) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
 
 	log.L().Info("FakeMaster: OnWorkerOffline",
 		zap.String("worker-id", worker.ID()), zap.Error(reason))
-	var (
-		startTick, startRevision int64
-		mvccCount                int
-	)
+	workerCkpt := zeroWorkerCheckpoint()
 	if ws, err := parseExtBytes(worker.Status().ExtBytes); err != nil {
 		log.L().Warn("failed to parse worker ext bytes", zap.Error(err))
 	} else {
-		startTick = ws.Tick
-		if ws.EtcdCheckpoint != nil {
-			startRevision = ws.EtcdCheckpoint.Revision
-			mvccCount = ws.EtcdCheckpoint.Mvcc
+		workerCkpt.Tick = ws.Tick
+		if ws.Checkpoint != nil {
+			workerCkpt.Revision = ws.Checkpoint.Revision
+			workerCkpt.MvccCount = ws.Checkpoint.MvccCount
 		}
 	}
-	wcfg := m.genWorkerConfig(index, startTick, startRevision, mvccCount)
+	wcfg := m.genWorkerConfig(index, workerCkpt)
 	m.workerListMu.Lock()
 	defer m.workerListMu.Unlock()
 	return m.createWorker(wcfg)
@@ -463,25 +471,25 @@ func (m *Master) genCheckpoint() *Checkpoint {
 	m.workerListMu.Lock()
 	defer m.workerListMu.Unlock()
 	cp := &Checkpoint{
-		Ticks:           make(map[int]int64),
-		EtcdCheckpoints: make(map[int]EtcdCheckpoint),
+		Ticks:       make(map[int]int64),
+		Checkpoints: make(map[int]workerCheckpoint),
 	}
 	m.bStatus.RLock()
 	defer m.bStatus.RUnlock()
 	for wid, status := range m.bStatus.status {
 		if businessID, ok := m.workerID2BusinessID[wid]; ok {
 			cp.Ticks[businessID] = status.Tick
-			if status.EtcdCheckpoint != nil {
-				cp.EtcdCheckpoints[businessID] = *status.EtcdCheckpoint
+			if status.Checkpoint != nil {
+				cp.Checkpoints[businessID] = *status.Checkpoint
 			} else {
-				cp.EtcdCheckpoints[businessID] = EtcdCheckpoint{}
+				cp.Checkpoints[businessID] = workerCheckpoint{}
 			}
 		}
 	}
 	return cp
 }
 
-func (m *Master) genWorkerConfig(index int, startTick, startRevision int64, etcdMvccCount int) *WorkerConfig {
+func (m *Master) genWorkerConfig(index int, checkpoint workerCheckpoint) *WorkerConfig {
 	return &WorkerConfig{
 		ID: index,
 
@@ -492,9 +500,7 @@ func (m *Master) genWorkerConfig(index int, startTick, startRevision int64, etcd
 		EtcdWatchPrefix: m.config.EtcdWatchPrefix,
 
 		// loaded from checkpoint if exists
-		StartTick:         startTick,
-		EtcdWatchRevision: startRevision,
-		EtcdMvccCount:     etcdMvccCount,
+		Checkpoint: checkpoint,
 	}
 }
 

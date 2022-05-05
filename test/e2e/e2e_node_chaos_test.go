@@ -16,6 +16,8 @@ import (
 	"github.com/hanfei1991/microcosm/test/e2e"
 )
 
+// update the watched key of workers belonging to a given job, and then
+// check the mvcc count and value of the key are updated as expected.
 func updateKeyAndCheckOnce(
 	ctx context.Context, t *testing.T, cli *e2e.ChaosCli,
 	jobID string, workerCount int, updateValue string, expectedMvcc int,
@@ -38,7 +40,8 @@ func updateKeyAndCheckOnce(
 }
 
 func TestNodeFailure(t *testing.T) {
-	// TODO: make the following variables configurable
+	// TODO: make the following variables configurable, these variables keep the
+	// same in sample/3m3e.yaml
 	var (
 		masterAddrs              = []string{"127.0.0.1:10245", "127.0.0.1:10246", "127.0.0.1:10247"}
 		userMetaAddrs            = []string{"127.0.0.1:12479"}
@@ -85,6 +88,7 @@ func TestNodeFailure(t *testing.T) {
 	mvccCount := 1
 	updateKeyAndCheckOnce(ctx, t, cli, jobID, cfg.WorkerCount, "random-value-1", mvccCount)
 
+	// restart all server masters and check fake job is running normally
 	nodeCount := 3
 	for i := 0; i < nodeCount; i++ {
 		name := fmt.Sprintf("sample_server-master-%d_1", i)
@@ -94,6 +98,7 @@ func TestNodeFailure(t *testing.T) {
 		updateKeyAndCheckOnce(ctx, t, cli, jobID, cfg.WorkerCount, value, mvccCount)
 	}
 
+	// restart all executors and check fake job is running normally
 	for i := 0; i < nodeCount; i++ {
 		name := fmt.Sprintf("sample_server-executor-%d_1", i)
 		cli.ContainerRestart(name)
@@ -104,7 +109,6 @@ func TestNodeFailure(t *testing.T) {
 
 	err = cli.PauseJob(ctx, jobID)
 	require.NoError(t, err)
-
 	require.Eventually(t, func() bool {
 		stopped, err := cli.CheckJobStatus(ctx, jobID, pb.QueryJobResponse_stopped)
 		if err != nil {

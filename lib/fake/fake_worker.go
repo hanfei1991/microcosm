@@ -37,16 +37,7 @@ type (
 		EtcdEndpoints   []string `json:"etcd-endpoints"`
 		EtcdWatchPrefix string   `json:"etcd-watch-prefix"`
 
-		// The following fields should be loaded from checkpoint if exits
-		StartTick         int64 `json:"start-tick"`
-		EtcdWatchRevision int64 `json:"etcd-watch-revision"`
-		EtcdMvccCount     int   `json:"etcd-mvcc-count"`
-	}
-
-	EtcdCheckpoint struct {
-		Revision int64  `json:"revision"`
-		Mvcc     int    `json:"mvcc"` // record mvcc version count
-		Value    string `json:"value"`
+		Checkpoint workerCheckpoint `json:"checkpoint"`
 	}
 
 	dummyWorker struct {
@@ -69,9 +60,9 @@ type (
 
 type dummyWorkerStatus struct {
 	sync.RWMutex
-	BusinessID     int             `json:"business-id"`
-	Tick           int64           `json:"tick"`
-	EtcdCheckpoint *EtcdCheckpoint `json:"etcd-checkpoint"`
+	BusinessID int               `json:"business-id"`
+	Tick       int64             `json:"tick"`
+	Checkpoint *workerCheckpoint `json:"checkpoint"`
 }
 
 func (s *dummyWorkerStatus) tick() {
@@ -80,16 +71,16 @@ func (s *dummyWorkerStatus) tick() {
 	s.Tick++
 }
 
-func (s *dummyWorkerStatus) getEtcdCheckpoint() EtcdCheckpoint {
+func (s *dummyWorkerStatus) getEtcdCheckpoint() workerCheckpoint {
 	s.RLock()
 	defer s.RUnlock()
-	return *s.EtcdCheckpoint
+	return *s.Checkpoint
 }
 
-func (s *dummyWorkerStatus) setEtcdCheckpoint(ckpt *EtcdCheckpoint) {
+func (s *dummyWorkerStatus) setEtcdCheckpoint(ckpt *workerCheckpoint) {
 	s.Lock()
 	defer s.Unlock()
-	s.EtcdCheckpoint = ckpt
+	s.Checkpoint = ckpt
 }
 
 func (s *dummyWorkerStatus) Marshal() ([]byte, error) {
@@ -250,7 +241,7 @@ watchLoop:
 				// no concurrent write of this checkpoint, so it is safe to read
 				// old value, change it and overwrite.
 				ckpt := d.status.getEtcdCheckpoint()
-				ckpt.Mvcc++
+				ckpt.MvccCount++
 				ckpt.Revision = event.Kv.ModRevision
 				switch event.Type {
 				case mvccpb.PUT:
@@ -272,10 +263,10 @@ func NewDummyWorker(
 	wcfg := cfg.(*WorkerConfig)
 	status := &dummyWorkerStatus{
 		BusinessID: wcfg.ID,
-		Tick:       wcfg.StartTick,
-		EtcdCheckpoint: &EtcdCheckpoint{
-			Revision: wcfg.EtcdWatchRevision,
-			Mvcc:     wcfg.EtcdMvccCount,
+		Tick:       wcfg.Checkpoint.Tick,
+		Checkpoint: &workerCheckpoint{
+			Revision:  wcfg.Checkpoint.Revision,
+			MvccCount: wcfg.Checkpoint.MvccCount,
 		},
 	}
 	return &dummyWorker{
