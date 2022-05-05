@@ -65,12 +65,6 @@ type dummyWorkerStatus struct {
 	Checkpoint *workerCheckpoint `json:"checkpoint"`
 }
 
-func (s *dummyWorkerStatus) getTick() int64 {
-	s.RLock()
-	defer s.RUnlock()
-	return s.Tick
-}
-
 func (s *dummyWorkerStatus) tick() {
 	s.Lock()
 	defer s.Unlock()
@@ -251,7 +245,6 @@ watchLoop:
 				// no concurrent write of this checkpoint, so it is safe to read
 				// old value, change it and overwrite.
 				ckpt := d.status.getEtcdCheckpoint()
-				ckpt.Tick = d.status.getTick()
 				ckpt.MvccCount++
 				ckpt.Revision = event.Kv.ModRevision
 				switch event.Type {
