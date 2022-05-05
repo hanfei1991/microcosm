@@ -397,7 +397,7 @@ func TestCleanTombstone(t *testing.T) {
 	_, err = workerMetaClient.Load(ctx, "worker-1")
 	// Asserts that the meta for the worker is indeed deleted.
 	require.Error(t, err)
-	require.Regexp(t, ".*ErrWorkerNoMeta", err)
+	require.Regexp(t, ".*ErrMetaEntryNotFound", err)
 
 	// CleanTombstone should be idempotent for robustness.
 	err = event.Handle.GetTombstone().CleanTombstone(ctx)
