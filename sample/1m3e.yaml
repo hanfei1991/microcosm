@@ -101,9 +101,9 @@ services:
                         - "3336:3306"
                 healthcheck:
                         test: "mysqladmin ping -h127.0.0.1 -P3306 -uroot -p123456"
-                        interval: 3s
-                        timeout: 30s
-                        retries: 10
+                        interval: 10s
+                        timeout: 600s
+                        retries: 60
         user-etcd-standalone:
                 image: quay.io/coreos/etcd
                 container_name: user-etcd-standalone

@@ -58,8 +58,10 @@ services:
                         - "--user-meta-endpoint"
                         - "user-etcd-standalone:2379"
                 depends_on:
-                        - "frame-mysql-standalone"
-                        - "user-etcd-standalone"
+                  "user-etcd-standalone":
+                    condition: service_started
+                  "frame-mysql-standalone":
+                    condition: service_healthy
         server-master-2:
                 image: dataflow:test
                 ports:
@@ -87,8 +89,10 @@ services:
                         - "--user-meta-endpoint"
                         - "user-etcd-standalone:2379"
                 depends_on:
-                        - "frame-mysql-standalone"
-                        - "user-etcd-standalone"
+                  "user-etcd-standalone":
+                    condition: service_started
+                  "frame-mysql-standalone":
+                    condition: service_healthy
         server-executor-0:
                 image: dataflow:test
                 volumes:
@@ -165,9 +169,9 @@ services:
                         - "3336:3306"
                 healthcheck:
                         test: "mysqladmin ping -h127.0.0.1 -P3306 -uroot -p123456"
-                        interval: 3s
-                        timeout: 30s
-                        retries: 10
+                        interval: 10s
+                        timeout: 600s
+                        retries: 60
         user-etcd-standalone:
                 image: quay.io/coreos/etcd
                 container_name: user-etcd-standalone
