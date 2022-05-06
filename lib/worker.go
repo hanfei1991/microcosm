@@ -5,11 +5,10 @@ import (
 	"sync"
 	"time"
 
-	"go.uber.org/atomic"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/pkg/workerpool"
+	"go.uber.org/atomic"
 	"go.uber.org/dig"
 	"go.uber.org/zap"
 
@@ -263,10 +262,6 @@ func (w *DefaultBaseWorker) doPostInit(ctx context.Context) error {
 }
 
 func (w *DefaultBaseWorker) doPoll(ctx context.Context) error {
-	if err := w.messageHandlerManager.CheckError(ctx); err != nil {
-		return err
-	}
-
 	if err := w.errCenter.CheckError(); err != nil {
 		if derror.ErrWorkerSuicide.Equal(err) {
 			// Suicides should result in an immediate exit.
@@ -277,16 +272,22 @@ func (w *DefaultBaseWorker) doPoll(ctx context.Context) error {
 		switch w.workerExitFsm.Load() {
 		case workerNormal:
 			w.workerExitFsm.Store(workerHalfExit)
+			return derror.ErrWorkerHalfExit.FastGenByArgs()
 		case workerHalfExit:
 			if w.masterClient.IsMasterSideClosed() {
 				w.workerExitFsm.Store(workerExited)
 				return err
 			}
+			return derror.ErrWorkerHalfExit.FastGenByArgs()
 		case workerExited:
 			fallthrough
 		default:
 			log.L().Panic("unreachable")
 		}
+	}
+
+	if err := w.messageHandlerManager.CheckError(ctx); err != nil {
+		return err
 	}
 
 	return w.messageRouter.Tick(ctx)
@@ -296,7 +297,10 @@ func (w *DefaultBaseWorker) Poll(ctx context.Context) error {
 	ctx = w.errCenter.WithCancelOnFirstError(ctx)
 
 	if err := w.doPoll(ctx); err != nil {
-		return errors.Trace(err)
+		if derror.ErrWorkerHalfExit.NotEqual(err) {
+			return err
+		}
+		return nil
 	}
 
 	if err := w.Impl.Tick(ctx); err != nil {
@@ -389,7 +393,6 @@ func (w *DefaultBaseWorker) Exit(ctx context.Context, status libModel.WorkerStat
 
 func (w *DefaultBaseWorker) startBackgroundTasks() {
 	ctx, cancel := context.WithCancel(context.Background())
-	ctx = w.errCenter.WithCancelOnFirstError(ctx)
 
 	w.cancelMu.Lock()
 	w.cancelBgTasks = cancel
@@ -414,6 +417,8 @@ func (w *DefaultBaseWorker) startBackgroundTasks() {
 
 func (w *DefaultBaseWorker) runHeartbeatWorker(ctx context.Context) error {
 	ticker := w.clock.Ticker(w.timeoutConfig.WorkerHeartbeatInterval)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():

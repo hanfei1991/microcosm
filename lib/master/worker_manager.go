@@ -437,9 +437,9 @@ func (m *WorkerManager) checkWorkerEntriesOnce() error {
 			continue
 		}
 
-		// TODO complex condition needs simplification.
-		if entry.ExpireTime().After(m.clock.Now()) && !entry.IsFinished() {
-			// Not timed out
+		hasTimedOut := entry.ExpireTime().Before(m.clock.Now())
+		shouldGoOffline := hasTimedOut || entry.IsFinished()
+		if !shouldGoOffline {
 			if reader := entry.StatusReader(); reader != nil {
 				if _, ok := reader.Receive(); ok {
 					err := m.enqueueEvent(&masterEvent{

@@ -6,6 +6,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/errors"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+
 	runtime "github.com/hanfei1991/microcosm/executor/worker"
 	"github.com/hanfei1991/microcosm/lib/config"
 	libModel "github.com/hanfei1991/microcosm/lib/model"
@@ -13,9 +17,6 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
-
-	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -363,6 +364,70 @@ func TestWorkerSuicideAfterRuntimeDelay(t *testing.T) {
 	}, 2*time.Second, 10*time.Millisecond)
 	require.Error(t, pollErr)
 	require.Regexp(t, ".*Suicide.*", pollErr)
+}
+
+func TestWorkerGracefulExit(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	worker := newMockWorkerImpl(workerID1, masterName)
+	worker.clock = clock.NewMock()
+	worker.clock.(*clock.Mock).Set(time.Now())
+	putMasterMeta(ctx, t, worker.metaKVClient, &libModel.MasterMetaKVData{
+		ID:         masterName,
+		NodeID:     masterNodeName,
+		Epoch:      1,
+		StatusCode: libModel.MasterStatusInit,
+	})
+
+	worker.On("InitImpl", mock.Anything).Return(nil)
+	worker.On("Status").Return(libModel.WorkerStatus{
+		Code: libModel.WorkerStatusNormal,
+	}, nil)
+
+	err := worker.Init(ctx)
+	require.NoError(t, err)
+
+	worker.On("Tick", mock.Anything).
+		Return(errors.New("fake error")).Once()
+
+	for {
+		err := worker.Poll(ctx)
+		require.NoError(t, err)
+
+		// Make the heartbeat worker tick.
+		worker.clock.(*clock.Mock).Add(time.Second)
+
+		rawMsg, ok := worker.messageSender.TryPop(masterNodeName, libModel.HeartbeatPingTopic(masterName))
+		if !ok {
+			continue
+		}
+		msg := rawMsg.(*libModel.HeartbeatPingMessage)
+		if msg.IsFinished {
+			pongMsg := &libModel.HeartbeatPongMessage{
+				SendTime:   msg.SendTime,
+				ReplyTime:  time.Now(),
+				ToWorkerID: workerID1,
+				Epoch:      1,
+				IsFinished: true,
+			}
+
+			err := worker.messageHandlerManager.InvokeHandler(
+				t,
+				libModel.HeartbeatPongTopic(masterName, workerID1),
+				masterNodeName,
+				pongMsg,
+			)
+			require.NoError(t, err)
+			break
+		}
+	}
+
+	err = worker.Poll(ctx)
+	require.Error(t, err)
+	require.Regexp(t, ".*fake error.*", err)
 }
 
 func TestCloseBeforeInit(t *testing.T) {
