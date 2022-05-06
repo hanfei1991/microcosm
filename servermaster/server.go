@@ -488,12 +488,6 @@ func (s *Server) registerMetaStore() error {
 		log.L().Error("connect to framework metastore fail", zap.Any("config", cfg.FrameMetaConf), zap.Error(err))
 		return err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	defer cancel()
-	if err := s.frameMetaClient.Initialize(ctx); err != nil {
-		log.L().Error("framework metastore initialized all backend tables fail", zap.Error(err))
-		return err
-	}
 
 	log.L().Info("register framework metastore successfully", zap.Any("metastore", cfg.FrameMetaConf))
 
@@ -625,7 +619,24 @@ func (s *Server) reset(ctx context.Context) error {
 	return nil
 }
 
+func (s *Server) initializedBackendMeta(ctx context.Context) error {
+	bctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	if err := s.frameMetaClient.Initialize(bctx); err != nil {
+		log.L().Error("framework metastore initialized all backend tables fail", zap.Error(err))
+		return err
+	}
+
+	return nil
+}
+
 func (s *Server) runLeaderService(ctx context.Context) (err error) {
+	// leader master need Initialize all backend tables first
+	err = s.initializedBackendMeta(ctx)
+	if err != nil {
+		return
+	}
+
 	// rebuild states from existing meta if needed
 	err = s.resetExecutor(ctx)
 	if err != nil {
