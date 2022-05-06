@@ -223,7 +223,8 @@ func (c *metaOpsClient) Close() error {
 
 ////////////////////////// Initialize
 // Initialize will create all related tables in SQL backend
-// TODO: What if we change the definition of orm??
+// TODO: What happen if we upgrade the definition of model when rolling update?
+// TODO: need test: change column definition/add column/drop column?
 func (c *metaOpsClient) Initialize(ctx context.Context) error {
 	if err := c.db.AutoMigrate(globalModels...); err != nil {
 		return cerrors.ErrMetaOpFail.Wrap(err)
