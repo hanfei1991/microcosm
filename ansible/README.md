@@ -16,7 +16,7 @@ Execute `ansible-playbook -i hosts deploy.yml` to deploy. If the download of etc
 
 ## Start & Stop
 
-Execute `ansible-playbook -i hosts start.yml` and `ansible-playbook -i hosts start.yml` to start / stop cluster.
+Execute `ansible-playbook -i hosts start.yml` and `ansible-playbook -i hosts stop.yml` to start or stop cluster.
 
 ## Clean Environment
 
