@@ -5,7 +5,7 @@ import (
 
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
-	dorm "github.com/hanfei1991/microcosm/pkg/orm"
+	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 )
@@ -56,11 +56,11 @@ func NewFrameMetaConfig() *metaclient.StoreConfigParams {
 	return &metaclient.StoreConfigParams{
 		StoreID: metaclient.FrameMetaID,
 		Endpoints: []string{
-			dorm.DefaultFrameMetaEndpoints,
+			pkgOrm.DefaultFrameMetaEndpoints,
 		},
 		Auth: metaclient.AuthConfParams{
-			User:   dorm.DefaultFrameMetaUser,
-			Passwd: dorm.DefaultFrameMetaPassword,
+			User:   pkgOrm.DefaultFrameMetaUser,
+			Passwd: pkgOrm.DefaultFrameMetaPassword,
 		},
 	}
 }

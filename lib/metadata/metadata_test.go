@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	libModel "github.com/hanfei1991/microcosm/lib/model"
-	dorm "github.com/hanfei1991/microcosm/pkg/orm"
+	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 )
 
 // These constants are only used for unit testing.
@@ -20,7 +20,7 @@ func TestMasterMetadata(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	metaClient, err := dorm.NewMockClient()
+	metaClient, err := pkgOrm.NewMockClient()
 	require.Nil(t, err)
 	meta := []*libModel.MasterMetaKVData{
 		{
@@ -84,7 +84,7 @@ func TestOperateMasterMetadata(t *testing.T) {
 			StatusCode: libModel.MasterStatusInit,
 		}
 	)
-	metaClient, err := dorm.NewMockClient()
+	metaClient, err := pkgOrm.NewMockClient()
 	require.Nil(t, err)
 
 	loadMeta := func() *libModel.MasterMetaKVData {
@@ -115,7 +115,7 @@ func TestOperateMasterMetadata(t *testing.T) {
 func TestLoadAllWorkers(t *testing.T) {
 	t.Parallel()
 
-	metaClient, err := dorm.NewMockClient()
+	metaClient, err := pkgOrm.NewMockClient()
 	require.Nil(t, err)
 	workerMetaClient := NewWorkerMetadataClient("master-1", metaClient)
 

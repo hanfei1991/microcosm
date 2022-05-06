@@ -16,7 +16,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	derrors "github.com/hanfei1991/microcosm/pkg/errors"
-	dorm "github.com/hanfei1991/microcosm/pkg/orm"
+	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
 )
@@ -47,7 +47,7 @@ type JobManagerImplV2 struct {
 	masterMetaClient *metadata.MasterMetadataClient
 	uuidGen          uuid.Generator
 	clocker          clock.Clock
-	frameMetaClient  dorm.Client
+	frameMetaClient  pkgOrm.Client
 	tombstoneCleaned bool
 }
 
@@ -186,14 +186,14 @@ func NewJobManagerImplV2(
 	dctx *dcontext.Context,
 	id libModel.MasterID,
 ) (*JobManagerImplV2, error) {
-	metaCli, err := dctx.Deps().Construct(func(cli dorm.Client) (dorm.Client, error) {
+	metaCli, err := dctx.Deps().Construct(func(cli pkgOrm.Client) (pkgOrm.Client, error) {
 		return cli, nil
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	metaClient := metaCli.(dorm.Client)
+	metaClient := metaCli.(pkgOrm.Client)
 	cli := metadata.NewMasterMetadataClient(id, metaClient)
 	impl := &JobManagerImplV2{
 		JobFsm:           NewJobFsm(),

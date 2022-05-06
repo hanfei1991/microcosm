@@ -16,13 +16,13 @@ import (
 	"github.com/hanfei1991/microcosm/pb"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
-	dorm "github.com/hanfei1991/microcosm/pkg/orm"
+	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 )
 
 type serviceTestSuite struct {
 	service              *Service
 	executorInfoProvider *MockExecutorInfoProvider
-	meta                 dorm.Client
+	meta                 pkgOrm.Client
 }
 
 var serviceMockData = []*resourcemeta.ResourceMeta{
@@ -65,7 +65,7 @@ var serviceMockData = []*resourcemeta.ResourceMeta{
 
 func newServiceTestSuite(t *testing.T) *serviceTestSuite {
 	execPro := NewMockExecutorInfoProvider()
-	meta, err := dorm.NewMockClient()
+	meta, err := pkgOrm.NewMockClient()
 	require.NoError(t, err)
 	id := "leader"
 	leaderVal := &atomic.Value{}

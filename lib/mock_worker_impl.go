@@ -11,7 +11,7 @@ import (
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
 	extkv "github.com/hanfei1991/microcosm/pkg/meta/extension"
-	dorm "github.com/hanfei1991/microcosm/pkg/orm"
+	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
@@ -24,7 +24,7 @@ type mockWorkerImpl struct {
 
 	messageHandlerManager *p2p.MockMessageHandlerManager
 	messageSender         *p2p.MockMessageSender
-	metaClient            dorm.Client
+	metaClient            pkgOrm.Client
 
 	failoverCount atomic.Int64
 }
@@ -34,7 +34,7 @@ type workerParamListForTest struct {
 
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
-	FrameMetaClient       dorm.Client
+	FrameMetaClient       pkgOrm.Client
 	UserRawKVClient       extkv.KVClientEx
 	ResourceBroker        broker.Broker
 }

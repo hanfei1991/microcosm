@@ -32,7 +32,7 @@ import (
 	extkv "github.com/hanfei1991/microcosm/pkg/meta/extension"
 	"github.com/hanfei1991/microcosm/pkg/meta/kvclient"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
-	dorm "github.com/hanfei1991/microcosm/pkg/orm"
+	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/pkg/quota"
 	"github.com/hanfei1991/microcosm/pkg/tenant"
@@ -113,7 +113,7 @@ type DefaultBaseMaster struct {
 	messageHandlerManager p2p.MessageHandlerManager
 	messageSender         p2p.MessageSender
 	// framework metastore client
-	frameMetaClient dorm.Client
+	frameMetaClient pkgOrm.Client
 	// user metastore raw kvclient
 	userRawKVClient       extkv.KVClientEx
 	executorClientManager client.ClientsManager
@@ -159,7 +159,7 @@ type masterParams struct {
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
 	// framework metastore client
-	FrameMetaClient dorm.Client
+	FrameMetaClient pkgOrm.Client
 	// user metastore raw kvclient
 	UserRawKVClient       extkv.KVClientEx
 	ExecutorClientManager client.ClientsManager

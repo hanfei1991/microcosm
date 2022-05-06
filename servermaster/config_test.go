@@ -19,13 +19,13 @@ func TestMetaStoreConfig(t *testing.T) {
 		"http://127.0.0.1:8291",
 		"--advertise-peer-urls",
 		"http://server-master:8291",
-		"--frame-meta-endpoint",
+		"--frame-meta-endpoints",
 		"frame-etcd-standalone:1111",
 		"--frame-meta-user",
 		"root134",
 		"--frame-meta-password",
 		"root123",
-		"--user-meta-endpoint",
+		"--user-meta-endpoints",
 		"user-etcd-standalone:2222",
 	})
 	require.Nil(t, err)

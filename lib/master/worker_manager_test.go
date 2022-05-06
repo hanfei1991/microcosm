@@ -17,14 +17,14 @@ import (
 	"github.com/hanfei1991/microcosm/lib/statusutil"
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
-	dorm "github.com/hanfei1991/microcosm/pkg/orm"
+	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
 type workerManageTestSuite struct {
 	manager       *WorkerManager
 	masterNode    p2p.NodeID
-	meta          dorm.Client
+	meta          pkgOrm.Client
 	messageSender p2p.MessageSender
 	clock         *clock.Mock
 
@@ -187,7 +187,7 @@ func (s *workerManageTestSuite) Close() {
 }
 
 func NewWorkerManageTestSuite(isInit bool) *workerManageTestSuite {
-	cli, err := dorm.NewMockClient()
+	cli, err := pkgOrm.NewMockClient()
 	if err != nil {
 		panic(err)
 	}

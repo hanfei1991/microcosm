@@ -8,19 +8,19 @@ import (
 	"go.uber.org/zap"
 
 	libModel "github.com/hanfei1991/microcosm/lib/model"
-	dorm "github.com/hanfei1991/microcosm/pkg/orm"
+	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 )
 
 const JobManagerUUID = "dataflow-engine-job-manager"
 
 type MasterMetadataClient struct {
 	masterID   libModel.MasterID
-	metaClient dorm.Client
+	metaClient pkgOrm.Client
 }
 
 func NewMasterMetadataClient(
 	masterID libModel.MasterID,
-	metaClient dorm.Client,
+	metaClient pkgOrm.Client,
 ) *MasterMetadataClient {
 	return &MasterMetadataClient{
 		masterID:   masterID,
@@ -31,7 +31,7 @@ func NewMasterMetadataClient(
 func (c *MasterMetadataClient) Load(ctx context.Context) (*libModel.MasterMetaKVData, error) {
 	masterMeta, err := c.metaClient.GetJobByID(ctx, c.masterID)
 	if err != nil {
-		if dorm.IsNotFoundError(err) {
+		if pkgOrm.IsNotFoundError(err) {
 			// TODO refine handling the situation where the mata key does not exist at this point
 			masterMeta := &libModel.MasterMetaKVData{
 				// TODO: projectID
@@ -72,12 +72,12 @@ func (c *MasterMetadataClient) LoadAllMasters(ctx context.Context) ([]*libModel.
 
 type WorkerMetadataClient struct {
 	masterID   libModel.MasterID
-	metaClient dorm.Client
+	metaClient pkgOrm.Client
 }
 
 func NewWorkerMetadataClient(
 	masterID libModel.MasterID,
-	metaClient dorm.Client,
+	metaClient pkgOrm.Client,
 ) *WorkerMetadataClient {
 	return &WorkerMetadataClient{
 		masterID:   masterID,
@@ -130,7 +130,7 @@ func (c *WorkerMetadataClient) MasterID() libModel.MasterID {
 // StoreMasterMeta is exposed to job manager for job master meta persistence
 func StoreMasterMeta(
 	ctx context.Context,
-	metaClient dorm.Client,
+	metaClient pkgOrm.Client,
 	meta *libModel.MasterMetaKVData,
 ) error {
 	metaCli := NewMasterMetadataClient(meta.ID, metaClient)
@@ -145,7 +145,7 @@ func StoreMasterMeta(
 
 func DeleteMasterMeta(
 	ctx context.Context,
-	metaClient dorm.Client,
+	metaClient pkgOrm.Client,
 	masterID libModel.MasterID,
 ) error {
 	metaCli := NewMasterMetadataClient(masterID, metaClient)

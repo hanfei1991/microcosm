@@ -6,7 +6,7 @@ import (
 	"go.uber.org/ratelimit"
 
 	resModel "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
-	dorm "github.com/hanfei1991/microcosm/pkg/orm"
+	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 )
 
 const (
@@ -18,10 +18,10 @@ type MetadataAccessor struct {
 	// It helps to prevent cascading failures after a fail-over
 	// where a large number of resources are created.
 	rl         ratelimit.Limiter
-	metaclient dorm.Client
+	metaclient pkgOrm.Client
 }
 
-func NewMetadataAccessor(client dorm.Client) *MetadataAccessor {
+func NewMetadataAccessor(client pkgOrm.Client) *MetadataAccessor {
 	return &MetadataAccessor{
 		rl:         ratelimit.New(metadataQPSLimit),
 		metaclient: client,
@@ -34,7 +34,7 @@ func (m *MetadataAccessor) GetResource(ctx context.Context, resourceID resModel.
 		return rec, true, nil
 	}
 
-	if dorm.IsNotFoundError(err) {
+	if pkgOrm.IsNotFoundError(err) {
 		return nil, false, nil
 	}
 
@@ -47,7 +47,7 @@ func (m *MetadataAccessor) CreateResource(ctx context.Context, resource *resMode
 		// A duplicate exists
 		return false, nil
 	}
-	if !dorm.IsNotFoundError(err) {
+	if !pkgOrm.IsNotFoundError(err) {
 		// An unexpected error
 		return false, err
 	}
@@ -63,7 +63,7 @@ func (m *MetadataAccessor) CreateResource(ctx context.Context, resource *resMode
 func (m *MetadataAccessor) UpdateResource(ctx context.Context, resource *resModel.ResourceMeta) (bool, error) {
 	_, err := m.metaclient.GetResourceByID(ctx, resource.ID)
 	if err != nil {
-		if dorm.IsNotFoundError(err) {
+		if pkgOrm.IsNotFoundError(err) {
 			return false, nil
 		}
 		return false, err

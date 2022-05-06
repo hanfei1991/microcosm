@@ -17,7 +17,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	"github.com/hanfei1991/microcosm/pkg/errctx"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
-	dorm "github.com/hanfei1991/microcosm/pkg/orm"
+	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
@@ -67,7 +67,7 @@ const (
 func NewWorkerManager(
 	masterID libModel.MasterID,
 	epoch libModel.Epoch,
-	meta dorm.Client,
+	meta pkgOrm.Client,
 	messageSender p2p.MessageSender,
 	onWorkerOnline Callback,
 	onWorkerOffline CallbackWithError,

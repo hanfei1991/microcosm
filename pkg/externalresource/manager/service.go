@@ -19,7 +19,7 @@ import (
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
 	resModel "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
-	dorm "github.com/hanfei1991/microcosm/pkg/orm"
+	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 )
 
 // Service implements pb.ResourceManagerServer
@@ -49,7 +49,7 @@ const (
 )
 
 func NewService(
-	metaclient dorm.Client,
+	metaclient pkgOrm.Client,
 	executorInfoProvider ExecutorInfoProvider,
 	preRPCHook *rpcutil.PreRPCHook[pb.ResourceManagerClient],
 ) *Service {

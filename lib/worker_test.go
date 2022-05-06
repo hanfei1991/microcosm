@@ -10,7 +10,7 @@ import (
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/statusutil"
 	"github.com/hanfei1991/microcosm/pkg/clock"
-	dorm "github.com/hanfei1991/microcosm/pkg/orm"
+	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -21,7 +21,7 @@ var (
 	_ runtime.Runnable = (Worker)(nil)
 )
 
-func putMasterMeta(ctx context.Context, t *testing.T, metaclient dorm.Client, metaData *libModel.MasterMetaKVData) {
+func putMasterMeta(ctx context.Context, t *testing.T, metaclient pkgOrm.Client, metaData *libModel.MasterMetaKVData) {
 	// FIXME: current backend mock db is not support unique index
 	if _, err := metaclient.GetJobByID(ctx, metaData.ID); err != nil {
 		err := metaclient.UpsertJob(ctx, metaData)

@@ -21,7 +21,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
 	extkv "github.com/hanfei1991/microcosm/pkg/meta/extension"
 	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
-	dorm "github.com/hanfei1991/microcosm/pkg/orm"
+	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
@@ -42,7 +42,7 @@ type MockMasterImpl struct {
 
 	messageHandlerManager *p2p.MockMessageHandlerManager
 	messageSender         p2p.MessageSender
-	frameMetaClient       dorm.Client
+	frameMetaClient       pkgOrm.Client
 	userRawKVClient       *mockkv.MetaMock
 	executorClientManager *client.Manager
 	serverMasterClient    *client.MockServerMasterClient
@@ -72,14 +72,14 @@ type masterParamListForTest struct {
 
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
-	FrameMetaClient       dorm.Client
+	FrameMetaClient       pkgOrm.Client
 	UserRawKVClient       extkv.KVClientEx
 	ExecutorClientManager client.ClientsManager
 	ServerMasterClient    client.MasterClient
 	ResourceBroker        broker.Broker
 }
 
-func (m *MockMasterImpl) GetFrameMetaClient() dorm.Client {
+func (m *MockMasterImpl) GetFrameMetaClient() pkgOrm.Client {
 	return m.frameMetaClient
 }
 

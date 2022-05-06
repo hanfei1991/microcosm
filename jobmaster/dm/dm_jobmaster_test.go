@@ -31,7 +31,7 @@ import (
 	extkv "github.com/hanfei1991/microcosm/pkg/meta/extension"
 	kvmock "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
-	dorm "github.com/hanfei1991/microcosm/pkg/orm"
+	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 
 	"github.com/stretchr/testify/mock"
@@ -62,7 +62,7 @@ type masterParamListForTest struct {
 
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
-	FrameMetaClient       dorm.Client
+	FrameMetaClient       pkgOrm.Client
 	UserRawKVClient       extkv.KVClientEx
 	ExecutorClientManager client.ClientsManager
 	ServerMasterClient    client.MasterClient
@@ -72,7 +72,7 @@ type masterParamListForTest struct {
 // Init -> Poll -> Close
 // FIXME: database is closed ???
 func (t *testDMJobmasterSuite) testRunDMJobMaster() {
-	cli, err := dorm.NewMockClient()
+	cli, err := pkgOrm.NewMockClient()
 	require.NoError(t.T(), err)
 	mockServerMasterClient := &client.MockServerMasterClient{}
 	mockExecutorClient := client.NewClientManager()
@@ -118,7 +118,7 @@ func (t *testDMJobmasterSuite) testRunDMJobMaster() {
 	require.NoError(t.T(), jobmaster.Close(context.Background()))
 
 	// FIXME: seems that mock db close unexpected here
-	cli, err = dorm.NewMockClient()
+	cli, err = pkgOrm.NewMockClient()
 	require.NoError(t.T(), err)
 	depsForTest.FrameMetaClient = cli
 	jobmaster, err = registry.GlobalWorkerRegistry().CreateWorker(dctx, lib.DMJobMaster, "dm-jobmaster", libMetadata.JobManagerUUID, cfgBytes)

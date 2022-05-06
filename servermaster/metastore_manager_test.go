@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
-	dorm "github.com/hanfei1991/microcosm/pkg/orm"
+	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 	"github.com/stretchr/testify/require"
 )
 
@@ -42,7 +42,7 @@ func TestDefaultMetaStoreManager(t *testing.T) {
 
 	store := NewFrameMetaConfig()
 	require.Equal(t, metaclient.FrameMetaID, store.StoreID)
-	require.Equal(t, dorm.DefaultFrameMetaEndpoints, store.Endpoints[0])
+	require.Equal(t, pkgOrm.DefaultFrameMetaEndpoints, store.Endpoints[0])
 
 	store = NewDefaultUserMetaConfig()
 	require.Equal(t, metaclient.DefaultUserMetaID, store.StoreID)

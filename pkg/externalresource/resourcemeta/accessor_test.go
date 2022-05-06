@@ -7,12 +7,12 @@ import (
 	"time"
 
 	resModel "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
-	dorm "github.com/hanfei1991/microcosm/pkg/orm"
+	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 	"github.com/stretchr/testify/require"
 )
 
 func newAccessorWithMockKV() *MetadataAccessor {
-	cli, _ := dorm.NewMockClient()
+	cli, _ := pkgOrm.NewMockClient()
 	return NewMetadataAccessor(cli)
 }
 

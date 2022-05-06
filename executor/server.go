@@ -36,7 +36,7 @@ import (
 	extkv "github.com/hanfei1991/microcosm/pkg/meta/extension"
 	"github.com/hanfei1991/microcosm/pkg/meta/kvclient"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
-	dorm "github.com/hanfei1991/microcosm/pkg/orm"
+	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/pkg/rpcutil"
 	"github.com/hanfei1991/microcosm/pkg/serverutils"
@@ -66,7 +66,7 @@ type Server struct {
 	// discovery only.
 	etcdCli *clientv3.Client
 	// framework metastore client
-	frameMetaClient dorm.Client
+	frameMetaClient pkgOrm.Client
 	// user metastore raw kvclient(reuse for all workers)
 	userRawKVClient extkv.KVClientEx
 	p2pMsgRouter    p2pImpl.MessageRouter
@@ -99,7 +99,7 @@ func (s *Server) buildDeps() (*deps.Deps, error) {
 		return nil, err
 	}
 
-	err = deps.Provide(func() dorm.Client {
+	err = deps.Provide(func() pkgOrm.Client {
 		return s.frameMetaClient
 	})
 	if err != nil {
@@ -458,7 +458,7 @@ func (s *Server) fetchMetaStore(ctx context.Context) error {
 		return err
 	}
 	// TODO: replace the default DB config
-	s.frameMetaClient, err = dorm.NewClient(conf, dorm.NewDefaultDBConfig())
+	s.frameMetaClient, err = pkgOrm.NewClient(conf, pkgOrm.NewDefaultDBConfig())
 	if err != nil {
 		log.L().Error("connect to framework metastore fail", zap.Any("conf", conf), zap.Error(err))
 		return err

@@ -14,7 +14,7 @@ import (
 	"github.com/hanfei1991/microcosm/lib/statusutil"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
-	dorm "github.com/hanfei1991/microcosm/pkg/orm"
+	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
 )
 
@@ -31,7 +31,7 @@ type dummyConfig struct {
 	param int
 }
 
-func prepareMeta(ctx context.Context, t *testing.T, metaclient dorm.Client) {
+func prepareMeta(ctx context.Context, t *testing.T, metaclient pkgOrm.Client) {
 	masterInfo := &libModel.MasterMetaKVData{
 		ID:         masterName,
 		NodeID:     masterNodeName,

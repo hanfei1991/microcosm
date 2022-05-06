@@ -23,7 +23,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
 	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
-	dorm "github.com/hanfei1991/microcosm/pkg/orm"
+	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
 )
@@ -31,7 +31,7 @@ import (
 func MockBaseMaster(id libModel.MasterID, masterImpl MasterImpl) *DefaultBaseMaster {
 	ctx := dcontext.Background()
 	dp := deps.NewDeps()
-	cli, err := dorm.NewMockClient()
+	cli, err := pkgOrm.NewMockClient()
 	if err != nil {
 		panic(err)
 	}

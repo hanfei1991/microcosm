@@ -41,7 +41,7 @@ import (
 	extkv "github.com/hanfei1991/microcosm/pkg/meta/extension"
 	"github.com/hanfei1991/microcosm/pkg/meta/kvclient"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
-	dorm "github.com/hanfei1991/microcosm/pkg/orm"
+	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/pkg/rpcutil"
 	"github.com/hanfei1991/microcosm/pkg/serverutils"
@@ -102,7 +102,7 @@ type Server struct {
 	testCtx *test.Context
 
 	// framework metastore client
-	frameMetaClient dorm.Client
+	frameMetaClient pkgOrm.Client
 	// user metastore kvclient
 	userMetaKVClient extkv.KVClientEx
 }
@@ -339,7 +339,7 @@ func (s *Server) QueryMetaStore(
 			return &pb.QueryMetaStoreResponse{
 				Err: &pb.Error{
 					Code:    pb.ErrorCode_MetaStoreSerializeFail,
-					Message: fmt.Sprintf("store ID: %s", storeID),
+					Message: fmt.Sprintf("raw store config params: %v", store),
 				},
 			}
 		}
@@ -484,7 +484,7 @@ func (s *Server) registerMetaStore() error {
 	}
 	var err error
 	// TODO: replace default db config
-	if s.frameMetaClient, err = dorm.NewClient(*cfg.FrameMetaConf, dorm.NewDefaultDBConfig()); err != nil {
+	if s.frameMetaClient, err = pkgOrm.NewClient(*cfg.FrameMetaConf, pkgOrm.NewDefaultDBConfig()); err != nil {
 		log.L().Error("connect to framework metastore fail", zap.Any("config", cfg.FrameMetaConf), zap.Error(err))
 		return err
 	}
@@ -660,7 +660,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	dctx.Environ.MasterMetaBytes = masterMetaBytes
 
 	dp := deps.NewDeps()
-	if err := dp.Provide(func() dorm.Client {
+	if err := dp.Provide(func() pkgOrm.Client {
 		return s.frameMetaClient
 	}); err != nil {
 		return err

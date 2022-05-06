@@ -118,6 +118,7 @@ var (
 	ErrMetaStoreIDDuplicate = errors.Normalize("metastore id duplicated", errors.RFCCodeText("DFLOW:ErrMetaStoreIDDuplicate"))
 	ErrMetaStoreUnfounded   = errors.Normalize("metastore unfounded:%s", errors.RFCCodeText("DFLOW:ErrMetaStoreUnfounded"))
 	ErrMetaEntryNotFound    = errors.Normalize("meta entry not found", errors.RFCCodeText("DFLOW:ErrMetaEntryNotFound"))
+	ErrMetaParamsInvalid    = errors.Normalize("meta params invalid:%s", errors.RFCCodeText("DFLOW:ErrMetaParamsInvalid"))
 
 	// DataSet errors
 	ErrDatasetEntryNotFound = errors.Normalize("dataset entry not found. Key: %s", errors.RFCCodeText("DFLOW:ErrDatasetEntryNotFound"))

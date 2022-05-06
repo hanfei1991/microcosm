@@ -8,13 +8,13 @@ import (
 
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
-	dorm "github.com/hanfei1991/microcosm/pkg/orm"
+	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
 type writerTestSuite struct {
 	writer        *Writer
-	cli           dorm.Client
+	cli           pkgOrm.Client
 	messageSender *p2p.MockMessageSender
 	masterInfo    *MockMasterInfoProvider
 }
@@ -26,7 +26,7 @@ func newWriterTestSuite(
 	masterEpoch libModel.Epoch,
 	workerID libModel.WorkerID,
 ) *writerTestSuite {
-	cli, err := dorm.NewMockClient()
+	cli, err := pkgOrm.NewMockClient()
 	require.NoError(t, err)
 
 	messageSender := p2p.NewMockMessageSender()

@@ -15,7 +15,7 @@ import (
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/deps"
 	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
-	dorm "github.com/hanfei1991/microcosm/pkg/orm"
+	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
@@ -136,7 +136,7 @@ func (m *testJobMasterImpl) Status() libModel.WorkerStatus {
 }
 
 func newBaseJobMasterForTests(impl JobMasterImpl) *DefaultBaseJobMaster {
-	cli, err := dorm.NewMockClient()
+	cli, err := pkgOrm.NewMockClient()
 	if err != nil {
 		panic(err)
 	}

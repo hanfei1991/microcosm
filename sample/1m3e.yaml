@@ -17,9 +17,9 @@ services:
                         - "http://127.0.0.1:8291"
                         - "--advertise-peer-urls"
                         - "http://server-master:8291"
-                        - "--frame-meta-endpoint"
+                        - "--frame-meta-endpoints"
                         - "frame-mysql-standalone:3306"
-                        - "--user-meta-endpoint"
+                        - "--user-meta-endpoints"
                         - "user-etcd-standalone:2379"
                 ports:
                         - "10240:10240"

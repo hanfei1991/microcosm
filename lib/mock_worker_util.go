@@ -15,7 +15,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/deps"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
 	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
-	dorm "github.com/hanfei1991/microcosm/pkg/orm"
+	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
@@ -31,7 +31,7 @@ func MockBaseWorker(
 ) *BaseWorkerForTesting {
 	ctx := dcontext.Background()
 	dp := deps.NewDeps()
-	cli, err := dorm.NewMockClient()
+	cli, err := pkgOrm.NewMockClient()
 	if err != nil {
 		panic(err)
 	}

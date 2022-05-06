@@ -12,14 +12,14 @@ import (
 	"golang.org/x/time/rate"
 
 	libModel "github.com/hanfei1991/microcosm/lib/model"
-	dorm "github.com/hanfei1991/microcosm/pkg/orm"
+	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
 // Writer is used to persist WorkerStatus changes and send notifications
 // to the Master.
 type Writer struct {
-	metaclient    dorm.Client
+	metaclient    pkgOrm.Client
 	messageSender p2p.MessageSender
 	lastStatus    *libModel.WorkerStatus
 
@@ -30,7 +30,7 @@ type Writer struct {
 
 // NewWriter creates a new Writer.
 func NewWriter(
-	metaclient dorm.Client,
+	metaclient pkgOrm.Client,
 	messageSender p2p.MessageSender,
 	masterInfo MasterInfoProvider,
 	workerID string,

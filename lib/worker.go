@@ -26,7 +26,7 @@ import (
 	extkv "github.com/hanfei1991/microcosm/pkg/meta/extension"
 	"github.com/hanfei1991/microcosm/pkg/meta/kvclient"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
-	dorm "github.com/hanfei1991/microcosm/pkg/orm"
+	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/pkg/tenant"
 )
@@ -86,7 +86,7 @@ type DefaultBaseWorker struct {
 	messageHandlerManager p2p.MessageHandlerManager
 	messageSender         p2p.MessageSender
 	// framework metastore client
-	frameMetaClient dorm.Client
+	frameMetaClient pkgOrm.Client
 	// user metastore raw kvclient
 	userRawKVClient extkv.KVClientEx
 	resourceBroker  broker.Broker
@@ -123,7 +123,7 @@ type workerParams struct {
 
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
-	FrameMetaClient       dorm.Client
+	FrameMetaClient       pkgOrm.Client
 	UserRawKVClient       extkv.KVClientEx
 	ResourceBroker        broker.Broker
 }
@@ -500,7 +500,7 @@ type masterClient struct {
 	workerID libModel.WorkerID
 
 	messageSender           p2p.MessageSender
-	frameMetaClient         dorm.Client
+	frameMetaClient         pkgOrm.Client
 	lastMasterAckedPingTime clock.MonotonicTime
 
 	timeoutConfig config.TimeoutConfig
@@ -512,7 +512,7 @@ func newMasterClient(
 	masterID libModel.MasterID,
 	workerID libModel.WorkerID,
 	messageRouter p2p.MessageSender,
-	metaCli dorm.Client,
+	metaCli pkgOrm.Client,
 	initTime clock.MonotonicTime,
 	onMasterFailOver func() error,
 ) *masterClient {
