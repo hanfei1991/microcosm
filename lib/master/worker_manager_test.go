@@ -497,6 +497,6 @@ func TestWorkerGracefulExitAfterFailover(t *testing.T) {
 	require.True(t, suite.manager.IsInitialized())
 	require.Len(t, suite.manager.GetWorkers(), 1)
 	require.Contains(t, suite.manager.GetWorkers(), "worker-1")
-	require.Nil(t, suite.manager.GetWorkers()["worker-1"].GetTombstone())
+	require.NotNil(t, suite.manager.GetWorkers()["worker-1"].GetTombstone())
 	suite.Close()
 }

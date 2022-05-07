@@ -182,14 +182,15 @@ func (m *WorkerManager) InitAfterRecover(ctx context.Context) (retErr error) {
 			zap.Duration("duration", m.clock.Since(startTime)))
 	case <-timer.C:
 		// Wait for the worker timeout to expire
-		m.mu.Lock()
-		for _, entry := range m.workerEntries {
-			if entry.State() == workerEntryWait {
-				entry.MarkAsTombstone()
-			}
-		}
-		m.mu.Unlock()
 	}
+
+	m.mu.Lock()
+	for _, entry := range m.workerEntries {
+		if entry.State() == workerEntryWait || entry.IsFinished() {
+			entry.MarkAsTombstone()
+		}
+	}
+	m.mu.Unlock()
 
 	m.state = workerManagerReady
 	return nil

@@ -105,7 +105,7 @@ func (e *workerEntry) MarkAsTombstone() {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	if e.state == workerEntryWait || e.state == workerEntryOffline {
+	if e.state == workerEntryWait || e.state == workerEntryOffline || e.IsFinished() {
 		// Only workerEntryWait and workerEntryOffline are allowed
 		// to transition to workerEntryTombstone.
 		e.state = workerEntryTombstone
