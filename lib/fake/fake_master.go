@@ -45,6 +45,8 @@ type Config struct {
 	EtcdWatchEnable bool     `json:"etcd-watch-enable"`
 	EtcdEndpoints   []string `json:"etcd-endpoints"`
 	EtcdWatchPrefix string   `json:"etcd-watch-prefix"`
+
+	InjectErrorInterval time.Duration `json:"inject-error-interval"`
 }
 
 type Checkpoint struct {
@@ -456,13 +458,14 @@ func (m *Master) genCheckpoint() *Checkpoint {
 
 func (m *Master) genWorkerConfig(index int, startTick, startRevision int64) *WorkerConfig {
 	return &WorkerConfig{
-		ID:                index,
-		StartTick:         startTick,
-		TargetTick:        int64(m.config.TargetTick),
-		EtcdWatchEnable:   m.config.EtcdWatchEnable,
-		EtcdEndpoints:     m.config.EtcdEndpoints,
-		EtcdWatchPrefix:   m.config.EtcdWatchPrefix,
-		EtcdWatchRevision: startRevision,
+		ID:                  index,
+		StartTick:           startTick,
+		TargetTick:          int64(m.config.TargetTick),
+		EtcdWatchEnable:     m.config.EtcdWatchEnable,
+		EtcdEndpoints:       m.config.EtcdEndpoints,
+		EtcdWatchPrefix:     m.config.EtcdWatchPrefix,
+		EtcdWatchRevision:   startRevision,
+		InjectErrorInterval: m.config.InjectErrorInterval,
 	}
 }
 

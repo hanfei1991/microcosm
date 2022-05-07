@@ -38,6 +38,8 @@ type (
 		EtcdEndpoints     []string `json:"etcd-endpoints"`
 		EtcdWatchPrefix   string   `json:"etcd-watch-prefix"`
 		EtcdWatchRevision int64    `json:"etcd-watch-revision"`
+
+		InjectErrorInterval time.Duration `json:"inject-error-interval"`
 	}
 
 	EtcdCheckpoint struct {
@@ -61,6 +63,8 @@ type (
 			sync.RWMutex
 			code libModel.WorkerStatusCode
 		}
+
+		startTime time.Time
 	}
 )
 
@@ -106,6 +110,7 @@ func (d *dummyWorker) InitImpl(ctx context.Context) error {
 		}
 		d.init = true
 		d.setStatusCode(libModel.WorkerStatusNormal)
+		d.startTime = time.Now()
 		return nil
 	}
 	return errors.New("repeated init")
@@ -148,6 +153,11 @@ func (d *dummyWorker) Tick(ctx context.Context) error {
 		return d.Exit(ctx, d.Status(), nil)
 	}
 
+	if d.config.InjectErrorInterval != 0 {
+		if time.Since(d.startTime) > d.config.InjectErrorInterval {
+			return errors.Errorf("injected error by worker: %d", d.config.ID)
+		}
+	}
 	return nil
 }
 
