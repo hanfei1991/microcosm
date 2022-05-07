@@ -2,7 +2,6 @@ package lib
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 	"time"
 
@@ -14,9 +13,8 @@ import (
 	"github.com/hanfei1991/microcosm/lib/config"
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/statusutil"
-	"github.com/hanfei1991/microcosm/pkg/adapter"
 	"github.com/hanfei1991/microcosm/pkg/clock"
-	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
+	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 )
 
 var (
@@ -24,11 +22,15 @@ var (
 	_ runtime.Runnable = (Worker)(nil)
 )
 
-func putMasterMeta(ctx context.Context, t *testing.T, metaclient metaclient.KVClient, metaData *libModel.MasterMetaKVData) {
-	masterKey := adapter.MasterMetaKey.Encode(masterName)
-	masterInfoBytes, err := json.Marshal(metaData)
-	require.NoError(t, err)
-	_, err = metaclient.Put(ctx, masterKey, string(masterInfoBytes))
+func putMasterMeta(ctx context.Context, t *testing.T, metaclient pkgOrm.Client, metaData *libModel.MasterMetaKVData) {
+	// FIXME: current backend mock db is not support unique index
+	if _, err := metaclient.GetJobByID(ctx, metaData.ID); err != nil {
+		err := metaclient.UpsertJob(ctx, metaData)
+		require.NoError(t, err)
+		return
+	}
+
+	err := metaclient.UpdateJob(ctx, metaData)
 	require.NoError(t, err)
 }
 
@@ -48,7 +50,7 @@ func TestWorkerInitAndClose(t *testing.T) {
 	worker := newMockWorkerImpl(workerID1, masterName)
 	worker.clock = clock.NewMock()
 	worker.clock.(*clock.Mock).Set(time.Now())
-	putMasterMeta(ctx, t, worker.metaKVClient, &libModel.MasterMetaKVData{
+	putMasterMeta(ctx, t, worker.metaClient, &libModel.MasterMetaKVData{
 		ID:         masterName,
 		NodeID:     masterNodeName,
 		Epoch:      1,
@@ -92,7 +94,7 @@ func TestWorkerInitAndClose(t *testing.T) {
 		}
 		return !ok
 	}, time.Second, time.Millisecond*10)
-	require.Equal(t, &statusutil.WorkerStatusMessage{
+	checkWorkerStatusMsg(t, &statusutil.WorkerStatusMessage{
 		Worker:      workerID1,
 		MasterEpoch: 1,
 		Status:      &libModel.WorkerStatus{Code: libModel.WorkerStatusNormal},
@@ -116,7 +118,7 @@ func TestWorkerHeartbeatPingPong(t *testing.T) {
 	worker := newMockWorkerImpl(workerID1, masterName)
 	worker.clock = clock.NewMock()
 	worker.clock.(*clock.Mock).Set(time.Now())
-	putMasterMeta(ctx, t, worker.metaKVClient, &libModel.MasterMetaKVData{
+	putMasterMeta(ctx, t, worker.metaClient, &libModel.MasterMetaKVData{
 		ID:         masterName,
 		NodeID:     masterNodeName,
 		Epoch:      1,
@@ -174,7 +176,7 @@ func TestWorkerMasterFailover(t *testing.T) {
 	worker := newMockWorkerImpl(workerID1, masterName)
 	worker.clock = clock.NewMock()
 	worker.clock.(*clock.Mock).Set(time.Now())
-	putMasterMeta(ctx, t, worker.metaKVClient, &libModel.MasterMetaKVData{
+	putMasterMeta(ctx, t, worker.metaClient, &libModel.MasterMetaKVData{
 		ID:         masterName,
 		NodeID:     masterNodeName,
 		Epoch:      1,
@@ -212,7 +214,7 @@ func TestWorkerMasterFailover(t *testing.T) {
 	masterAckedTimeAfterPing := worker.masterClient.getLastMasterAckedPingTime()
 
 	worker.clock.(*clock.Mock).Add(time.Second * 1)
-	putMasterMeta(ctx, t, worker.metaKVClient, &libModel.MasterMetaKVData{
+	putMasterMeta(ctx, t, worker.metaClient, &libModel.MasterMetaKVData{
 		ID:         masterName,
 		NodeID:     executorNodeID3,
 		Epoch:      2,
@@ -225,7 +227,7 @@ func TestWorkerMasterFailover(t *testing.T) {
 
 	require.Eventually(t, func() bool {
 		return worker.failoverCount.Load() == 1
-	}, time.Second*1, time.Millisecond*10)
+	}, time.Second*3, time.Millisecond*10)
 
 	masterAckedTimeAfterFailover := worker.masterClient.getLastMasterAckedPingTime()
 	require.Greater(t, masterAckedTimeAfterFailover, masterAckedTimeAfterPing)
@@ -238,7 +240,7 @@ func TestWorkerStatus(t *testing.T) {
 	worker := newMockWorkerImpl(workerID1, masterName)
 	worker.clock = clock.NewMock()
 	worker.clock.(*clock.Mock).Set(time.Now())
-	putMasterMeta(ctx, t, worker.metaKVClient, &libModel.MasterMetaKVData{
+	putMasterMeta(ctx, t, worker.metaClient, &libModel.MasterMetaKVData{
 		ID:         masterName,
 		NodeID:     masterNodeName,
 		Epoch:      1,
@@ -259,7 +261,7 @@ func TestWorkerStatus(t *testing.T) {
 	rawStatus, ok := worker.messageSender.TryPop(masterNodeName, statusutil.WorkerStatusTopic(masterName))
 	require.True(t, ok)
 	msg := rawStatus.(*statusutil.WorkerStatusMessage)
-	require.Equal(t, &statusutil.WorkerStatusMessage{
+	checkWorkerStatusMsg(t, &statusutil.WorkerStatusMessage{
 		Worker:      workerID1,
 		MasterEpoch: 1,
 		Status: &libModel.WorkerStatus{
@@ -276,7 +278,7 @@ func TestWorkerStatus(t *testing.T) {
 	rawStatus, ok = worker.messageSender.TryPop(masterNodeName, statusutil.WorkerStatusTopic(masterName))
 	require.True(t, ok)
 	msg = rawStatus.(*statusutil.WorkerStatusMessage)
-	require.Equal(t, &statusutil.WorkerStatusMessage{
+	checkWorkerStatusMsg(t, &statusutil.WorkerStatusMessage{
 		Worker:      workerID1,
 		MasterEpoch: 1,
 		Status: &libModel.WorkerStatus{
@@ -296,7 +298,7 @@ func TestWorkerSuicide(t *testing.T) {
 	worker := newMockWorkerImpl(workerID1, masterName)
 	worker.clock = clock.NewMock()
 	worker.clock.(*clock.Mock).Set(time.Now())
-	putMasterMeta(ctx, t, worker.metaKVClient, &libModel.MasterMetaKVData{
+	putMasterMeta(ctx, t, worker.metaClient, &libModel.MasterMetaKVData{
 		ID:         masterName,
 		NodeID:     masterNodeName,
 		Epoch:      1,
@@ -336,7 +338,7 @@ func TestWorkerSuicideAfterRuntimeDelay(t *testing.T) {
 	worker.clock = clock.NewMock()
 	worker.clock.(*clock.Mock).Set(submitTime.Add(worker.timeoutConfig.WorkerTimeoutDuration * 2))
 
-	putMasterMeta(ctx, t, worker.metaKVClient, &libModel.MasterMetaKVData{
+	putMasterMeta(ctx, t, worker.metaClient, &libModel.MasterMetaKVData{
 		ID:         masterName,
 		NodeID:     masterNodeName,
 		Epoch:      1,
@@ -375,7 +377,7 @@ func TestWorkerGracefulExit(t *testing.T) {
 	worker := newMockWorkerImpl(workerID1, masterName)
 	worker.clock = clock.NewMock()
 	worker.clock.(*clock.Mock).Set(time.Now())
-	putMasterMeta(ctx, t, worker.metaKVClient, &libModel.MasterMetaKVData{
+	putMasterMeta(ctx, t, worker.metaClient, &libModel.MasterMetaKVData{
 		ID:         masterName,
 		NodeID:     masterNodeName,
 		Epoch:      1,
@@ -439,4 +441,12 @@ func TestCloseBeforeInit(t *testing.T) {
 	worker.On("CloseImpl").Return(nil)
 	err := worker.Close(ctx)
 	require.NoError(t, err)
+}
+
+func checkWorkerStatusMsg(t *testing.T, expect, msg *statusutil.WorkerStatusMessage) {
+	require.Equal(t, expect.Worker, msg.Worker)
+	require.Equal(t, expect.MasterEpoch, msg.MasterEpoch)
+	require.Equal(t, expect.Status.Code, expect.Status.Code)
+	require.Equal(t, expect.Status.ErrorMessage, expect.Status.ErrorMessage)
+	require.Equal(t, expect.Status.ExtBytes, expect.Status.ExtBytes)
 }

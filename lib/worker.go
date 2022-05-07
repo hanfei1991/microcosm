@@ -23,10 +23,11 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/errctx"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
-	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
-	extKV "github.com/hanfei1991/microcosm/pkg/meta/extension"
+	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
+	extkv "github.com/hanfei1991/microcosm/pkg/meta/extension"
 	"github.com/hanfei1991/microcosm/pkg/meta/kvclient"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
+	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/pkg/tenant"
 )
@@ -93,10 +94,10 @@ type DefaultBaseWorker struct {
 
 	messageHandlerManager p2p.MessageHandlerManager
 	messageSender         p2p.MessageSender
-	// framework metastore prefix kvclient
-	metaKVClient metaclient.KVClient
+	// framework metastore client
+	frameMetaClient pkgOrm.Client
 	// user metastore raw kvclient
-	userRawKVClient extKV.KVClientEx
+	userRawKVClient extkv.KVClientEx
 	resourceBroker  broker.Broker
 
 	masterClient *masterClient
@@ -104,6 +105,7 @@ type DefaultBaseWorker struct {
 
 	workerMetaClient *metadata.WorkerMetadataClient
 	statusSender     *statusutil.Writer
+	workerStatus     *libModel.WorkerStatus
 	messageRouter    *MessageRouter
 
 	id            libModel.WorkerID
@@ -132,8 +134,8 @@ type workerParams struct {
 
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
-	MetaKVClient          metaclient.KVClient
-	UserRawKVClient       extKV.KVClientEx
+	FrameMetaClient       pkgOrm.Client
+	UserRawKVClient       extkv.KVClientEx
 	ResourceBroker        broker.Broker
 }
 
@@ -142,6 +144,7 @@ func NewBaseWorker(
 	impl WorkerImpl,
 	workerID libModel.WorkerID,
 	masterID libModel.MasterID,
+	// tp libModel.WorkerType,
 ) BaseWorker {
 	var params workerParams
 	if err := ctx.Deps().Fill(&params); err != nil {
@@ -153,12 +156,18 @@ func NewBaseWorker(
 		Impl:                  impl,
 		messageHandlerManager: params.MessageHandlerManager,
 		messageSender:         params.MessageSender,
-		metaKVClient:          params.MetaKVClient,
+		frameMetaClient:       params.FrameMetaClient,
 		userRawKVClient:       params.UserRawKVClient,
 		resourceBroker:        params.ResourceBroker,
 
-		masterID:      masterID,
-		id:            workerID,
+		masterID: masterID,
+		id:       workerID,
+		workerStatus: &libModel.WorkerStatus{
+			// TODO ProjectID
+			JobID: masterID,
+			ID:    workerID,
+			// TODO: worker_type
+		},
 		timeoutConfig: config.DefaultTimeoutConfig(),
 
 		pool: workerpool.NewDefaultAsyncPool(1),
@@ -222,7 +231,7 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) error {
 		w.masterID,
 		w.id,
 		w.messageSender,
-		w.metaKVClient,
+		w.frameMetaClient,
 		initTime,
 		func() error {
 			return errors.Trace(w.Impl.OnMasterFailover(MasterFailoverReason{
@@ -231,10 +240,10 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) error {
 			}))
 		})
 
-	w.workerMetaClient = metadata.NewWorkerMetadataClient(w.masterID, w.metaKVClient)
+	w.workerMetaClient = metadata.NewWorkerMetadataClient(w.masterID, w.frameMetaClient)
 
 	w.statusSender = statusutil.NewWriter(
-		w.metaKVClient, w.messageSender, w.masterClient, w.id)
+		w.frameMetaClient, w.messageSender, w.masterClient, w.id)
 	w.messageRouter = NewMessageRouter(w.id, w.pool, defaultMessageRouterBufferSize,
 		func(topic p2p.Topic, msg p2p.MessageValue) error {
 			return w.Impl.OnMasterMessage(topic, msg)
@@ -253,8 +262,13 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) error {
 }
 
 func (w *DefaultBaseWorker) doPostInit(ctx context.Context) error {
-	if err := w.statusSender.UpdateStatus(
-		ctx, &libModel.WorkerStatus{Code: libModel.WorkerStatusInit}); err != nil {
+	// Upsert the worker to ensure we have created the worker info
+	if err := w.frameMetaClient.UpsertWorker(ctx, w.workerStatus); err != nil {
+		return errors.Trace(err)
+	}
+
+	w.workerStatus.Code = libModel.WorkerStatusInit
+	if err := w.statusSender.UpdateStatus(ctx, w.workerStatus); err != nil {
 		return errors.Trace(err)
 	}
 
@@ -358,7 +372,10 @@ func (w *DefaultBaseWorker) MetaKVClient() metaclient.KVClient {
 func (w *DefaultBaseWorker) UpdateStatus(ctx context.Context, status libModel.WorkerStatus) error {
 	ctx = w.errCenter.WithCancelOnFirstError(ctx)
 
-	err := w.statusSender.UpdateStatus(ctx, &status)
+	w.workerStatus.Code = status.Code
+	w.workerStatus.ErrorMessage = status.ErrorMessage
+	w.workerStatus.ExtBytes = status.ExtBytes
+	err := w.statusSender.UpdateStatus(ctx, w.workerStatus)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -384,7 +401,10 @@ func (w *DefaultBaseWorker) Exit(ctx context.Context, status libModel.WorkerStat
 		status.Code = libModel.WorkerStatusError
 	}
 
-	if err1 := w.statusSender.UpdateStatus(ctx, &status); err1 != nil {
+	w.workerStatus.Code = status.Code
+	w.workerStatus.ErrorMessage = status.ErrorMessage
+	w.workerStatus.ExtBytes = status.ExtBytes
+	if err1 := w.statusSender.UpdateStatus(ctx, w.workerStatus); err1 != nil {
 		return err1
 	}
 
@@ -524,7 +544,7 @@ type masterClient struct {
 	workerID libModel.WorkerID
 
 	messageSender           p2p.MessageSender
-	metaKVClient            metaclient.KVClient
+	frameMetaClient         pkgOrm.Client
 	lastMasterAckedPingTime clock.MonotonicTime
 
 	// masterSideClosed records whether the master
@@ -540,7 +560,7 @@ func newMasterClient(
 	masterID libModel.MasterID,
 	workerID libModel.WorkerID,
 	messageRouter p2p.MessageSender,
-	metaKV metaclient.KVClient,
+	metaCli pkgOrm.Client,
 	initTime clock.MonotonicTime,
 	onMasterFailOver func() error,
 ) *masterClient {
@@ -548,7 +568,7 @@ func newMasterClient(
 		masterID:                masterID,
 		workerID:                workerID,
 		messageSender:           messageRouter,
-		metaKVClient:            metaKV,
+		frameMetaClient:         metaCli,
 		lastMasterAckedPingTime: initTime,
 		timeoutConfig:           config.DefaultTimeoutConfig(),
 		onMasterFailOver:        onMasterFailOver,
@@ -556,7 +576,7 @@ func newMasterClient(
 }
 
 func (m *masterClient) InitMasterInfoFromMeta(ctx context.Context) error {
-	metaClient := metadata.NewMasterMetadataClient(m.masterID, m.metaKVClient)
+	metaClient := metadata.NewMasterMetadataClient(m.masterID, m.frameMetaClient)
 	masterMeta, err := metaClient.Load(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -575,7 +595,7 @@ func (m *masterClient) MasterNodeID() p2p.NodeID {
 }
 
 func (m *masterClient) refreshMasterInfo(ctx context.Context, clock clock.Clock) error {
-	metaClient := metadata.NewMasterMetadataClient(m.masterID, m.metaKVClient)
+	metaClient := metadata.NewMasterMetadataClient(m.masterID, m.frameMetaClient)
 	masterMeta, err := metaClient.Load(ctx)
 	if err != nil {
 		return errors.Trace(err)
