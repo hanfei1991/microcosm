@@ -309,12 +309,11 @@ func TestRecoverAfterFailover(t *testing.T) {
 		require.NoError(t, err)
 	}()
 
-	time.Sleep(10 * time.Millisecond)
-	suite.SimulateHeartbeat("worker-1", 1, "executor-1", false)
-	suite.SimulateHeartbeat("worker-2", 1, "executor-2", false)
-	suite.SimulateHeartbeat("worker-3", 1, "executor-3", false)
-
 	require.Eventually(t, func() bool {
+		suite.SimulateHeartbeat("worker-1", 1, "executor-1", false)
+		suite.SimulateHeartbeat("worker-2", 1, "executor-2", false)
+		suite.SimulateHeartbeat("worker-3", 1, "executor-3", false)
+
 		select {
 		case <-doneCh:
 			return true

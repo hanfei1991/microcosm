@@ -225,8 +225,7 @@ func (m *WorkerManager) HandleHeartbeat(msg *libModel.HeartbeatPingMessage, from
 
 	if m.state == workerManagerWaitingHeartbeat {
 		if entry.State() != workerEntryWait {
-			log.L().Panic("Unexpected worker entry state",
-				zap.Any("entry", entry))
+			return
 		}
 
 		log.L().Info("Worker discovered", zap.String("master-id", m.masterID),
