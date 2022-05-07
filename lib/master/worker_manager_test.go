@@ -185,6 +185,7 @@ func (s *workerManageTestSuite) AssertNoEvents(t *testing.T, workerID libModel.W
 
 func (s *workerManageTestSuite) Close() {
 	s.manager.Close()
+	_ = s.meta.Close()
 }
 
 func NewWorkerManageTestSuite(isInit bool) *workerManageTestSuite {
@@ -356,9 +357,9 @@ func TestRecoverAfterFailoverFast(t *testing.T) {
 	}()
 
 	time.Sleep(10 * time.Millisecond)
-	suite.SimulateHeartbeat("worker-1", 1, "executor-1", false)
 
 	require.Eventually(t, func() bool {
+		suite.SimulateHeartbeat("worker-1", 1, "executor-1", false)
 		select {
 		case <-doneCh:
 			return true
