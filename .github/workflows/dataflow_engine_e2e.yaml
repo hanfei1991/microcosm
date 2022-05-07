@@ -89,7 +89,6 @@ jobs:
         if: ${{ failure() }}
         run: docker-compose -f $GITHUB_WORKSPACE/sample/3m3e.yaml logs -t
 
-
   DM-workflow:
     runs-on: ubuntu-latest
 
