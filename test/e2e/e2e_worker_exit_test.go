@@ -33,7 +33,7 @@ func TestWorkerExit(t *testing.T) {
 		EtcdEndpoints:   userMetaAddrsInContainer,
 		EtcdWatchPrefix: "/fake-job/test/",
 
-		InjectErrorInterval: time.Second * 2,
+		InjectErrorInterval: time.Second * 1,
 	}
 	cfgBytes, err := json.Marshal(cfg)
 	require.NoError(t, err)
@@ -51,7 +51,7 @@ func TestWorkerExit(t *testing.T) {
 
 	require.Eventually(t, func() bool {
 		// check tick increases to ensure all workers are online
-		targetTick := int64(5)
+		targetTick := int64(100)
 		for jobIdx := 0; jobIdx < cfg.WorkerCount; jobIdx++ {
 			err := cli.CheckFakeJobTick(ctx, jobID, jobIdx, targetTick)
 			if err != nil {
@@ -60,41 +60,8 @@ func TestWorkerExit(t *testing.T) {
 			}
 		}
 		return true
-	}, time.Second*60, time.Second*2)
-
-	sourceUpdateCount := 3
-	sourceValue := "value"
-	for i := 0; i < sourceUpdateCount; i++ {
-		for j := 0; j < cfg.WorkerCount; j++ {
-			err := cli.UpdateFakeJobKey(ctx, j, sourceValue)
-			require.NoError(t, err)
-		}
-	}
-
-	require.Eventually(t, func() bool {
-		for jobIdx := 0; jobIdx < cfg.WorkerCount; jobIdx++ {
-			err := cli.CheckFakeJobKey(ctx, jobID, jobIdx, sourceUpdateCount, sourceValue)
-			if err != nil {
-				log.L().Warn("check fake job failed", zap.Error(err))
-				return false
-			}
-		}
-		return true
-	}, time.Second*60, time.Second*2)
+	}, time.Second*300, time.Second*2)
 
 	err = cli.PauseJob(ctx, jobID)
 	require.NoError(t, err)
-
-	require.Eventually(t, func() bool {
-		stopped, err := cli.CheckJobStatus(ctx, jobID, pb.QueryJobResponse_stopped)
-		if err != nil {
-			log.L().Warn("check job status failed", zap.Error(err))
-			return false
-		}
-		if !stopped {
-			log.L().Info("job is not stopped")
-			return false
-		}
-		return true
-	}, time.Second*60, time.Second*2)
 }
