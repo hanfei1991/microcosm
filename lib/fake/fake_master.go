@@ -416,6 +416,9 @@ func (m *Master) OnWorkerMessage(worker lib.WorkerHandle, topic p2p.Topic, messa
 }
 
 func (m *Master) OnWorkerStatusUpdated(worker lib.WorkerHandle, newStatus *libModel.WorkerStatus) error {
+	log.L().Info("FakeMaster: worker status updated",
+		zap.String("worker-id", worker.ID()),
+		zap.Any("worker-status", newStatus))
 	return nil
 }
 
