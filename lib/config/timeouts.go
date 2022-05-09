@@ -11,11 +11,13 @@ type TimeoutConfig struct {
 }
 
 var defaultTimeoutConfig = TimeoutConfig{
-	WorkerTimeoutDuration:            time.Second * 15,
-	WorkerTimeoutGracefulDuration:    time.Second * 5,
-	WorkerHeartbeatInterval:          time.Second * 3,
-	WorkerReportStatusInterval:       time.Second * 3,
-	MasterHeartbeatCheckLoopInterval: time.Second * 1,
+	WorkerTimeoutDuration:         time.Second * 15,
+	WorkerTimeoutGracefulDuration: time.Second * 5,
+	WorkerHeartbeatInterval:       time.Second * 3,
+	WorkerReportStatusInterval:    time.Second * 3,
+	// We use a very short loop interval to increase the throughput of handling
+	// status updates.
+	MasterHeartbeatCheckLoopInterval: time.Millisecond * 10,
 }.Adjust()
 
 // Adjust validates the TimeoutConfig and adjusts it
