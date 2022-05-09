@@ -159,10 +159,10 @@ func (c *FailoverRPCClients[T]) GetLeaderClient() T {
 // It should be a method of FailoverRPCClients, but golang can't let us do it, so
 // we use a public function.
 func DoFailoverRPC[
-C FailoverRPCClientType,
-Req any,
-Resp any,
-F func(C, context.Context, Req, ...grpc.CallOption) (Resp, error),
+	C FailoverRPCClientType,
+	Req any,
+	Resp any,
+	F func(C, context.Context, Req, ...grpc.CallOption) (Resp, error),
 ](
 	ctx context.Context,
 	clients *FailoverRPCClients[C],
