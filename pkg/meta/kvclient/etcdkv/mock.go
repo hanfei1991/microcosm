@@ -20,7 +20,7 @@ func allocTempURL() (string, error) {
 	return fmt.Sprintf("http://127.0.0.1:%d", port), nil
 }
 
-func MockBackendEtcd() (*embed.Etcd, string, error) {
+func mockBackendEtcd() (*embed.Etcd, string, error) {
 	cfg := embed.NewConfig()
 	tmpDir := "embedded-etcd"
 	dir, err := ioutil.TempDir("", tmpDir)
@@ -64,7 +64,7 @@ func MockBackendEtcd() (*embed.Etcd, string, error) {
 	return svr, advertises, nil
 }
 
-func CloseEmbededEtcd(svr *embed.Etcd) {
+func closeEmbededEtcd(svr *embed.Etcd) {
 	if svr != nil {
 		svr.Server.Stop()
 		svr.Close()
