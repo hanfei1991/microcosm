@@ -16,6 +16,7 @@ type Broker interface {
 		jobID resModel.JobID,
 		resourcePath resModel.ResourceID,
 	) (Handle, error)
+
 	OnWorkerClosed(
 		ctx context.Context,
 		workerID resModel.WorkerID,
@@ -26,7 +27,16 @@ type Broker interface {
 // FileManager abstracts the operations on resources that
 // a Broker needs to perform.
 type FileManager interface {
-	CreateResourceDirectory(workerID libModel.WorkerID, resourceID resModel.ResourceID) error
-	RemoveResourceDirectory(workerID libModel.WorkerID) error
+	CreateResource(
+		creator libModel.WorkerID,
+		resourceID resModel.ResourceID,
+	) (string, error)
+
+	GetPathForResource(
+		creator libModel.WorkerID,
+		resourceID resModel.ResourceID,
+	) (string, error)
+
+	RemoveTemporaryFiles(creator libModel.WorkerID) error
 	RemoveResource(resourceID resModel.ResourceID) error
 }
