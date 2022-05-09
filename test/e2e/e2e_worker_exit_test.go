@@ -51,7 +51,8 @@ func TestWorkerExit(t *testing.T) {
 
 	require.Eventually(t, func() bool {
 		// check tick increases to ensure all workers are online
-		targetTick := int64(10000)
+		// TODO modify the test case to use a "restart-count" as a terminating condition.
+		targetTick := int64(1000)
 		for jobIdx := 0; jobIdx < cfg.WorkerCount; jobIdx++ {
 			err := cli.CheckFakeJobTick(ctx, jobID, jobIdx, targetTick)
 			if err != nil {
