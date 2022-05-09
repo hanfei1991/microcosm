@@ -54,6 +54,7 @@ type JobManagerImplV2 struct {
 func (jm *JobManagerImplV2) PauseJob(ctx context.Context, req *pb.PauseJobRequest) *pb.PauseJobResponse {
 	job := jm.JobFsm.QueryOnlineJob(req.JobIdStr)
 	if job == nil {
+		log.L().Info("PauseJob: Job not found", zap.String("job-id", req.JobIdStr))
 		return &pb.PauseJobResponse{Err: &pb.Error{
 			Code: pb.ErrorCode_UnKnownJob,
 		}}
@@ -69,6 +70,7 @@ func (jm *JobManagerImplV2) PauseJob(ctx context.Context, req *pb.PauseJobReques
 		err := handle.SendMessage(ctx, topic, msg, true /*nonblocking*/)
 		return &pb.PauseJobResponse{Err: derrors.ToPBError(err)}
 	}
+	log.L().Info("PauseJob: Job is a tombstone", zap.String("job-id", req.JobIdStr))
 	// The job is a tombstone, which means that the job has already exited.
 	return &pb.PauseJobResponse{Err: &pb.Error{
 		Code: pb.ErrorCode_UnKnownJob,
