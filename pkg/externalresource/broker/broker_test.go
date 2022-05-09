@@ -6,17 +6,18 @@ import (
 	"testing"
 
 	"github.com/gogo/status"
-	"github.com/hanfei1991/microcosm/pkg/rpcutil"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
+
+	"github.com/hanfei1991/microcosm/pkg/rpcutil"
 
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/manager"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/storagecfg"
 )
 
-func newBroker(t *testing.T) (*Impl, *rpcutil.FailoverRPCClients[pb.ResourceManagerClient], string) {
+func newBroker(t *testing.T) (*DefaultBroker, *rpcutil.FailoverRPCClients[pb.ResourceManagerClient], string) {
 	tmpDir := t.TempDir()
 	client := manager.NewWrappedMockClient()
 	broker := NewBroker(&storagecfg.Config{Local: &storagecfg.LocalFileConfig{BaseDir: tmpDir}},

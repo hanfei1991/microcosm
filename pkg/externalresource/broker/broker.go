@@ -3,30 +3,16 @@ package broker
 import (
 	"context"
 
-	"github.com/hanfei1991/microcosm/pkg/rpcutil"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 
 	"github.com/hanfei1991/microcosm/pb"
 	resModel "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/storagecfg"
+	"github.com/hanfei1991/microcosm/pkg/rpcutil"
 )
 
-type Broker interface {
-	OpenStorage(
-		ctx context.Context,
-		workerID resModel.WorkerID,
-		jobID resModel.JobID,
-		resourcePath resModel.ResourceID,
-	) (Handle, error)
-	OnWorkerClosed(
-		ctx context.Context,
-		workerID resModel.WorkerID,
-		jobID resModel.JobID,
-	)
-}
-
-type Impl struct {
+type DefaultBroker struct {
 	config     *storagecfg.Config
 	executorID resModel.ExecutorID
 
@@ -37,8 +23,8 @@ func NewBroker(
 	config *storagecfg.Config,
 	executorID resModel.ExecutorID,
 	client *rpcutil.FailoverRPCClients[pb.ResourceManagerClient],
-) *Impl {
-	return &Impl{
+) *DefaultBroker {
+	return &DefaultBroker{
 		config:     config,
 		executorID: executorID,
 		factory: &Factory{
@@ -49,7 +35,7 @@ func NewBroker(
 	}
 }
 
-func (i *Impl) OpenStorage(
+func (i *DefaultBroker) OpenStorage(
 	ctx context.Context,
 	workerID resModel.WorkerID,
 	jobID resModel.JobID,
@@ -72,6 +58,6 @@ func (i *Impl) OpenStorage(
 	panic("unreachable")
 }
 
-func (i *Impl) OnWorkerClosed(ctx context.Context, workerID resModel.WorkerID, jobID resModel.JobID) {
+func (i *DefaultBroker) OnWorkerClosed(ctx context.Context, workerID resModel.WorkerID, jobID resModel.JobID) {
 	panic("implement me")
 }
