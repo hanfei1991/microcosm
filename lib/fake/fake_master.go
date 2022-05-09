@@ -371,6 +371,8 @@ func (m *Master) OnWorkerOnline(worker lib.WorkerHandle) error {
 func (m *Master) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
 	index := -1
 	for i, handle := range m.workerList {
+		log.L().Info("OnWorkerOffline", zap.Any("handle1", handle),
+			zap.Any("handle2", worker))
 		if handle.ID() == worker.ID() {
 			index = i
 			break
