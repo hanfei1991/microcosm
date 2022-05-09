@@ -30,13 +30,18 @@ type FileManager interface {
 	CreateResource(
 		creator libModel.WorkerID,
 		resourceID resModel.ResourceID,
-	) (string, error)
+	) (resModel.LocalFileResourceDescriptor, error)
 
-	GetPathForResource(
+	GetResource(
 		creator libModel.WorkerID,
 		resourceID resModel.ResourceID,
-	) (string, error)
+	) (resModel.LocalFileResourceDescriptor, error)
 
 	RemoveTemporaryFiles(creator libModel.WorkerID) error
 	RemoveResource(resourceID resModel.ResourceID) error
+
+	SetPersisted(
+		creator libModel.WorkerID,
+		resourceID resModel.ResourceID,
+	)
 }
