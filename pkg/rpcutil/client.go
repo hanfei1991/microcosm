@@ -105,7 +105,8 @@ func (c *FailoverRPCClients[T]) UpdateClients(ctx context.Context, urls []string
 	c.leader = trimURL(leaderURL)
 	// we also handle "" because "" is not in clients map
 	if _, ok := c.clients[c.leader]; !ok {
-		// note that when c.clients is empty, c.leader is ""
+		// reset leader first, note that when c.clients is empty, c.leader is ""
+		c.leader = ""
 		for k := range c.clients {
 			c.leader = k
 			break
@@ -158,10 +159,10 @@ func (c *FailoverRPCClients[T]) GetLeaderClient() T {
 // It should be a method of FailoverRPCClients, but golang can't let us do it, so
 // we use a public function.
 func DoFailoverRPC[
-	C FailoverRPCClientType,
-	Req any,
-	Resp any,
-	F func(C, context.Context, Req, ...grpc.CallOption) (Resp, error),
+C FailoverRPCClientType,
+Req any,
+Resp any,
+F func(C, context.Context, Req, ...grpc.CallOption) (Resp, error),
 ](
 	ctx context.Context,
 	clients *FailoverRPCClients[C],
@@ -170,6 +171,8 @@ func DoFailoverRPC[
 ) (resp Resp, err error) {
 	clients.clientsLock.RLock()
 	defer clients.clientsLock.RUnlock()
+
+	err = errors.ErrNoRPCClient
 
 	for _, cli := range clients.clients {
 		resp, err = rpc(cli.client, ctx, req)

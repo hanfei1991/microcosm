@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/pingcap/errors"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -84,4 +85,27 @@ func TestValidLeaderAfterUpdateClients(t *testing.T) {
 
 	clients.UpdateClients(ctx, []string{}, "")
 	require.Nil(t, clients.GetLeaderClient())
+
+	_, err = DoFailoverRPC(ctx, clients, req, (*mockRPCClient).MockRPC)
+	require.ErrorIs(t, err, derror.ErrNoRPCClient)
+}
+
+func mockDailWithAddrWithError(_ context.Context, addr string) (*mockRPCClient, CloseableConnIface, error) {
+	if addr == "cant-dail" {
+		return nil, nil, errors.New("can't dail RPC connection")
+	}
+	return &mockRPCClient{addr: addr}, &closer{}, nil
+}
+
+func TestFailToDailLeaderAfterwards(t *testing.T) {
+	ctx := context.Background()
+	clients, err := NewFailoverRPCClients(ctx, []string{"url1"}, mockDailWithAddrWithError)
+	require.NoError(t, err)
+	require.Equal(t, "url1", clients.GetLeaderClient().addr)
+
+	clients.UpdateClients(ctx, []string{"cant-dail"}, "cant-dail")
+	require.Nil(t, clients.GetLeaderClient())
+	require.Equal(t, "", clients.leader)
+	_, err = DoFailoverRPC(ctx, clients, req, (*mockRPCClient).MockRPC)
+	require.ErrorIs(t, err, derror.ErrNoRPCClient)
 }
