@@ -1,6 +1,7 @@
 package statusutil
 
 import (
+	"context"
 	"sync"
 
 	libModel "github.com/hanfei1991/microcosm/lib/model"
@@ -13,6 +14,7 @@ type MasterInfoProvider interface {
 	MasterID() libModel.MasterID
 	MasterNode() p2p.NodeID
 	Epoch() libModel.Epoch
+	RefreshMasterInfo(ctx context.Context) error
 }
 
 type MockMasterInfoProvider struct {
@@ -41,6 +43,11 @@ func (p *MockMasterInfoProvider) Epoch() libModel.Epoch {
 	defer p.mu.RUnlock()
 
 	return p.epoch
+}
+
+func (p *MockMasterInfoProvider) RefreshMasterInfo(ctx context.Context) error {
+	// No-op for now
+	return nil
 }
 
 func (p *MockMasterInfoProvider) Set(masterID libModel.MasterID, masterNode p2p.NodeID, epoch libModel.Epoch) {

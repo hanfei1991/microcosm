@@ -12,6 +12,7 @@ import (
 	"golang.org/x/time/rate"
 
 	libModel "github.com/hanfei1991/microcosm/lib/model"
+	derrors "github.com/hanfei1991/microcosm/pkg/errors"
 	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
@@ -100,10 +101,19 @@ func (w *Writer) sendStatusMessageWithRetry(
 			Status:      newStatus,
 		})
 		if err != nil {
+			if derrors.ErrExecutorNotFoundForMessage.Equal(err) {
+				if err := w.masterInfo.RefreshMasterInfo(ctx); err != nil {
+					log.L().Warn("failed to refresh master info",
+						zap.String("worker-id", w.workerID),
+						zap.String("master-id", w.masterInfo.MasterID()),
+						zap.Error(err))
+				}
+			}
 			log.L().Warn("failed to send status to master. Retrying...",
 				zap.String("worker-id", w.workerID),
 				zap.String("master-id", w.masterInfo.MasterID()),
-				zap.Any("status", newStatus))
+				zap.Any("status", newStatus),
+				zap.Error(err))
 			continue
 		}
 		return nil
