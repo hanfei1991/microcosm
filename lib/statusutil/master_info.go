@@ -4,6 +4,8 @@ import (
 	"context"
 	"sync"
 
+	"go.uber.org/atomic"
+
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
@@ -22,6 +24,8 @@ type MockMasterInfoProvider struct {
 	masterID   libModel.MasterID
 	masterNode p2p.NodeID
 	epoch      libModel.Epoch
+
+	refreshCount atomic.Int64
 }
 
 func (p *MockMasterInfoProvider) MasterID() libModel.MasterID {
@@ -46,7 +50,7 @@ func (p *MockMasterInfoProvider) Epoch() libModel.Epoch {
 }
 
 func (p *MockMasterInfoProvider) RefreshMasterInfo(ctx context.Context) error {
-	// No-op for now
+	p.refreshCount.Add(1)
 	return nil
 }
 
@@ -57,4 +61,8 @@ func (p *MockMasterInfoProvider) Set(masterID libModel.MasterID, masterNode p2p.
 	p.masterID = masterID
 	p.masterNode = masterNode
 	p.epoch = epoch
+}
+
+func (p *MockMasterInfoProvider) RefreshCount() int {
+	return int(p.refreshCount.Load())
 }
