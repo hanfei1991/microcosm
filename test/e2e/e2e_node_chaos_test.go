@@ -111,7 +111,7 @@ func TestNodeFailure(t *testing.T) {
 	}
 	for i := 0; i < nodeCount; i++ {
 		cli.ContainerStart(masterContainerName(i))
-		cli.ContainerStop(executorContainerName(i))
+		cli.ContainerStart(executorContainerName(i))
 	}
 	value := "stop-start-container-value"
 	mvccCount++
