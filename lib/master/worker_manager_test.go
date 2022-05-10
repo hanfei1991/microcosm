@@ -185,6 +185,7 @@ func (s *workerManageTestSuite) AssertNoEvents(t *testing.T, workerID libModel.W
 
 func (s *workerManageTestSuite) Close() {
 	s.manager.Close()
+	// Prevents SQL connection leak.
 	_ = s.meta.Close()
 }
 
@@ -321,7 +322,7 @@ func TestRecoverAfterFailover(t *testing.T) {
 		}
 		suite.AdvanceClockBy(1 * time.Second)
 		return false
-	}, 1*time.Second, 10*time.Millisecond)
+	}, 5*time.Second, 10*time.Millisecond)
 
 	require.True(t, suite.manager.IsInitialized())
 	require.Len(t, suite.manager.GetWorkers(), 4)
@@ -354,8 +355,6 @@ func TestRecoverAfterFailoverFast(t *testing.T) {
 		err := suite.manager.InitAfterRecover(ctx)
 		require.NoError(t, err)
 	}()
-
-	time.Sleep(10 * time.Millisecond)
 
 	require.Eventually(t, func() bool {
 		suite.SimulateHeartbeat("worker-1", 1, "executor-1", false)

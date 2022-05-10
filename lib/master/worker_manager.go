@@ -225,6 +225,8 @@ func (m *WorkerManager) HandleHeartbeat(msg *libModel.HeartbeatPingMessage, from
 
 	if m.state == workerManagerWaitingHeartbeat {
 		if entry.State() != workerEntryWait {
+			// We should allow multiple heartbeats during the
+			// workerManagerWaitingHeartbeat stage.
 			return
 		}
 
