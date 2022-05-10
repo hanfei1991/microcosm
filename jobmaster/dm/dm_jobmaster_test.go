@@ -156,6 +156,8 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	checker.CheckSyncConfigFunc = func(_ context.Context, _ []*dmconfig.SubTaskConfig, _, _ int64) (string, error) {
 		return "", precheckError
 	}
+	mockBaseJobmaster.On("MetaKVClient").Return(metaKVClient)
+	mockBaseJobmaster.On("GetWorkers").Return(map[string]lib.WorkerHandle{}).Once()
 	require.EqualError(t.T(), jm.InitImpl(context.Background()), precheckError.Error())
 
 	checker.CheckSyncConfigFunc = func(_ context.Context, _ []*dmconfig.SubTaskConfig, _, _ int64) (string, error) {
