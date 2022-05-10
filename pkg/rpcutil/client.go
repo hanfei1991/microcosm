@@ -172,7 +172,9 @@ func DoFailoverRPC[
 	clients.clientsLock.RLock()
 	defer clients.clientsLock.RUnlock()
 
-	err = errors.ErrNoRPCClient
+	if len(clients.clients) == 0 {
+		return resp, errors.ErrNoRPCClient.GenWithStack("rpc: %#v, request: %#v", rpc, req)
+	}
 
 	for _, cli := range clients.clients {
 		resp, err = rpc(cli.client, ctx, req)
@@ -180,6 +182,7 @@ func DoFailoverRPC[
 			return resp, nil
 		}
 	}
+	// return the last error
 	return resp, err
 }
 

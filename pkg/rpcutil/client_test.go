@@ -50,13 +50,13 @@ func TestFailoverRpcClients(t *testing.T) {
 	// reset
 	testClient.cnt = 0
 	_, err = DoFailoverRPC(ctx, clients, req, (*mockRPCClient).MockFailRPC)
-	require.Error(t, err)
+	require.ErrorContains(t, err, "mock fail")
 	require.Equal(t, 2, testClient.cnt)
 
 	clients.UpdateClients(ctx, []string{"url1", "url2", "url3"}, "")
 	testClient.cnt = 0
 	_, err = DoFailoverRPC(ctx, clients, req, (*mockRPCClient).MockFailRPC)
-	require.Error(t, err)
+	require.ErrorContains(t, err, "mock fail")
 	require.Equal(t, 3, testClient.cnt)
 	require.Len(t, clients.Endpoints(), 3)
 }
@@ -91,21 +91,22 @@ func TestValidLeaderAfterUpdateClients(t *testing.T) {
 }
 
 func mockDailWithAddrWithError(_ context.Context, addr string) (*mockRPCClient, CloseableConnIface, error) {
-	if addr == "cant-dail" {
-		return nil, nil, errors.New("can't dail RPC connection")
+	if addr == "cant-dial" {
+		return nil, nil, errors.New("can't dial RPC connection")
 	}
 	return &mockRPCClient{addr: addr}, &closer{}, nil
 }
 
-func TestFailToDailLeaderAfterwards(t *testing.T) {
+func TestFailToDialLeaderAfterwards(t *testing.T) {
 	ctx := context.Background()
 	clients, err := NewFailoverRPCClients(ctx, []string{"url1"}, mockDailWithAddrWithError)
 	require.NoError(t, err)
 	require.Equal(t, "url1", clients.GetLeaderClient().addr)
 
-	clients.UpdateClients(ctx, []string{"cant-dail"}, "cant-dail")
+	clients.UpdateClients(ctx, []string{"cant-dial"}, "cant-dial")
 	require.Nil(t, clients.GetLeaderClient())
 	require.Equal(t, "", clients.leader)
 	_, err = DoFailoverRPC(ctx, clients, req, (*mockRPCClient).MockRPC)
 	require.ErrorIs(t, err, derror.ErrNoRPCClient)
+	t.Log(err.Error())
 }
