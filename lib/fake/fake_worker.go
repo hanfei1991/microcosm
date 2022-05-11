@@ -255,7 +255,7 @@ watchLoop:
 				// old value, change it and overwrite.
 				ckpt := d.status.getEtcdCheckpoint()
 				ckpt.MvccCount++
-				ckpt.Revision = resp.Header.GetRevision()
+				ckpt.Revision = event.Kv.ModRevision
 				switch event.Type {
 				case mvccpb.PUT:
 					ckpt.Value = string(event.Kv.Value)

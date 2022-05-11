@@ -526,7 +526,7 @@ func NewFakeMaster(ctx *dcontext.Context, workerID libModel.WorkerID, masterID l
 		workerList:          make([]lib.WorkerHandle, masterConfig.WorkerCount),
 		workerID2BusinessID: make(map[libModel.WorkerID]int),
 		config:              masterConfig,
-		statusRateLimiter:   rate.NewLimiter(rate.Every(200*time.Millisecond), 1),
+		statusRateLimiter:   rate.NewLimiter(rate.Every(1*time.Second), 1),
 		bStatus:             &businessStatus{status: make(map[libModel.WorkerID]*dummyWorkerStatus)},
 		finishedSet:         make(map[libModel.WorkerID]int),
 		ctx:                 ctx.Context,
