@@ -65,7 +65,7 @@ func MockBackendEtcd() (*embed.Etcd, string, error) {
 	return svr, advertises, nil
 }
 
-// CloseEmbededEtcd close the input embeded etcd server
+// CloseEmbededEtcd close the input embedded etcd server
 func CloseEmbededEtcd(svr *embed.Etcd) {
 	if svr != nil {
 		svr.Server.Stop()
