@@ -24,8 +24,7 @@ type Writer struct {
 	messageSender p2p.MessageSender
 	lastStatus    *libModel.WorkerStatus
 
-	// TODO replace the string type
-	workerID   string
+	workerID   libModel.WorkerID
 	masterInfo MasterInfoProvider
 }
 
@@ -34,7 +33,7 @@ func NewWriter(
 	metaclient pkgOrm.Client,
 	messageSender p2p.MessageSender,
 	masterInfo MasterInfoProvider,
-	workerID string,
+	workerID libModel.WorkerID,
 ) *Writer {
 	return &Writer{
 		metaclient:    metaclient,
@@ -94,7 +93,7 @@ func (w *Writer) sendStatusMessageWithRetry(
 		}
 
 		topic := WorkerStatusTopic(w.masterInfo.MasterID())
-		// NOTE: We must ready the MasterNode() in each retry in case the master is failed over.
+		// NOTE: We must read the MasterNode() in each retry in case the master is failed over.
 		err := w.messageSender.SendToNodeB(ctx, w.masterInfo.MasterNode(), topic, &WorkerStatusMessage{
 			Worker:      w.workerID,
 			MasterEpoch: w.masterInfo.Epoch(),
