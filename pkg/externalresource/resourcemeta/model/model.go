@@ -77,13 +77,17 @@ type GCTodoEntry struct {
 // ResourceType represents the type of the resource
 type ResourceType string
 
+// ResourceName is the ResourceID with its type prefix removed.
+// For example, the resource name of `/local/resource-1` is `resource-1`.
+type ResourceName = string
+
 const (
 	ResourceTypeLocalFile = ResourceType("local")
 	ResourceTypeS3        = ResourceType("s3")
 )
 
 // ParseResourcePath returns the ResourceType and the path suffix.
-func ParseResourcePath(rpath ResourceID) (ResourceType, string, error) {
+func ParseResourcePath(rpath ResourceID) (ResourceType, ResourceName, error) {
 	if !strings.HasPrefix(rpath, "/") {
 		return "", "", derror.ErrIllegalResourcePath.GenWithStackByArgs(rpath)
 	}

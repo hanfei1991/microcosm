@@ -67,6 +67,8 @@ func TestBrokerOpenNewStorage(t *testing.T) {
 
 func TestBrokerOpenExistingStorage(t *testing.T) {
 	brk, client, dir := newBroker(t)
+	_, err := brk.fileManager.CreateResource("worker-2", "test-2")
+	require.NoError(t, err)
 
 	innerClient := client.GetLeaderClient().(*manager.MockClient)
 	innerClient.On("QueryResource", mock.Anything, &pb.QueryResourceRequest{ResourceId: "/local/test-2"}, mock.Anything).

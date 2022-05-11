@@ -31,7 +31,7 @@ func NewLocalFileManager(config storagecfg.LocalFileConfig) *LocalFileManager {
 
 func (m *LocalFileManager) CreateResource(
 	creator libModel.WorkerID,
-	resourceID resModel.ResourceID,
+	resourceID resModel.ResourceName,
 ) (*resModel.LocalFileResourceDescriptor, error) {
 	res := &resModel.LocalFileResourceDescriptor{
 		BasePath:   m.config.BaseDir,
@@ -47,7 +47,7 @@ func (m *LocalFileManager) CreateResource(
 
 func (m *LocalFileManager) GetResource(
 	creator libModel.WorkerID,
-	resourceID resModel.ResourceID,
+	resourceID resModel.ResourceName,
 ) (*resModel.LocalFileResourceDescriptor, error) {
 	res := &resModel.LocalFileResourceDescriptor{
 		BasePath:   m.config.BaseDir,
@@ -106,7 +106,7 @@ func (m *LocalFileManager) RemoveTemporaryFiles(creator libModel.WorkerID) error
 	return err
 }
 
-func (m *LocalFileManager) RemoveResource(creator libModel.WorkerID, resourceID resModel.ResourceID) error {
+func (m *LocalFileManager) RemoveResource(creator libModel.WorkerID, resourceID resModel.ResourceName) error {
 	resourcePath := filepath.Join(m.config.BaseDir, creator, resourceID)
 	if _, err := os.Stat(resourcePath); err != nil {
 		if os.IsNotExist(err) {
@@ -139,7 +139,7 @@ func (m *LocalFileManager) RemoveResource(creator libModel.WorkerID, resourceID 
 
 func (m *LocalFileManager) SetPersisted(
 	creator libModel.WorkerID,
-	resourceID resModel.ResourceID,
+	resourceID resModel.ResourceName,
 ) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -158,7 +158,7 @@ func (m *LocalFileManager) SetPersisted(
 // DO NOT hold the mu when calling this method.
 func (m *LocalFileManager) isPersisted(
 	creator libModel.WorkerID,
-	resourceID resModel.ResourceID,
+	resourceID resModel.ResourceName,
 ) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()

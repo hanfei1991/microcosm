@@ -2,13 +2,13 @@ package broker
 
 import (
 	"context"
-	"path/filepath"
 
 	"github.com/gogo/status"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/pb"
 	resModel "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/storagecfg"
@@ -79,8 +79,11 @@ func (b *DefaultBroker) newHandleForLocalFile(
 	jobID resModel.JobID,
 	workerID resModel.WorkerID,
 	resourceID resModel.ResourceID,
-) (Handle, error) {
-	tp, suffix, err := resModel.ParseResourcePath(resourceID)
+) (hdl Handle, retErr error) {
+	// Note the semantics of ParseResourcePath:
+	// If resourceID is `/local/my-resource`, then tp == resModel.ResourceTypeLocalFile
+	// and resName == "my-resource".
+	tp, resName, err := resModel.ParseResourcePath(resourceID)
 	if err != nil {
 		return nil, err
 	}
@@ -93,13 +96,32 @@ func (b *DefaultBroker) newHandleForLocalFile(
 		return nil, err
 	}
 
-	var creatorWorkerID string
-	if exists {
-		creatorWorkerID = record.Worker
-	} else {
+	var (
+		res             *resModel.LocalFileResourceDescriptor
+		creatorWorkerID libModel.WorkerID
+	)
+
+	if !exists {
 		creatorWorkerID = workerID
+		res, err = b.fileManager.CreateResource(workerID, resName)
+		if err != nil {
+			return nil, err
+		}
+		defer func() {
+			if retErr != nil {
+				//nolint:errcheck
+				_ = b.fileManager.RemoveResource(workerID, resName)
+			}
+		}()
+	} else {
+		creatorWorkerID = record.Worker
+		res, err = b.fileManager.GetResource(record.Worker, resName)
+		if err != nil {
+			return nil, err
+		}
 	}
-	filePath := filepath.Join(getWorkerDir(b.config, creatorWorkerID), suffix)
+
+	filePath := res.AbsolutePath()
 	log.L().Info("Using local storage with path", zap.String("path", filePath))
 
 	ls, err := newBrStorageForLocalFile(filePath)

@@ -33,23 +33,23 @@ type Broker interface {
 type FileManager interface {
 	CreateResource(
 		creator libModel.WorkerID,
-		resourceID resModel.ResourceID,
+		resourceID resModel.ResourceName,
 	) (*resModel.LocalFileResourceDescriptor, error)
 
 	GetResource(
 		creator libModel.WorkerID,
-		resourceID resModel.ResourceID,
+		resourceID resModel.ResourceName,
 	) (*resModel.LocalFileResourceDescriptor, error)
 
 	RemoveTemporaryFiles(creator libModel.WorkerID) error
 
 	RemoveResource(
 		creator libModel.WorkerID,
-		resourceID resModel.ResourceID,
+		resourceID resModel.ResourceName,
 	) error
 
 	SetPersisted(
 		creator libModel.WorkerID,
-		resourceID resModel.ResourceID,
+		resourceID resModel.ResourceName,
 	)
 }
