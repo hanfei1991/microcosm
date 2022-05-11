@@ -54,7 +54,6 @@ type JobManagerImplV2 struct {
 func (jm *JobManagerImplV2) PauseJob(ctx context.Context, req *pb.PauseJobRequest) *pb.PauseJobResponse {
 	job := jm.JobFsm.QueryOnlineJob(req.JobIdStr)
 	if job == nil {
-		log.L().Info("PauseJob: Job not found", zap.String("job-id", req.JobIdStr))
 		return &pb.PauseJobResponse{Err: &pb.Error{
 			Code: pb.ErrorCode_UnKnownJob,
 		}}
@@ -70,7 +69,6 @@ func (jm *JobManagerImplV2) PauseJob(ctx context.Context, req *pb.PauseJobReques
 		err := handle.SendMessage(ctx, topic, msg, true /*nonblocking*/)
 		return &pb.PauseJobResponse{Err: derrors.ToPBError(err)}
 	}
-	log.L().Info("PauseJob: Job is a tombstone", zap.String("job-id", req.JobIdStr))
 	// The job is a tombstone, which means that the job has already exited.
 	return &pb.PauseJobResponse{Err: &pb.Error{
 		Code: pb.ErrorCode_UnKnownJob,
@@ -256,16 +254,10 @@ func (jm *JobManagerImplV2) Tick(ctx context.Context) error {
 
 	if !jm.tombstoneCleaned && jm.BaseMaster.IsMasterReady() {
 		for _, worker := range jm.BaseMaster.GetWorkers() {
-			// clean tombstone workers from worker manager and they will be
-			// re-created in the following IterWaitAckJobs
-			tombstoneHandle := worker.GetTombstone()
-			if tombstoneHandle != nil {
-				if err := tombstoneHandle.CleanTombstone(ctx); err != nil {
-					return err
-				}
+			// ignore tombstone worker
+			if worker.GetTombstone() != nil {
 				continue
 			}
-			// mark non-tombstone workers as online
 			err := jm.JobFsm.JobOnline(worker)
 			// ignore worker that is not in WaitAck list
 			if err != nil && derrors.ErrWorkerNotFound.NotEqual(err) {

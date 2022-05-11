@@ -190,9 +190,9 @@ func (m *WorkerManager) InitAfterRecover(ctx context.Context) (retErr error) {
 			entry.MarkAsTombstone()
 		}
 	}
+	m.state = workerManagerReady
 	m.mu.Unlock()
 
-	m.state = workerManagerReady
 	return nil
 }
 

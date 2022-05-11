@@ -5,11 +5,10 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
-
-	"github.com/hanfei1991/microcosm/pkg/errors"
 )
 
 type CloseableConnIface interface {

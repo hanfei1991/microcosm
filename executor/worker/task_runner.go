@@ -41,7 +41,7 @@ type TaskRunner struct {
 
 const (
 	defaultTaskWeight         = 1
-	defaultPollInterval       = 5 * time.Millisecond
+	defaultPollInterval       = 50 * time.Millisecond
 	defaultInitQueuingTimeout = 10 * time.Second
 )
 
