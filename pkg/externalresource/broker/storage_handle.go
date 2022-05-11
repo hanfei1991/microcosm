@@ -5,15 +5,16 @@ import (
 	"path/filepath"
 
 	"github.com/gogo/status"
-	"github.com/hanfei1991/microcosm/pkg/rpcutil"
 	"github.com/pingcap/errors"
 	brStorage "github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 
 	"github.com/hanfei1991/microcosm/pb"
+	derrors "github.com/hanfei1991/microcosm/pkg/errors"
 	resModel "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/storagecfg"
+	"github.com/hanfei1991/microcosm/pkg/rpcutil"
 )
 
 type Handle interface {
@@ -101,11 +102,7 @@ func (f *Factory) NewHandleForLocalFile(
 	filePath := filepath.Join(getWorkerDir(f.config, creatorWorkerID), suffix)
 	log.L().Info("Using local storage with path", zap.String("path", filePath))
 
-	backend, err := brStorage.ParseBackend(filePath, nil)
-	if err != nil {
-		return nil, err
-	}
-	ls, err := brStorage.New(ctx, backend, nil)
+	ls, err := newBrStorageForLocalFile(filePath)
 	if err != nil {
 		return nil, err
 	}
@@ -173,4 +170,16 @@ func (f *Factory) CheckForExistingResource(
 
 func getWorkerDir(config *storagecfg.Config, workerID resModel.WorkerID) string {
 	return filepath.Join(config.Local.BaseDir, workerID)
+}
+
+func newBrStorageForLocalFile(filePath string) (brStorage.ExternalStorage, error) {
+	backend, err := brStorage.ParseBackend(filePath, nil)
+	if err != nil {
+		return nil, err
+	}
+	ls, err := brStorage.New(context.Background(), backend, nil)
+	if err != nil {
+		return nil, derrors.ErrFailToCreateExternalStorage.Wrap(err)
+	}
+	return ls, nil
 }

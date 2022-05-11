@@ -15,48 +15,53 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/externalresource/storagecfg"
 )
 
-type (
-	workerIDToResourcesMap = map[libModel.WorkerID]map[resModel.ResourceID]struct{}
-	LocalFileManager       struct {
-		config storagecfg.LocalFileConfig
+type LocalFileManager struct {
+	config storagecfg.LocalFileConfig
 
-		mu                          sync.Mutex
-		persistedResourcesByCreator workerIDToResourcesMap
-	}
-)
+	mu                          sync.Mutex
+	persistedResourcesByCreator map[libModel.WorkerID]map[resModel.ResourceID]struct{}
+}
 
 func NewLocalFileManager(config storagecfg.LocalFileConfig) *LocalFileManager {
 	return &LocalFileManager{
 		config:                      config,
-		persistedResourcesByCreator: make(workerIDToResourcesMap),
+		persistedResourcesByCreator: make(map[libModel.WorkerID]map[resModel.ResourceID]struct{}),
 	}
 }
 
 func (m *LocalFileManager) CreateResource(
 	creator libModel.WorkerID,
 	resourceID resModel.ResourceID,
-) (resModel.LocalFileResourceDescriptor, error) {
-	// Not actually writing the file system for now.
-	// Add some logic here when we implement quota.
-
-	return resModel.LocalFileResourceDescriptor{
+) (*resModel.LocalFileResourceDescriptor, error) {
+	res := &resModel.LocalFileResourceDescriptor{
 		BasePath:   m.config.BaseDir,
 		Creator:    creator,
 		ResourceID: resourceID,
-	}, nil
+	}
+	if err := os.MkdirAll(res.AbsolutePath(), 0o700); err != nil {
+		return nil, derrors.ErrCreateLocalFileDirectoryFailed.Wrap(err)
+	}
+	// TODO check for quota when we implement quota.
+	return res, nil
 }
 
 func (m *LocalFileManager) GetResource(
 	creator libModel.WorkerID,
 	resourceID resModel.ResourceID,
-) (resModel.LocalFileResourceDescriptor, error) {
-	// TODO check whether the resource's directory exists
-
-	return resModel.LocalFileResourceDescriptor{
+) (*resModel.LocalFileResourceDescriptor, error) {
+	res := &resModel.LocalFileResourceDescriptor{
 		BasePath:   m.config.BaseDir,
 		Creator:    creator,
 		ResourceID: resourceID,
-	}, nil
+	}
+	if _, err := os.Stat(res.AbsolutePath()); err != nil {
+		if os.IsNotExist(err) {
+			return nil, derrors.ErrResourceDoesNotExist.GenWithStackByArgs(resourceID)
+		}
+		return nil, derrors.ErrReadLocalFileDirectoryFailed.Wrap(err)
+	}
+
+	return res, nil
 }
 
 func (m *LocalFileManager) RemoveTemporaryFiles(creator libModel.WorkerID) error {
@@ -102,18 +107,34 @@ func (m *LocalFileManager) RemoveTemporaryFiles(creator libModel.WorkerID) error
 }
 
 func (m *LocalFileManager) RemoveResource(creator libModel.WorkerID, resourceID resModel.ResourceID) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	resourcePath := filepath.Join(m.config.BaseDir, creator, resourceID)
 	if _, err := os.Stat(resourcePath); err != nil {
 		if os.IsNotExist(err) {
-			log.L().Info("Trying to remove non-existing resource",
+			log.L().Info("Trying to remove non-existingworkerIDToResourcesMap resource",
 				zap.String("creator", creator),
 				zap.String("resource-id", resourceID))
-			return nil
+			return derrors.ErrResourceDoesNotExist.GenWithStackByArgs(resourceID)
+		}
+		return derrors.ErrReadLocalFileDirectoryFailed.Wrap(err)
+	}
+
+	// Note that the resourcePath is actually a directory.
+	if err := os.RemoveAll(resourcePath); err != nil {
+		return derrors.ErrRemovingLocalResource.Wrap(err)
+	}
+
+	log.L().Info("Local resource has been removed",
+		zap.String("resource-id", resourceID))
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if resources := m.persistedResourcesByCreator[creator]; resources != nil {
+		if _, ok := resources[resourceID]; ok {
+			delete(resources, resourceID)
 		}
 	}
+	return nil
 }
 
 func (m *LocalFileManager) SetPersisted(
