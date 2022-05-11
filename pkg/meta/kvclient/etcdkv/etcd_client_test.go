@@ -23,7 +23,7 @@ type SuiteTestEtcd struct {
 // The SetupSuite method will be run by testify once, at the very
 // start of the testing suite, before any tests are run.
 func (suite *SuiteTestEtcd) SetupSuite() {
-	svr, endpoints, err := mockBackendEtcd()
+	svr, endpoints, err := MockBackendEtcd()
 	require.NoError(suite.T(), err)
 
 	suite.e = svr
@@ -33,7 +33,7 @@ func (suite *SuiteTestEtcd) SetupSuite() {
 // The TearDownSuite method will be run by testify once, at the very
 // end of the testing suite, after all tests have been run.
 func (suite *SuiteTestEtcd) TearDownSuite() {
-	closeEmbededEtcd(suite.e)
+	CloseEmbededEtcd(suite.e)
 }
 
 func clearKeySpace(ctx context.Context, cli metaclient.KVClient) {
