@@ -32,13 +32,3 @@ message ConfirmDispatchTaskRequest {
 
 message ConfirmDispatchTaskResponse {
 }
-
-service ResourceBroker {
-    rpc RemoveResource(RemoveResourceRequest) returns (RemoveResourceResponse){}
-}
-
-message RemoveResourceRequest {
-    string resource_id = 1;
-}
-
-message RemoveResourceResponse {}
