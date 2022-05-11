@@ -10,11 +10,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 
-	"github.com/hanfei1991/microcosm/pkg/rpcutil"
-
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/manager"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/storagecfg"
+	"github.com/hanfei1991/microcosm/pkg/rpcutil"
 )
 
 func newBroker(t *testing.T) (*DefaultBroker, *rpcutil.FailoverRPCClients[pb.ResourceManagerClient], string) {

@@ -16,7 +16,6 @@ import (
 	"google.golang.org/grpc/codes"
 
 	"github.com/hanfei1991/microcosm/pb"
-
 	"github.com/hanfei1991/microcosm/pkg/externalresource/manager"
 	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/storagecfg"

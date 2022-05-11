@@ -10,6 +10,7 @@ import (
 // A Broker is created and maintained by the executor
 // and provides file resources to the tasks.
 type Broker interface {
+	// OpenStorage creates a storage Handle for a worker.
 	OpenStorage(
 		ctx context.Context,
 		workerID resModel.WorkerID,
@@ -17,6 +18,9 @@ type Broker interface {
 		resourcePath resModel.ResourceID,
 	) (Handle, error)
 
+	// OnWorkerClosed in called when a worker is closing.
+	// The implementation should do necessary garbage collection
+	// for the worker, especially local temporary files.
 	OnWorkerClosed(
 		ctx context.Context,
 		workerID resModel.WorkerID,
