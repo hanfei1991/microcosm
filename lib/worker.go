@@ -594,7 +594,7 @@ func (m *masterClient) MasterNodeID() p2p.NodeID {
 	return m.masterID
 }
 
-func (m *masterClient) refreshMasterInfo(ctx context.Context, clock clock.Clock) error {
+func (m *masterClient) RefreshMasterInfo(ctx context.Context) error {
 	metaClient := metadata.NewMasterMetadataClient(m.masterID, m.frameMetaClient)
 	masterMeta, err := metaClient.Load(ctx)
 	if err != nil {
@@ -608,9 +608,6 @@ func (m *masterClient) refreshMasterInfo(ctx context.Context, clock clock.Clock)
 			zap.Int64("oldEpoch", m.masterEpoch), zap.Int64("newEpoch", masterMeta.Epoch),
 		)
 		m.masterEpoch = masterMeta.Epoch
-		// if worker finds master is transferred, reset the master last ack time
-		// to now in case of a false positive detection of master timeout.
-		m.lastMasterAckedPingTime = clock.Mono()
 		m.mu.Unlock()
 		if err := m.onMasterFailOver(); err != nil {
 			return errors.Trace(err)
@@ -677,7 +674,7 @@ func (m *masterClient) CheckMasterTimeout(ctx context.Context, clock clock.Clock
 	if sinceLastAcked > 2*m.timeoutConfig.WorkerHeartbeatInterval &&
 		sinceLastAcked < m.timeoutConfig.WorkerTimeoutDuration {
 
-		if err := m.refreshMasterInfo(ctx, clock); err != nil {
+		if err := m.RefreshMasterInfo(ctx); err != nil {
 			return false, errors.Trace(err)
 		}
 		return true, nil
