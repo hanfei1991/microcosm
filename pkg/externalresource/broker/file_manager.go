@@ -15,6 +15,8 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/externalresource/storagecfg"
 )
 
+// LocalFileManager manages the local files resources stored in
+// the local file system.
 type LocalFileManager struct {
 	config storagecfg.LocalFileConfig
 
@@ -45,20 +47,31 @@ func (m *LocalFileManager) CreateResource(
 	return res, nil
 }
 
-func (m *LocalFileManager) GetResource(
+func (m *LocalFileManager) GetPersistedResource(
 	creator libModel.WorkerID,
-	resourceID resModel.ResourceName,
+	resName resModel.ResourceName,
 ) (*resModel.LocalFileResourceDescriptor, error) {
 	res := &resModel.LocalFileResourceDescriptor{
 		BasePath:   m.config.BaseDir,
 		Creator:    creator,
-		ResourceID: resourceID,
+		ResourceID: resName,
 	}
 	if _, err := os.Stat(res.AbsolutePath()); err != nil {
 		if os.IsNotExist(err) {
-			return nil, derrors.ErrResourceDoesNotExist.GenWithStackByArgs(resourceID)
+			return nil, derrors.ErrResourceDoesNotExist.GenWithStackByArgs(resName)
 		}
 		return nil, derrors.ErrReadLocalFileDirectoryFailed.Wrap(err)
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	resources, exists := m.persistedResourcesByCreator[creator]
+	if !exists {
+		return nil, derrors.ErrResourceDoesNotExist.GenWithStackByArgs(resName)
+	}
+	if _, ok := resources[resName]; !ok {
+		return nil, derrors.ErrResourceDoesNotExist.GenWithStackByArgs(resName)
 	}
 
 	return res, nil

@@ -115,7 +115,7 @@ func (b *DefaultBroker) newHandleForLocalFile(
 		}()
 	} else {
 		creatorWorkerID = record.Worker
-		res, err = b.fileManager.GetResource(record.Worker, resName)
+		res, err = b.fileManager.GetPersistedResource(record.Worker, resName)
 		if err != nil {
 			return nil, err
 		}
@@ -133,10 +133,12 @@ func (b *DefaultBroker) newHandleForLocalFile(
 		inner:  ls,
 		client: b.client,
 
-		id:         resourceID,
-		jobID:      jobID,
-		workerID:   creatorWorkerID,
-		executorID: b.executorID,
+		id:          resourceID,
+		name:        resName,
+		jobID:       jobID,
+		workerID:    creatorWorkerID,
+		executorID:  b.executorID,
+		fileManager: b.fileManager,
 	}, nil
 }
 

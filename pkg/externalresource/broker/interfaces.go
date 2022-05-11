@@ -28,28 +28,28 @@ type Broker interface {
 	)
 }
 
-// FileManager abstracts the operations on resources that
+// FileManager abstracts the operations on local resources that
 // a Broker needs to perform.
 type FileManager interface {
 	CreateResource(
 		creator libModel.WorkerID,
-		resourceID resModel.ResourceName,
+		resName resModel.ResourceName,
 	) (*resModel.LocalFileResourceDescriptor, error)
 
-	GetResource(
+	GetPersistedResource(
 		creator libModel.WorkerID,
-		resourceID resModel.ResourceName,
+		resName resModel.ResourceName,
 	) (*resModel.LocalFileResourceDescriptor, error)
 
 	RemoveTemporaryFiles(creator libModel.WorkerID) error
 
 	RemoveResource(
 		creator libModel.WorkerID,
-		resourceID resModel.ResourceName,
+		resName resModel.ResourceName,
 	) error
 
 	SetPersisted(
 		creator libModel.WorkerID,
-		resourceID resModel.ResourceName,
+		resName resModel.ResourceName,
 	)
 }

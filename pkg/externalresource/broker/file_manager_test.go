@@ -159,20 +159,25 @@ func TestCreateAndGetResource(t *testing.T) {
 
 	dir := t.TempDir()
 	fm := NewLocalFileManager(storagecfg.LocalFileConfig{BaseDir: dir})
-	_, err := fm.GetResource("worker-1", "resource-1")
+	_, err := fm.GetPersistedResource("worker-1", "resource-1")
 	require.Error(t, err)
 	require.Regexp(t, ".*ErrResourceDoesNotExist.*", err)
 
 	_, err = fm.CreateResource("worker-1", "resource-1")
 	require.NoError(t, err)
 
-	_, err = fm.GetResource("worker-1", "resource-1")
+	_, err = fm.GetPersistedResource("worker-1", "resource-1")
+	require.Error(t, err)
+	require.Regexp(t, ".*ErrResourceDoesNotExist.*", err)
+
+	fm.SetPersisted("worker-1", "resource-1")
+	_, err = fm.GetPersistedResource("worker-1", "resource-1")
 	require.NoError(t, err)
 
 	err = fm.RemoveResource("worker-1", "resource-1")
 	require.NoError(t, err)
 
-	_, err = fm.GetResource("worker-1", "resource-1")
+	_, err = fm.GetPersistedResource("worker-1", "resource-1")
 	require.Error(t, err)
 	require.Regexp(t, ".*ErrResourceDoesNotExist.*", err)
 }
