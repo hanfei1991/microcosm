@@ -38,7 +38,11 @@ type FileManager interface {
 	) (resModel.LocalFileResourceDescriptor, error)
 
 	RemoveTemporaryFiles(creator libModel.WorkerID) error
-	RemoveResource(resourceID resModel.ResourceID) error
+
+	RemoveResource(
+		creator libModel.WorkerID,
+		resourceID resModel.ResourceID,
+	) error
 
 	SetPersisted(
 		creator libModel.WorkerID,

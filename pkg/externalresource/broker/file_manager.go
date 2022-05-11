@@ -101,8 +101,19 @@ func (m *LocalFileManager) RemoveTemporaryFiles(creator libModel.WorkerID) error
 	return err
 }
 
-func (m *LocalFileManager) RemoveResource(resourceID resModel.ResourceID) error {
-	panic("implement me")
+func (m *LocalFileManager) RemoveResource(creator libModel.WorkerID, resourceID resModel.ResourceID) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	resourcePath := filepath.Join(m.config.BaseDir, creator, resourceID)
+	if _, err := os.Stat(resourcePath); err != nil {
+		if os.IsNotExist(err) {
+			log.L().Info("Trying to remove non-existing resource",
+				zap.String("creator", creator),
+				zap.String("resource-id", resourceID))
+			return nil
+		}
+	}
 }
 
 func (m *LocalFileManager) SetPersisted(
