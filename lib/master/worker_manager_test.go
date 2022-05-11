@@ -480,10 +480,8 @@ func TestWorkerGracefulExitAfterFailover(t *testing.T) {
 		require.NoError(t, err)
 	}()
 
-	time.Sleep(10 * time.Millisecond)
-	suite.SimulateHeartbeat("worker-1", 1, "executor-1", true)
-
 	require.Eventually(t, func() bool {
+		suite.SimulateHeartbeat("worker-1", 1, "executor-1", true)
 		select {
 		case <-doneCh:
 			return true
