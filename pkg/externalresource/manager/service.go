@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/gogo/status"
-	"github.com/hanfei1991/microcosm/pkg/rpcutil"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/atomic"
@@ -20,6 +19,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
 	resModel "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
 	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
+	"github.com/hanfei1991/microcosm/pkg/rpcutil"
 )
 
 // Service implements pb.ResourceManagerServer
@@ -31,6 +31,8 @@ type Service struct {
 	mu       *ctxmu.CtxMutex
 	accessor *resourcemeta.MetadataAccessor
 	cache    map[resModel.ResourceID]*resModel.ResourceMeta
+
+	metaclient pkgOrm.Client
 
 	executors ExecutorInfoProvider
 
@@ -71,61 +73,18 @@ func (s *Service) QueryResource(ctx context.Context, request *pb.QueryResourceRe
 	if shouldRet {
 		return resp2, err
 	}
-	if !s.checkAllLoaded() {
-		return nil, status.Error(codes.Unavailable, "ResourceManager is initializing")
-	}
 
-	logger := log.L().WithFields(zap.String("resource-id", request.GetResourceId()))
-
-	if !s.mu.Lock(ctx) {
-		return nil, status.Error(codes.Canceled, ctx.Err().Error())
-	}
-	defer s.mu.Unlock()
-
-	record, exists := s.cache[request.GetResourceId()]
-	if !exists {
-		logger.Info("cache miss", zap.String("resource-id", request.GetResourceId()))
-		var err error
-
-		startTime := time.Now()
-		record, exists, err = s.accessor.GetResource(ctx, request.ResourceId)
-		getResourceDuration := time.Since(startTime)
-
-		logger.Info("Resource meta fetch completed", zap.Duration("duration", getResourceDuration))
-		if err != nil {
-			st, stErr := status.New(codes.NotFound, "resource manager error").WithDetails(&pb.ResourceError{
-				ErrorCode:  pb.ResourceErrorCode_ResourceManagerInternalError,
-				StackTrace: errors.ErrorStack(err),
-			})
-			if stErr != nil {
-				return nil, stErr
-			}
-			return nil, st.Err()
+	record, err := s.metaclient.GetResourceByID(ctx, request.GetResourceId())
+	if err != nil {
+		if pkgOrm.IsNotFoundError(err) {
+			return nil, status.Error(codes.NotFound, err.Error())
 		}
-		if !exists {
-			st, stErr := status.New(codes.NotFound, "resource manager error").WithDetails(&pb.ResourceError{
-				ErrorCode: pb.ResourceErrorCode_ResourceNotFound,
-			})
-			if stErr != nil {
-				return nil, stErr
-			}
-			return nil, st.Err()
-		}
-		s.cache[request.ResourceId] = record
-	} else {
-		log.L().Info("cache hit", zap.String("resource-id", request.GetResourceId()))
+		return nil, status.Error(codes.Aborted, err.Error())
 	}
 
 	if record.Deleted {
-		st, stErr := status.New(codes.NotFound, "resource manager error").WithDetails(&pb.ResourceError{
-			ErrorCode: pb.ResourceErrorCode_ResourceNotFound,
-		})
-		if stErr != nil {
-			return nil, stErr
-		}
-		return nil, st.Err()
+		return nil, status.Error(codes.NotFound, "resource marked as deleted")
 	}
-
 	return record.ToQueryResourceResponse(), nil
 }
 
@@ -139,57 +98,61 @@ func (s *Service) CreateResource(
 	if shouldRet {
 		return resp2, err
 	}
-	if !s.checkAllLoaded() {
-		return nil, status.Error(codes.Unavailable, "ResourceManager is initializing")
-	}
 
-	if !s.mu.Lock(ctx) {
-		return nil, status.Error(codes.Canceled, ctx.Err().Error())
-	}
-	defer s.mu.Unlock()
-
-	if _, exists := s.cache[request.GetResourceId()]; exists {
-		st, stErr := status.New(codes.Internal, "resource manager error").WithDetails(&pb.ResourceError{
-			ErrorCode: pb.ResourceErrorCode_ResourceIDConflict,
-		})
-		if stErr != nil {
-			return nil, stErr
+	// s.metaclient.UpdateResource()
+	/*
+		if !s.checkAllLoaded() {
+			return nil, status.Error(codes.Unavailable, "ResourceManager is initializing")
 		}
-		return nil, st.Err()
-	}
 
-	resourceRecord := &resModel.ResourceMeta{
-		// TODO: projectID
-		ID:       request.GetResourceId(),
-		Job:      request.GetJobId(),
-		Worker:   request.GetCreatorWorkerId(),
-		Executor: resModel.ExecutorID(request.GetCreatorExecutor()),
-		Deleted:  false,
-	}
-
-	ok, err := s.accessor.CreateResource(ctx, resourceRecord)
-	if err != nil {
-		st, stErr := status.New(codes.Internal, err.Error()).WithDetails(&pb.ResourceError{
-			ErrorCode:  pb.ResourceErrorCode_ResourceManagerInternalError,
-			StackTrace: errors.ErrorStack(err),
-		})
-		if stErr != nil {
-			return nil, stErr
+		if !s.mu.Lock(ctx) {
+			return nil, status.Error(codes.Canceled, ctx.Err().Error())
 		}
-		return nil, st.Err()
-	}
+		defer s.mu.Unlock()
 
-	if !ok {
-		st, stErr := status.New(codes.Internal, "resource manager error").WithDetails(&pb.ResourceError{
-			ErrorCode: pb.ResourceErrorCode_ResourceIDConflict,
-		})
-		if stErr != nil {
-			return nil, stErr
+		if _, exists := s.cache[request.GetResourceId()]; exists {
+			st, stErr := status.New(codes.Internal, "resource manager error").WithDetails(&pb.ResourceError{
+				ErrorCode: pb.ResourceErrorCode_ResourceIDConflict,
+			})
+			if stErr != nil {
+				return nil, stErr
+			}
+			return nil, st.Err()
 		}
-		return nil, st.Err()
-	}
 
-	s.cache[request.GetResourceId()] = resourceRecord
+		resourceRecord := &resModel.ResourceMeta{
+			// TODO: projectID
+			ID:       request.GetResourceId(),
+			Job:      request.GetJobId(),
+			Worker:   request.GetCreatorWorkerId(),
+			Executor: resModel.ExecutorID(request.GetCreatorExecutor()),
+			Deleted:  false,
+		}
+
+		ok, err := s.accessor.CreateResource(ctx, resourceRecord)
+		if err != nil {
+			st, stErr := status.New(codes.Internal, err.Error()).WithDetails(&pb.ResourceError{
+				ErrorCode:  pb.ResourceErrorCode_ResourceManagerInternalError,
+				StackTrace: errors.ErrorStack(err),
+			})
+			if stErr != nil {
+				return nil, stErr
+			}
+			return nil, st.Err()
+		}
+
+		if !ok {
+			st, stErr := status.New(codes.Internal, "resource manager error").WithDetails(&pb.ResourceError{
+				ErrorCode: pb.ResourceErrorCode_ResourceIDConflict,
+			})
+			if stErr != nil {
+				return nil, stErr
+			}
+			return nil, st.Err()
+		}
+
+		s.cache[request.GetResourceId()] = resourceRecord
+	*/
 
 	// TODO: handle the case where resourceRecord.Deleted == true
 	return &pb.CreateResourceResponse{}, nil

@@ -7,17 +7,19 @@ import (
 	"time"
 
 	dmysql "github.com/go-sql-driver/mysql"
+	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
+
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	cerrors "github.com/hanfei1991/microcosm/pkg/errors"
 	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/orm/model"
 	"github.com/hanfei1991/microcosm/pkg/tenant"
-	"github.com/pingcap/log"
-	"go.uber.org/zap"
-	"gorm.io/driver/mysql"
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 var globalModels = []interface{}{
@@ -507,6 +509,24 @@ func (c *metaOpsClient) UpsertResource(ctx context.Context, resource *resourceme
 	}
 
 	return nil
+}
+
+func (c *metaOpsClient) CreateResource(ctx context.Context, resource *resourcemeta.ResourceMeta) error {
+	if resource == nil {
+		return cerrors.ErrMetaParamsInvalid.GenWithStackByArgs("input resource meta is nil")
+	}
+
+	err := c.db.Transaction(func(tx *gorm.DB) error {
+		var count int64
+		if err := tx.Where("id = ?", resource).Count(&count).Error; err != nil {
+			return errors.Trace(err)
+		}
+		if count != 0 {
+			return cerrors.ErrMetaEntryAlreadyExists.GenWithStackByArgs()
+		}
+
+		return nil
+	})
 }
 
 // UpdateResource update the resourcemeta
