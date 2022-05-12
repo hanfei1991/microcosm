@@ -82,7 +82,7 @@ func RetryMockBackendDB(db string) (s *gsvr.Server, addr string, err error) {
 	},
 		retry.WithBackoffBaseDelay(1000 /* 1000 ms */),
 		retry.WithBackoffMaxDelay(3000 /* 3 seconds */),
-		retry.WithMaxTries(3 /* fail after 33 seconds*/),
+		retry.WithMaxTries(3 /* fail after 10 seconds*/),
 		retry.WithIsRetryableErr(func(err error) bool {
 			if strings.Contains(err.Error(), "address already in use") {
 				log.L().Info("address already in use, retry again")
