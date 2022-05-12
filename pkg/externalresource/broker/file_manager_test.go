@@ -29,9 +29,9 @@ func TestFileManagerBasics(t *testing.T) {
 	res1, err := fm.CreateResource("worker-1", "resource-1")
 	require.NoError(t, err)
 	require.Equal(t, &resModel.LocalFileResourceDescriptor{
-		BasePath:   dir,
-		Creator:    "worker-1",
-		ResourceID: "resource-1",
+		BasePath:     dir,
+		Creator:      "worker-1",
+		ResourceName: "resource-1",
 	}, res1)
 
 	storage, err := newBrStorageForLocalFile(res1.AbsolutePath())
@@ -48,9 +48,9 @@ func TestFileManagerBasics(t *testing.T) {
 	res2, err := fm.CreateResource("worker-1", "resource-2")
 	require.NoError(t, err)
 	require.Equal(t, &resModel.LocalFileResourceDescriptor{
-		BasePath:   dir,
-		Creator:    "worker-1",
-		ResourceID: "resource-2",
+		BasePath:     dir,
+		Creator:      "worker-1",
+		ResourceName: "resource-2",
 	}, res2)
 
 	storage, err = newBrStorageForLocalFile(res2.AbsolutePath())

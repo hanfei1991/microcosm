@@ -15,6 +15,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/rpcutil"
 )
 
+// DefaultBroker implements the Broker interface
 type DefaultBroker struct {
 	config     *storagecfg.Config
 	executorID resModel.ExecutorID
@@ -23,6 +24,7 @@ type DefaultBroker struct {
 	fileManager FileManager
 }
 
+// NewBroker creates a new Impl instance
 func NewBroker(
 	config *storagecfg.Config,
 	executorID resModel.ExecutorID,
@@ -37,6 +39,7 @@ func NewBroker(
 	}
 }
 
+// OpenStorage implements Broker.OpenStorage
 func (b *DefaultBroker) OpenStorage(
 	ctx context.Context,
 	workerID resModel.WorkerID,
@@ -60,6 +63,7 @@ func (b *DefaultBroker) OpenStorage(
 	panic("unreachable")
 }
 
+// OnWorkerClosed implements Broker.OnWorkerClosed
 func (b *DefaultBroker) OnWorkerClosed(ctx context.Context, workerID resModel.WorkerID, jobID resModel.JobID) {
 	err := b.fileManager.RemoveTemporaryFiles(workerID)
 	if err != nil {

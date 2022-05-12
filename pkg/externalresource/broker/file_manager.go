@@ -24,6 +24,9 @@ type LocalFileManager struct {
 	persistedResourcesByCreator map[libModel.WorkerID]map[resModel.ResourceID]struct{}
 }
 
+// NewLocalFileManager returns a new NewLocalFileManager.
+// Note that the lifetime of the returned object should span the whole
+// lifetime of the executor.
 func NewLocalFileManager(config storagecfg.LocalFileConfig) *LocalFileManager {
 	return &LocalFileManager{
 		config:                      config,
@@ -31,14 +34,18 @@ func NewLocalFileManager(config storagecfg.LocalFileConfig) *LocalFileManager {
 	}
 }
 
+// CreateResource makes a local directory for the given resource name,
+// and returns a LocalFileResourceDescriptor.
+// The resource is NOT marked as persisted by this method.
+// Only use it when we are sure it is a NEW resource.
 func (m *LocalFileManager) CreateResource(
 	creator libModel.WorkerID,
-	resourceID resModel.ResourceName,
+	resName resModel.ResourceName,
 ) (*resModel.LocalFileResourceDescriptor, error) {
 	res := &resModel.LocalFileResourceDescriptor{
-		BasePath:   m.config.BaseDir,
-		Creator:    creator,
-		ResourceID: resourceID,
+		BasePath:     m.config.BaseDir,
+		Creator:      creator,
+		ResourceName: resName,
 	}
 	if err := os.MkdirAll(res.AbsolutePath(), 0o700); err != nil {
 		return nil, derrors.ErrCreateLocalFileDirectoryFailed.Wrap(err)
@@ -47,14 +54,16 @@ func (m *LocalFileManager) CreateResource(
 	return res, nil
 }
 
+// GetPersistedResource checks the given resource exists in the local
+// file system and returns a LocalFileResourceDescriptor.
 func (m *LocalFileManager) GetPersistedResource(
 	creator libModel.WorkerID,
 	resName resModel.ResourceName,
 ) (*resModel.LocalFileResourceDescriptor, error) {
 	res := &resModel.LocalFileResourceDescriptor{
-		BasePath:   m.config.BaseDir,
-		Creator:    creator,
-		ResourceID: resName,
+		BasePath:     m.config.BaseDir,
+		Creator:      creator,
+		ResourceName: resName,
 	}
 	if _, err := os.Stat(res.AbsolutePath()); err != nil {
 		if os.IsNotExist(err) {
@@ -77,6 +86,8 @@ func (m *LocalFileManager) GetPersistedResource(
 	return res, nil
 }
 
+// RemoveTemporaryFiles cleans up all temporary files (i.e., unpersisted file resources),
+// created by `creator`.
 func (m *LocalFileManager) RemoveTemporaryFiles(creator libModel.WorkerID) error {
 	log.L().Info("Start cleaning temporary files",
 		zap.String("worker-id", creator))
@@ -119,6 +130,8 @@ func (m *LocalFileManager) RemoveTemporaryFiles(creator libModel.WorkerID) error
 	return err
 }
 
+// RemoveResource removes a single resource from the local file system.
+// NOTE the caller should handle ErrResourceDoesNotExist appropriately.
 func (m *LocalFileManager) RemoveResource(creator libModel.WorkerID, resourceID resModel.ResourceName) error {
 	resourcePath := filepath.Join(m.config.BaseDir, creator, resourceID)
 	if _, err := os.Stat(resourcePath); err != nil {
@@ -150,6 +163,10 @@ func (m *LocalFileManager) RemoveResource(creator libModel.WorkerID, resourceID 
 	return nil
 }
 
+// SetPersisted marks a file resource as persisted.
+// NOTE it is only marked as persisted in memory, because
+// we assume that if the executor process crashes, the
+// file resources are lost.
 func (m *LocalFileManager) SetPersisted(
 	creator libModel.WorkerID,
 	resourceID resModel.ResourceName,
@@ -185,6 +202,7 @@ func (m *LocalFileManager) isPersisted(
 	return isPersisted
 }
 
+// IterOverResourceDirectories iterates over all subdirectories in `path`.
 func IterOverResourceDirectories(path string, fn func(relPath string) error) error {
 	infos, err := ioutil.ReadDir(path)
 	if err != nil {

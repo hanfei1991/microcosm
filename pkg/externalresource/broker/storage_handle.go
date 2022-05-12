@@ -11,6 +11,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/rpcutil"
 )
 
+// Handle defines an interface for interact with framework
 type Handle interface {
 	ID() resModel.ResourceID
 	BrExternalStorage() brStorage.ExternalStorage
@@ -33,14 +34,17 @@ type BrExternalStorageHandle struct {
 	fileManager FileManager
 }
 
+// ID implements Handle.ID
 func (h *BrExternalStorageHandle) ID() resModel.ResourceID {
 	return h.id
 }
 
+// BrExternalStorage implements Handle.BrExternalStorage
 func (h *BrExternalStorageHandle) BrExternalStorage() brStorage.ExternalStorage {
 	return h.inner
 }
 
+// Persist implements Handle.Persist
 func (h *BrExternalStorageHandle) Persist(ctx context.Context) error {
 	_, err := rpcutil.DoFailoverRPC(
 		ctx,
@@ -64,6 +68,7 @@ func (h *BrExternalStorageHandle) Persist(ctx context.Context) error {
 	return nil
 }
 
+// Discard implements Handle.Discard
 func (h *BrExternalStorageHandle) Discard(ctx context.Context) error {
 	return nil
 }
