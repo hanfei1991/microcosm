@@ -66,7 +66,7 @@ func (h *runningHandleImpl) Status() *libModel.WorkerStatus {
 		log.L().Panic("Using a stale handle", zap.String("worker-id", h.workerID))
 	}
 
-	return entry.StatusReader().Status()
+	return entry.Status()
 }
 
 func (h *runningHandleImpl) ID() libModel.WorkerID {
@@ -125,7 +125,7 @@ func (h *tombstoneHandleImpl) Status() *libModel.WorkerStatus {
 		log.L().Panic("Using a stale handle", zap.String("worker-id", h.workerID))
 	}
 
-	return entry.StatusReader().Status()
+	return entry.Status()
 }
 
 func (h *tombstoneHandleImpl) ID() libModel.WorkerID {
