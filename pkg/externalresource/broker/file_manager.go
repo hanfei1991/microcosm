@@ -21,7 +21,7 @@ type LocalFileManager struct {
 	config storagecfg.LocalFileConfig
 
 	mu                          sync.Mutex
-	persistedResourcesByCreator map[libModel.WorkerID]map[resModel.ResourceID]struct{}
+	persistedResourcesByCreator map[libModel.WorkerID]map[resModel.ResourceName]struct{}
 }
 
 // NewLocalFileManager returns a new NewLocalFileManager.
@@ -30,7 +30,7 @@ type LocalFileManager struct {
 func NewLocalFileManager(config storagecfg.LocalFileConfig) *LocalFileManager {
 	return &LocalFileManager{
 		config:                      config,
-		persistedResourcesByCreator: make(map[libModel.WorkerID]map[resModel.ResourceID]struct{}),
+		persistedResourcesByCreator: make(map[libModel.WorkerID]map[resModel.ResourceName]struct{}),
 	}
 }
 
@@ -108,7 +108,7 @@ func (m *LocalFileManager) RemoveTemporaryFiles(creator libModel.WorkerID) error
 	}
 
 	// Iterates over all resources created by `creator`.
-	err := IterOverResourceDirectories(creatorResourcePath, func(resourceID string) error {
+	err := iterOverResourceDirectories(creatorResourcePath, func(resourceID string) error {
 		if m.isPersisted(creator, resourceID) {
 			// Persisted resources are skipped, as they are NOT temporary.
 			return nil
@@ -132,14 +132,14 @@ func (m *LocalFileManager) RemoveTemporaryFiles(creator libModel.WorkerID) error
 
 // RemoveResource removes a single resource from the local file system.
 // NOTE the caller should handle ErrResourceDoesNotExist appropriately.
-func (m *LocalFileManager) RemoveResource(creator libModel.WorkerID, resourceID resModel.ResourceName) error {
-	resourcePath := filepath.Join(m.config.BaseDir, creator, resourceID)
+func (m *LocalFileManager) RemoveResource(creator libModel.WorkerID, resName resModel.ResourceName) error {
+	resourcePath := filepath.Join(m.config.BaseDir, creator, resName)
 	if _, err := os.Stat(resourcePath); err != nil {
 		if os.IsNotExist(err) {
-			log.L().Info("Trying to remove non-existingworkerIDToResourcesMap resource",
+			log.L().Info("Trying to remove non-existing resource",
 				zap.String("creator", creator),
-				zap.String("resource-id", resourceID))
-			return derrors.ErrResourceDoesNotExist.GenWithStackByArgs(resourceID)
+				zap.String("resource-name", resName))
+			return derrors.ErrResourceDoesNotExist.GenWithStackByArgs(resName)
 		}
 		return derrors.ErrReadLocalFileDirectoryFailed.Wrap(err)
 	}
@@ -150,14 +150,14 @@ func (m *LocalFileManager) RemoveResource(creator libModel.WorkerID, resourceID 
 	}
 
 	log.L().Info("Local resource has been removed",
-		zap.String("resource-id", resourceID))
+		zap.String("resource-id", resName))
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	if resources := m.persistedResourcesByCreator[creator]; resources != nil {
-		if _, ok := resources[resourceID]; ok {
-			delete(resources, resourceID)
+		if _, ok := resources[resName]; ok {
+			delete(resources, resName)
 		}
 	}
 	return nil
@@ -169,7 +169,7 @@ func (m *LocalFileManager) RemoveResource(creator libModel.WorkerID, resourceID 
 // file resources are lost.
 func (m *LocalFileManager) SetPersisted(
 	creator libModel.WorkerID,
-	resourceID resModel.ResourceName,
+	resName resModel.ResourceName,
 ) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -180,7 +180,7 @@ func (m *LocalFileManager) SetPersisted(
 		m.persistedResourcesByCreator[creator] = persistedResourceSet
 	}
 
-	persistedResourceSet[resourceID] = struct{}{}
+	persistedResourceSet[resName] = struct{}{}
 	return
 }
 
@@ -188,7 +188,7 @@ func (m *LocalFileManager) SetPersisted(
 // DO NOT hold the mu when calling this method.
 func (m *LocalFileManager) isPersisted(
 	creator libModel.WorkerID,
-	resourceID resModel.ResourceName,
+	resName resModel.ResourceName,
 ) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -198,12 +198,12 @@ func (m *LocalFileManager) isPersisted(
 		return false
 	}
 
-	_, isPersisted := persistedResourceSet[resourceID]
+	_, isPersisted := persistedResourceSet[resName]
 	return isPersisted
 }
 
-// IterOverResourceDirectories iterates over all subdirectories in `path`.
-func IterOverResourceDirectories(path string, fn func(relPath string) error) error {
+// iterOverResourceDirectories iterates over all subdirectories in `path`.
+func iterOverResourceDirectories(path string, fn func(relPath string) error) error {
 	infos, err := ioutil.ReadDir(path)
 	if err != nil {
 		return derrors.ErrReadLocalFileDirectoryFailed.Wrap(err)
