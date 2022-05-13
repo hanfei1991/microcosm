@@ -5,11 +5,11 @@ import "github.com/prometheus/client_golang/prometheus"
 // Routine to get a Factory:
 // 1. Servermaster/Executor maintains a process-level prometheus.Registerer singleton.
 // 2. 'BaseMaster/BaseWorker' interface offers a method 'func PromFactory() Factory'.
-// 3. When app implements 'MasterImpl/WorkerImpl', it can get a Factory object by BaseWorker.PromFactory()
-// Actually, the return Factory object would be the wrappingFactory which can produce prometheus metric object
-// with tenant and task information of dataflow engine.
+// 3. When app implements 'MasterImpl/WorkerImpl', it can get a Factory object by BaseWorker.PromFactory().
+//		Actually, the return Factory object would be the wrappingFactory which can produce prometheus metric object
+//		with tenant and task information of dataflow engine.
 // 4. App uses Factory.NewCounter(xxx) to produce the native prometheus object without any concern about the
-// registration and http handler. Similar to usage of promauto.
+//		registration and http handler. Similar to usage of promauto.
 
 type Factory interface {
 	// NewCounter works like the function of the same name in the prometheus
