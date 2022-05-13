@@ -37,7 +37,8 @@ df-demo:
 unit_test: check_failpoint_ctl
 	mkdir -p "$(TEST_DIR)"
 	$(FAILPOINT_ENABLE)
-	$(GOTEST) -cover -covermode=atomic -coverprofile="$(TEST_DIR)/cov.unit.out" $(PACKAGES)
+	$(GOTEST) -cover -covermode=atomic -coverprofile="$(TEST_DIR)/cov.unit.out" $(PACKAGES) \
+		|| { $(FAILPOINT_DISABLE); exit 1; }
 	$(FAILPOINT_DISABLE)
 
 tools_setup:
