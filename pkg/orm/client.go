@@ -441,7 +441,7 @@ func (c *metaOpsClient) UpdateWorker(ctx context.Context, worker *libModel.Worke
 		return cerrors.ErrMetaParamsInvalid.GenWithStackByArgs("input worker meta is nil")
 	}
 	// we don't use `Save` here to avoid user dealing with the basic model
-	if err := c.db.Model(&libModel.WorkerStatus{}).Where("job_id = ? && id = ?", worker.JobID, worker.ID).Updates(worker.Map()).Error; err != nil {
+	if err := c.db.Model(&libModel.WorkerStatus{}).Where("job_id = ? AND id = ?", worker.JobID, worker.ID).Updates(worker.Map()).Error; err != nil {
 		return cerrors.ErrMetaOpFail.Wrap(err)
 	}
 
