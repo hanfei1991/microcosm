@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/gogo/status"
-	"github.com/hanfei1991/microcosm/pkg/rpcutil"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
 	"golang.org/x/time/rate"
@@ -17,7 +16,10 @@ import (
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
 	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
+	"github.com/hanfei1991/microcosm/pkg/rpcutil"
 )
+
+var _ pb.ResourceManagerServer = (*Service)(nil)
 
 type serviceTestSuite struct {
 	service              *Service
@@ -87,12 +89,6 @@ func (s *serviceTestSuite) Start() {
 	s.service.StartBackgroundWorker()
 }
 
-func (s *serviceTestSuite) WaitForReady(t *testing.T) {
-	require.Eventually(t, func() bool {
-		return s.service.isAllLoaded.Load()
-	}, 1*time.Second, 1*time.Millisecond)
-}
-
 func (s *serviceTestSuite) Stop() {
 	s.service.Stop()
 }
@@ -113,16 +109,10 @@ func (s *serviceTestSuite) LoadMockData() {
 	}
 }
 
-func (s *serviceTestSuite) CleanCache() {
-	// Note that this is NOT thread-safe
-	s.service.cache = make(map[resourcemeta.ResourceID]*resourcemeta.ResourceMeta)
-}
-
 func TestServiceBasics(t *testing.T) {
 	suite := newServiceTestSuite(t)
 	suite.LoadMockData()
 	suite.Start()
-	suite.WaitForReady(t)
 
 	ctx := context.Background()
 	_, err := suite.service.CreateResource(ctx, &pb.CreateResourceRequest{
@@ -211,47 +201,10 @@ func TestServiceResourceTypeNoConstraint(t *testing.T) {
 	suite := newServiceTestSuite(t)
 	suite.LoadMockData()
 	suite.Start()
-	suite.WaitForReady(t)
 
 	_, ok, err := suite.service.GetPlacementConstraint(context.Background(), "/s3/fake-s3-resource")
 	require.NoError(t, err)
 	require.False(t, ok)
-
-	suite.Stop()
-}
-
-func TestServiceCacheMiss(t *testing.T) {
-	suite := newServiceTestSuite(t)
-	suite.LoadMockData()
-	suite.Start()
-	suite.WaitForReady(t)
-	suite.CleanCache()
-
-	ctx := context.Background()
-	execID, ok, err := suite.service.GetPlacementConstraint(ctx, "/local/test/2")
-	require.NoError(t, err)
-	require.True(t, ok)
-	require.Equal(t, "executor-1", string(execID))
-
-	_, err = suite.service.CreateResource(ctx, &pb.CreateResourceRequest{
-		ResourceId:      "/local/test/1",
-		CreatorExecutor: "executor-1",
-		JobId:           "test-job-1",
-		CreatorWorkerId: "test-worker-4",
-	})
-	require.Error(t, err)
-	st, ok := status.FromError(err)
-	require.True(t, ok)
-	require.Len(t, st.Details(), 1)
-	require.Equal(t, pb.ResourceErrorCode_ResourceIDConflict, st.Details()[0].(*pb.ResourceError).ErrorCode)
-
-	resp, err := suite.service.QueryResource(ctx, &pb.QueryResourceRequest{ResourceId: "/local/test/2"})
-	require.NoError(t, err)
-	require.Equal(t, &pb.QueryResourceResponse{
-		CreatorExecutor: "executor-1",
-		JobId:           "test-job-1",
-		CreatorWorkerId: "test-worker-1",
-	}, resp)
 
 	suite.Stop()
 }

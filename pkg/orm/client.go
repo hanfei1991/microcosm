@@ -7,7 +7,6 @@ import (
 	"time"
 
 	dmysql "github.com/go-sql-driver/mysql"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
 	"gorm.io/driver/mysql"
@@ -39,6 +38,10 @@ type TimeRange struct {
 	start time.Time
 	end   time.Time
 }
+
+const (
+	duplicateKeyErrorNo = 1062
+)
 
 // Client defines an interface that has the ability to manage every kind of
 // logic abstraction in metastore, including project, project op, job, worker
@@ -101,6 +104,7 @@ type WorkerClient interface {
 
 // ResourceClient defines interface that manages resource in metastore
 type ResourceClient interface {
+	CreateResource(ctx context.Context, resource *resourcemeta.ResourceMeta) error
 	UpsertResource(ctx context.Context, resource *resourcemeta.ResourceMeta) error
 	UpdateResource(ctx context.Context, resource *resourcemeta.ResourceMeta) error
 	DeleteResource(ctx context.Context, resourceID string) (Result, error)
@@ -518,15 +522,27 @@ func (c *metaOpsClient) CreateResource(ctx context.Context, resource *resourceme
 
 	err := c.db.Transaction(func(tx *gorm.DB) error {
 		var count int64
-		if err := tx.Where("id = ?", resource).Count(&count).Error; err != nil {
-			return errors.Trace(err)
-		}
-		if count != 0 {
-			return cerrors.ErrMetaEntryAlreadyExists.GenWithStackByArgs()
+		err := tx.Model(&resourcemeta.ResourceMeta{}).
+			Where("id = ?", resource.ID).
+			Count(&count).Error
+		if err != nil {
+			return err
 		}
 
+		if count > 0 {
+			return cerrors.ErrDuplicateResourceID.GenWithStackByArgs(resource.ID)
+		}
+
+		if err := tx.Create(resource).Error; err != nil {
+			return cerrors.ErrMetaOpFail.Wrap(err)
+		}
 		return nil
 	})
+
+	if err != nil {
+		return cerrors.ErrMetaOpFail.Wrap(err)
+	}
+	return nil
 }
 
 // UpdateResource update the resourcemeta

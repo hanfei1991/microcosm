@@ -5,6 +5,7 @@ package pb;
 service ResourceManager {
   rpc CreateResource(CreateResourceRequest) returns (CreateResourceResponse){}
   rpc QueryResource(QueryResourceRequest) returns (QueryResourceResponse){}
+  rpc RemoveResource
 }
 
 message CreateResourceRequest {
@@ -25,6 +26,12 @@ message QueryResourceResponse {
   string job_id = 3;
   string creator_worker_id = 4;
 }
+
+message RemoveResourceMetaRequest {
+  string resource_id = 1;
+}
+
+message RemoveResourceMetaResponse {}
 
 message ResourceError {
   ResourceErrorCode error_code = 1;
