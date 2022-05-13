@@ -119,7 +119,7 @@ func TestBrokerRemoveResource(t *testing.T) {
 	require.NoError(t, err)
 
 	// Wrong creatorID would yield NotFound
-	_, err = brk.RemoveResource(context.Background(), &pb.RemoveResourceRequest{
+	_, err = brk.RemoveResource(context.Background(), &pb.RemoveLocalResourceRequest{
 		ResourceId: "/local/resource-1",
 		CreatorId:  "worker-2", // wrong creatorID
 	})
@@ -128,7 +128,7 @@ func TestBrokerRemoveResource(t *testing.T) {
 	require.Equal(t, codes.NotFound, code)
 
 	// The response is ignored because it is an empty PB message.
-	_, err = brk.RemoveResource(context.Background(), &pb.RemoveResourceRequest{
+	_, err = brk.RemoveResource(context.Background(), &pb.RemoveLocalResourceRequest{
 		ResourceId: "/local/resource-1",
 		CreatorId:  "worker-1",
 	})
@@ -136,7 +136,7 @@ func TestBrokerRemoveResource(t *testing.T) {
 	require.NoDirExists(t, resPath)
 
 	// Repeated calls should fail with NotFound
-	_, err = brk.RemoveResource(context.Background(), &pb.RemoveResourceRequest{
+	_, err = brk.RemoveResource(context.Background(), &pb.RemoveLocalResourceRequest{
 		ResourceId: "/local/resource-1",
 		CreatorId:  "worker-1",
 	})
@@ -145,7 +145,7 @@ func TestBrokerRemoveResource(t *testing.T) {
 	require.Equal(t, codes.NotFound, code)
 
 	// Unexpected resource type
-	_, err = brk.RemoveResource(context.Background(), &pb.RemoveResourceRequest{
+	_, err = brk.RemoveResource(context.Background(), &pb.RemoveLocalResourceRequest{
 		ResourceId: "/s3/resource-1",
 		CreatorId:  "worker-1",
 	})
@@ -154,7 +154,7 @@ func TestBrokerRemoveResource(t *testing.T) {
 	require.Equal(t, codes.InvalidArgument, code)
 
 	// Unparsable ResourceID
-	_, err = brk.RemoveResource(context.Background(), &pb.RemoveResourceRequest{
+	_, err = brk.RemoveResource(context.Background(), &pb.RemoveLocalResourceRequest{
 		ResourceId: "#@$!@#!$",
 		CreatorId:  "worker-1",
 	})
@@ -163,7 +163,7 @@ func TestBrokerRemoveResource(t *testing.T) {
 	require.Equal(t, codes.InvalidArgument, code)
 
 	// Empty CreatorID
-	_, err = brk.RemoveResource(context.Background(), &pb.RemoveResourceRequest{
+	_, err = brk.RemoveResource(context.Background(), &pb.RemoveLocalResourceRequest{
 		ResourceId: "/local/resource-1",
 		CreatorId:  "",
 	})
@@ -172,7 +172,7 @@ func TestBrokerRemoveResource(t *testing.T) {
 	require.Equal(t, codes.InvalidArgument, code)
 
 	// Empty ResourceID
-	_, err = brk.RemoveResource(context.Background(), &pb.RemoveResourceRequest{
+	_, err = brk.RemoveResource(context.Background(), &pb.RemoveLocalResourceRequest{
 		ResourceId: "",
 		CreatorId:  "worker-1",
 	})

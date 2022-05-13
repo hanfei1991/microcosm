@@ -84,8 +84,8 @@ func (b *DefaultBroker) OnWorkerClosed(ctx context.Context, workerID resModel.Wo
 // RemoveResource implements pb.BrokerServiceServer.
 func (b *DefaultBroker) RemoveResource(
 	_ context.Context,
-	request *pb.RemoveResourceRequest,
-) (*pb.RemoveResourceResponse, error) {
+	request *pb.RemoveLocalResourceRequest,
+) (*pb.RemoveLocalResourceResponse, error) {
 	tp, resName, err := resModel.ParseResourcePath(request.GetResourceId())
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
@@ -109,7 +109,7 @@ func (b *DefaultBroker) RemoveResource(
 		return nil, status.Error(codes.Unknown, err.Error())
 	}
 
-	return &pb.RemoveResourceResponse{}, nil
+	return &pb.RemoveLocalResourceResponse{}, nil
 }
 
 func (b *DefaultBroker) newHandleForLocalFile(
