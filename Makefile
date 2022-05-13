@@ -1,5 +1,6 @@
 TEST_DIR := /tmp/dataflow_engine_test
 PARALLEL=3
+GO       := GO111MODULE=on go
 GOTEST := CGO_ENABLED=1 go test -p $(PARALLEL) --race
 FAIL_ON_STDOUT := awk '{ print  } END { if (NR > 0) { exit 1  }  }'
 
@@ -44,6 +45,9 @@ unit_test: check_failpoint_ctl
 tools_setup:
 	@echo "setup build and check tools"
 	@cd tools && make
+
+tools/bin/failpoint-ctl: tools/go.mod
+	cd tools && $(GO) build -mod=mod -o ./bin/failpoint-ctl github.com/pingcap/failpoint/failpoint-ctl
 
 check_failpoint_ctl: tools/bin/failpoint-ctl
 
