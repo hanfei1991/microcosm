@@ -33,7 +33,7 @@ func TestWorkerExit(t *testing.T) {
 		EtcdEndpoints:   userMetaAddrsInContainer,
 		EtcdWatchPrefix: "/fake-job/test/",
 
-		InjectErrorInterval: time.Second * 1,
+		InjectErrorInterval: time.Second * 3,
 	}
 	cfgBytes, err := json.Marshal(cfg)
 	require.NoError(t, err)
