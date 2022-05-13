@@ -39,10 +39,6 @@ type TimeRange struct {
 	end   time.Time
 }
 
-const (
-	duplicateKeyErrorNo = 1062
-)
-
 // Client defines an interface that has the ability to manage every kind of
 // logic abstraction in metastore, including project, project op, job, worker
 // and resource
@@ -538,7 +534,6 @@ func (c *metaOpsClient) CreateResource(ctx context.Context, resource *resourceme
 		}
 		return nil
 	})
-
 	if err != nil {
 		return cerrors.ErrMetaOpFail.Wrap(err)
 	}

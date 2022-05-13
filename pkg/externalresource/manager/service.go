@@ -5,7 +5,6 @@ import (
 	"sync"
 
 	"github.com/gogo/status"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
@@ -96,26 +95,43 @@ func (s *Service) CreateResource(
 
 	err = s.metaclient.CreateResource(ctx, resourceRecord)
 	if derror.ErrDuplicateResourceID.Equal(err) {
-		st, stErr := status.New(codes.Internal, "resource manager error").WithDetails(&pb.ResourceError{
-			ErrorCode: pb.ResourceErrorCode_ResourceIDConflict,
-		})
-		if stErr != nil {
-			return nil, stErr
-		}
-		return nil, st.Err()
+		return nil, status.Error(codes.AlreadyExists, "resource manager error")
 	}
 	if err != nil {
-		st, stErr := status.New(codes.Internal, err.Error()).WithDetails(&pb.ResourceError{
-			ErrorCode:  pb.ResourceErrorCode_ResourceManagerInternalError,
-			StackTrace: errors.ErrorStack(err),
-		})
-		if stErr != nil {
-			return nil, stErr
-		}
-		return nil, st.Err()
+		return nil, status.Error(codes.Unknown, err.Error())
 	}
 
 	return &pb.CreateResourceResponse{}, nil
+}
+
+// RemoveResource implements ResourceManagerClient.RemoveResource
+func (s *Service) RemoveResource(
+	ctx context.Context,
+	request *pb.RemoveResourceRequest,
+) (*pb.RemoveResourceResponse, error) {
+	var resp2 *pb.RemoveResourceResponse
+	shouldRet, err := s.preRPCHook.PreRPC(ctx, request, &resp2)
+	if shouldRet {
+		return resp2, err
+	}
+
+	if request.GetResourceId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "empty resource-id")
+	}
+
+	res, err := s.metaclient.DeleteResource(ctx, request.GetResourceId())
+	if err != nil {
+		return nil, status.Error(codes.Aborted, err.Error())
+	}
+	if res.RowsAffected() == 0 {
+		return nil, status.Error(codes.NotFound, "resource not found")
+	}
+	if res.RowsAffected() > 1 {
+		log.L().Panic("unexpected RowsAffected",
+			zap.String("resource-id", request.GetResourceId()))
+	}
+
+	return &pb.RemoveResourceResponse{}, nil
 }
 
 // GetPlacementConstraint is called by the Scheduler to determine whether
@@ -145,6 +161,9 @@ func (s *Service) GetPlacementConstraint(
 
 	record, err := s.metaclient.GetResourceByID(ctx, id)
 	if err != nil {
+		if pkgOrm.IsNotFoundError(err) {
+			return "", false, derror.ErrResourceDoesNotExist.GenWithStackByArgs(id)
+		}
 		return "", false, err
 	}
 

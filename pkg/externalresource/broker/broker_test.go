@@ -28,14 +28,9 @@ func newBroker(t *testing.T) (*DefaultBroker, *rpcutil.FailoverRPCClients[pb.Res
 func TestBrokerOpenNewStorage(t *testing.T) {
 	brk, client, dir := newBroker(t)
 
-	st, err := status.New(codes.Internal, "resource manager error").WithDetails(&pb.ResourceError{
-		ErrorCode: pb.ResourceErrorCode_ResourceNotFound,
-	})
-	require.NoError(t, err)
-
 	innerClient := client.GetLeaderClient().(*manager.MockClient)
 	innerClient.On("QueryResource", mock.Anything, &pb.QueryResourceRequest{ResourceId: "/local/test-1"}, mock.Anything).
-		Return((*pb.QueryResourceResponse)(nil), st.Err())
+		Return((*pb.QueryResourceResponse)(nil), status.Error(codes.NotFound, "resource manager error"))
 	hdl, err := brk.OpenStorage(context.Background(), "worker-1", "job-1", "/local/test-1")
 	require.NoError(t, err)
 	require.Equal(t, "/local/test-1", hdl.ID())
@@ -68,15 +63,9 @@ func TestBrokerOpenNewStorage(t *testing.T) {
 func TestBrokerOpenExistingStorage(t *testing.T) {
 	brk, client, dir := newBroker(t)
 
-	st, err := status.New(codes.NotFound, "resource manager error").WithDetails(&pb.ResourceError{
-		ErrorCode: pb.ResourceErrorCode_ResourceNotFound,
-	})
-	require.NoError(t, err)
-	notFoundErr := st.Err()
-
 	innerClient := client.GetLeaderClient().(*manager.MockClient)
 	innerClient.On("QueryResource", mock.Anything, &pb.QueryResourceRequest{ResourceId: "/local/test-2"}, mock.Anything).
-		Return((*pb.QueryResourceResponse)(nil), notFoundErr).Once()
+		Return((*pb.QueryResourceResponse)(nil), status.Error(codes.NotFound, "resource manager error")).Once()
 	innerClient.On("CreateResource", mock.Anything, &pb.CreateResourceRequest{
 		ResourceId:      "/local/test-2",
 		CreatorExecutor: "executor-1",

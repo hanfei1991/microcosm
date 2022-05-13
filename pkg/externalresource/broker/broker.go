@@ -7,6 +7,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
+	"google.golang.org/grpc/codes"
 
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/pb"
@@ -172,26 +173,12 @@ func (b *DefaultBroker) checkForExistingResource(
 		// If the error is not derived from a grpc status, we should throw it.
 		return nil, false, errors.Trace(err)
 	}
-	if len(st.Details()) != 1 {
-		// The resource manager only generates status with ONE detail.
-		return nil, false, errors.Trace(err)
-	}
-	resourceErr, ok := st.Details()[0].(*pb.ResourceError)
-	if !ok {
-		return nil, false, errors.Trace(err)
-	}
 
-	log.L().Info("Got ResourceError",
-		zap.String("resource-id", resourceID),
-		zap.Any("resource-err", resourceErr))
-	switch resourceErr.ErrorCode {
-	case pb.ResourceErrorCode_ResourceNotFound:
+	switch st.Code() {
+	case codes.NotFound:
 		// Indicates that there is no existing resource with the same name.
 		return nil, false, nil
 	default:
-		log.L().Warn("Unexpected ResourceError",
-			zap.String("code", resourceErr.ErrorCode.String()),
-			zap.String("stack-trace", resourceErr.StackTrace))
 		return nil, false, errors.Trace(err)
 	}
 }
