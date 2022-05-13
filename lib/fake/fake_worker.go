@@ -283,7 +283,7 @@ func NewDummyWorker(
 		},
 	}
 	return &dummyWorker{
-		statusRateLimiter: rate.NewLimiter(rate.Every(3*time.Second), 1),
+		statusRateLimiter: rate.NewLimiter(rate.Every(100*time.Millisecond), 1),
 		status:            status,
 		config:            wcfg,
 		errCh:             make(chan error, 1),
