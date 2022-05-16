@@ -24,7 +24,7 @@ func NewMockClient() (Client, error) {
 
 	cli := &metaOpsClient{
 		db:   db,
-		impl: nil, //TODO: need close embeded db
+		impl: nil, // TODO: need close embedded db
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
