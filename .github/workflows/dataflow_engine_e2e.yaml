@@ -60,23 +60,24 @@ jobs:
           cd $GITHUB_WORKSPACE/test/e2e
           go test -count=1 -v -run=TestNodeFailure
 
+      - name: Dump docker container logs on failure
+        if: ${{ failure() }}
+        uses: jwalton/gh-docker-logs@v1
+        with:
+          tail: '100'
+
       - name: Collect docker logs on failure
         if: ${{ failure() }}
         uses: jwalton/gh-docker-logs@v1
         with:
-          dest: './logs'
-          tail: '200'
-
-      - name: Tar logs
-        if: ${{ failure() }}
-        run: tar cvzf ./logs.tgz ./logs
+          dest: 'logs'
 
       - name: Upload logs to GitHub
         if: ${{ failure() }}
         uses: actions/upload-artifact@master
         with:
-          name: logs.tgz
-          path: ./logs.tgz
+          name: logs
+          path: logs/*
 
   DM-workflow:
     runs-on: ubuntu-latest
