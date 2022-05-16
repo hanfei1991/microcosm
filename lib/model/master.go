@@ -3,6 +3,8 @@ package model
 import (
 	"encoding/json"
 
+	"gorm.io/gorm"
+
 	ormModel "github.com/hanfei1991/microcosm/pkg/orm/model"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/pkg/tenant"
@@ -33,10 +35,10 @@ var MasterUpdateColumns = []string{
 // MasterMetaKVData defines the metadata of job master
 type MasterMetaKVData struct {
 	ormModel.Model
-	ProjectID  tenant.ProjectID `json:"project-id" gorm:"column:project_id;type:varchar(64) not null;index:idx_st,priority:1"`
-	ID         MasterID         `json:"id" gorm:"column:id;type:varchar(64) not null;uniqueIndex:uidx_id"`
+	ProjectID  tenant.ProjectID `json:"project-id" gorm:"column:project_id;type:varchar(64) not null;index:idx_mst,priority:1"`
+	ID         MasterID         `json:"id" gorm:"column:id;type:varchar(64) not null;uniqueIndex:uidx_mid"`
 	Tp         WorkerType       `json:"type" gorm:"column:type;type:tinyint not null"`
-	StatusCode MasterStatusCode `json:"status" gorm:"column:status;type:tinyint not null;index:idx_st,priority:2"`
+	StatusCode MasterStatusCode `json:"status" gorm:"column:status;type:tinyint not null;index:idx_mst,priority:2"`
 	NodeID     p2p.NodeID       `json:"node-id" gorm:"column:node_id;type:varchar(64) not null"`
 	Addr       string           `json:"addr" gorm:"column:address;type:varchar(64) not null"`
 	Epoch      Epoch            `json:"epoch" gorm:"column:epoch;type:bigint not null"`
@@ -44,6 +46,10 @@ type MasterMetaKVData struct {
 	// Config holds business-specific data
 	Config []byte `json:"config" gorm:"column:config;type:blob"`
 	// TODO: add master status and checkpoint data
+
+	// Deleted is a nullable timestamp. Then master is deleted
+	// if Deleted is not null.
+	Deleted gorm.DeletedAt
 }
 
 // Marshal returns the JSON encoding of MasterMetaKVData.
