@@ -97,6 +97,9 @@ func TestNodeFailure(t *testing.T) {
 		updateKeyAndCheckOnce(ctx, t, cli, jobID, cfg.WorkerCount, value, mvccCount)
 	}
 
+	// test only
+	require.Truef(t, false, "injected error")
+
 	// restart all executors and check fake job is running normally
 	for i := 0; i < nodeCount; i++ {
 		cli.ContainerRestart(executorContainerName(i))
@@ -131,8 +134,6 @@ func TestNodeFailure(t *testing.T) {
 		}
 		return true
 	}, time.Second*60, time.Second*2)
-
-	require.Truef(t, false, "injected error")
 }
 
 func masterContainerName(index int) string {
