@@ -15,6 +15,7 @@ import (
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
+	"github.com/hanfei1991/microcosm/pkg/externalresource/manager"
 	"github.com/hanfei1991/microcosm/servermaster/scheduler"
 
 	"github.com/phayes/freeport"
@@ -250,6 +251,10 @@ func (m *mockJobManager) PauseJob(ctx context.Context, req *pb.PauseJobRequest) 
 }
 
 func (m *mockJobManager) GetJobStatuses(ctx context.Context) (map[libModel.MasterID]libModel.MasterStatusCode, error) {
+	panic("not implemented")
+}
+
+func (m *mockJobManager) WatchJobStatuses(ctx context.Context) (manager.JobStatusesSnapshot, <-chan manager.JobStatusChangeEvent, error) {
 	panic("not implemented")
 }
 

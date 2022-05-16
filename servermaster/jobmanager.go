@@ -3,6 +3,7 @@ package servermaster
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"time"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -16,6 +17,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	derrors "github.com/hanfei1991/microcosm/pkg/errors"
+	resManager "github.com/hanfei1991/microcosm/pkg/externalresource/manager"
 	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
@@ -32,6 +34,9 @@ type JobManager interface {
 	PauseJob(ctx context.Context, req *pb.PauseJobRequest) *pb.PauseJobResponse
 
 	GetJobStatuses(ctx context.Context) (map[libModel.MasterID]libModel.MasterStatusCode, error)
+	WatchJobStatuses(
+		ctx context.Context,
+	) (resManager.JobStatusesSnapshot, <-chan resManager.JobStatusChangeEvent, error)
 }
 
 const defaultJobMasterCost = 1
@@ -51,6 +56,12 @@ type JobManagerImplV2 struct {
 	clocker          clock.Clock
 	frameMetaClient  pkgOrm.Client
 	tombstoneCleaned bool
+
+	// watchMu protects fields required for status watching.
+	// TODO refactor out status watching capability as a generic component.
+	watchMu       sync.RWMutex
+	watchers      map[int]chan resManager.JobStatusChangeEvent
+	nextWatcherID int
 }
 
 // PauseJob implements proto/Master.PauseJob
@@ -105,19 +116,59 @@ func (jm *JobManagerImplV2) CancelJob(ctx context.Context, req *pb.CancelJobRequ
 		}}
 	}
 
-	// Note that DeleteJob is a soft delete.
-	res, err := jm.frameMetaClient.DeleteJob(ctx, req.JobIdStr)
-	if err != nil {
+	if err := jm.deleteJobMeta(ctx, req.JobIdStr); err != nil {
 		return &pb.CancelJobResponse{Err: &pb.Error{
 			Code:    pb.ErrorCode_UnknownError,
 			Message: err.Error(),
 		}}
 	}
+
+	return &pb.CancelJobResponse{}
+}
+
+func (jm *JobManagerImplV2) deleteJobMeta(ctx context.Context, jobID string) error {
+	jm.watchMu.RLock()
+
+	var congestedWatcherIDs []int
+	defer func() {
+		jm.watchMu.Lock()
+		defer jm.watchMu.Unlock()
+
+		for _, wid := range congestedWatcherIDs {
+			close(jm.watchers[wid])
+			delete(jm.watchers, wid)
+		}
+	}()
+
+	defer jm.watchMu.RUnlock()
+
+	timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	// Note that DeleteJob is a soft delete.
+	res, err := jm.frameMetaClient.DeleteJob(ctx, jobID)
+	if err != nil {
+		return err
+	}
 	if res.RowsAffected() == 0 {
 		log.L().Warn("Job not found in meta (or already deleted)",
-			zap.Any("req", req))
+			zap.Any("job-id", jobID))
 	}
-	return &pb.CancelJobResponse{}
+
+	for wid, watcher := range jm.watchers {
+		select {
+		case <-timeoutCtx.Done():
+			congestedWatcherIDs = append(congestedWatcherIDs, wid)
+			log.L().Warn("status watcher timed out")
+			return timeoutCtx.Err()
+		case watcher <- resManager.JobStatusChangeEvent{
+			EventType: resManager.JobRemovedEvent,
+			JobID:     jobID,
+		}:
+		}
+	}
+
+	return nil
 }
 
 // QueryJob implements proto/Master.QueryJob
@@ -259,6 +310,7 @@ func NewJobManagerImplV2(
 		masterMetaClient: cli,
 		clocker:          clock.New(),
 		frameMetaClient:  metaClient,
+		watchers:         make(map[int]chan resManager.JobStatusChangeEvent),
 	}
 	impl.BaseMaster = lib.NewBaseMaster(
 		dctx,
@@ -418,4 +470,41 @@ func (jm *JobManagerImplV2) OnWorkerStatusUpdated(worker lib.WorkerHandle, newSt
 // CloseImpl implements lib.MasterImpl.CloseImpl
 func (jm *JobManagerImplV2) CloseImpl(ctx context.Context) error {
 	return nil
+}
+
+// WatchJobStatuses returns a snapshot of job statuses followed by a stream
+// of job status changes.
+func (jm *JobManagerImplV2) WatchJobStatuses(
+	ctx context.Context,
+) (snapshot resManager.JobStatusesSnapshot, watchCh <-chan resManager.JobStatusChangeEvent, retErr error) {
+	jm.watchMu.Lock()
+	defer jm.watchMu.Unlock()
+
+	watcher, wid := jm.initWatcher()
+
+	defer func() {
+		if retErr != nil {
+			// Note that this delete must be before
+			// unlocking the watchMu.
+			delete(jm.watchers, wid)
+		}
+	}()
+
+	snapshot, err := jm.GetJobStatuses(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return snapshot, watcher, err
+}
+
+// initWatcher MUST be called with jm.watchMu taken exclusively.
+func (jm *JobManagerImplV2) initWatcher() (chan resManager.JobStatusChangeEvent, int) {
+	wid := jm.nextWatcherID
+	jm.nextWatcherID++
+
+	watcher := make(chan resManager.JobStatusChangeEvent, 16)
+	jm.watchers[wid] = watcher
+
+	return watcher, wid
 }
