@@ -32,11 +32,6 @@ func TestGenEpochMock(t *testing.T) {
 
 	// Being a lightweight database, SQLite can’t handle a high level of concurrency
 	// NOTICE: Not Recommend to do high concurrenct test in unit test
-	// TODO:
-	// (1) if we enable 'cache=shared', need disable 't.Parallel()' and close DB when the test run finish.
-	// we still will meet 'database table is lock' error for high concurrency
-	// (2) if we disable 'cache=shared', a new connection will create a new DB, and cause the 'no such table'
-	// error as consequence
 	/*
 		var wg sync.WaitGroup
 		for i := 0; i < 10; i++ {
