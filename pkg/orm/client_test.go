@@ -875,7 +875,7 @@ func TestResource(t *testing.T) {
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
 				mock.ExpectBegin()
-				mock.ExpectQuery("SELECT count[(]1[)] FROM `resource_meta` WHERE id").WithArgs("r333").WillReturnRows(
+				mock.ExpectQuery("SELECT count[(][*][)] FROM `resource_meta` WHERE id").WithArgs("r333").WillReturnRows(
 					sqlmock.NewRows([]string{
 						"count(1)",
 					}).AddRow(0))
@@ -905,7 +905,7 @@ func TestResource(t *testing.T) {
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
 				mock.ExpectBegin()
-				mock.ExpectQuery("SELECT count[(]1[)] FROM `resource_meta` WHERE id").WithArgs("r333").WillReturnRows(
+				mock.ExpectQuery("SELECT count[(][*][)] FROM `resource_meta` WHERE id").WithArgs("r333").WillReturnRows(
 					sqlmock.NewRows([]string{
 						"count(1)",
 					}).AddRow(1))
@@ -926,7 +926,7 @@ func TestResource(t *testing.T) {
 					ProjectID: "111-222-333",
 					Job:       "j111",
 					Worker:    "w222",
-					Executor:  "e444",
+					Executor:  "e445",
 					Deleted:   true,
 				},
 			},
