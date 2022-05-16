@@ -212,21 +212,23 @@ func newClient(sqlDB *sql.DB) (*metaOpsClient, error) {
 	}
 
 	return &metaOpsClient{
-		db:   db,
-		impl: sqlDB,
+		db: db,
 	}, nil
 }
 
 // metaOpsClient is the meta operations client for framework metastore
 type metaOpsClient struct {
 	// gorm claim to be thread safe
-	db   *gorm.DB
-	impl *sql.DB
+	db *gorm.DB
 }
 
 func (c *metaOpsClient) Close() error {
-	if c.impl != nil {
-		return cerrors.ErrMetaOpFail.Wrap(c.impl.Close())
+	impl, err := c.db.DB()
+	if err != nil {
+		return err
+	}
+	if impl != nil {
+		return cerrors.ErrMetaOpFail.Wrap(impl.Close())
 	}
 
 	return nil
