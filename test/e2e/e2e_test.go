@@ -168,4 +168,6 @@ func testSubmitTest(t *testing.T, cfg *cvs.Config, config *Config, demoAddr stri
 	})
 	require.Nil(t, err, resp.JobIdStr)
 	require.Empty(t, demoResp.ErrMsg, demoResp.ErrFileIdx)
+
+	require.Falsef(t, true, "injected error")
 }
