@@ -103,6 +103,4 @@ func TestDMJob(t *testing.T) {
 
 	// check auto resume
 	waitRow("c = 3")
-
-	require.Falsef(t, true, "injected error")
 }
