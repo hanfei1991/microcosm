@@ -131,6 +131,8 @@ func TestNodeFailure(t *testing.T) {
 		}
 		return true
 	}, time.Second*60, time.Second*2)
+
+	require.Truef(t, false, "injected error")
 }
 
 func masterContainerName(index int) string {
