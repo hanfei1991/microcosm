@@ -60,10 +60,6 @@ jobs:
           cd $GITHUB_WORKSPACE/test/e2e
           go test -count=1 -v -run=TestNodeFailure
 
-          # - name: Dump docker container logs on failure
-          #   if: ${{ failure() }}
-          #   uses: jwalton/gh-docker-logs@v2
-
       - name: Collect docker logs on failure
         if: ${{ failure() }}
         uses: jwalton/gh-docker-logs@v1
