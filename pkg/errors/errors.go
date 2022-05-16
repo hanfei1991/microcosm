@@ -136,4 +136,7 @@ var (
 	ErrCleaningLocalTempFiles         = errors.Normalize("errors is encountered when cleaning local temp files", errors.RFCCodeText("DFLOW:ErrCleaningLocalTempFiles"))
 	ErrRemovingLocalResource          = errors.Normalize("removing a local resource file directory has failed", errors.RFCCodeText("DFLOW:ErrRemovingLocalResource"))
 	ErrFailToCreateExternalStorage    = errors.Normalize("failed to create external storage", errors.RFCCodeText("DFLOW:ErrFailToCreateExternalStorage"))
+
+	// Metric related error
+	ErrMetricRegisterFail = errors.Normalize("failed to register metric", errors.RFCCodeText("DFLOW:ErrMetricRegisterFail"))
 )
