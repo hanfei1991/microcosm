@@ -3,6 +3,7 @@ package promutil
 import (
 	"net/http"
 
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/pkg/tenant"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -17,17 +18,16 @@ import (
 // 4. App uses Factory.NewCounter(xxx) to produce the native prometheus object without any concern about the
 // registration and http handler. Similar to usage of promauto.
 
-//TODO:
-// 2. offer different With method to produce factory for framework/user master/user worker
-// 5. job_type register
-// 6. framework metric
-
 const (
-	systemID    = "system"
+	systemID    = "dataflow-system"
 	frameworkID = "dateflow-framework"
 )
 
 const (
+	/// framework const lable
+	constLabelFrameworkKey = "framework"
+
+	/// app const label
 	// constLableTenantKey and constLabelProjectKey is used to recognize metric for tenant/project
 	constLableTenantKey  = "tenant"
 	constLabelProjectKey = "project_id"
@@ -41,19 +41,48 @@ const (
 func HttpHandlerForMetric() http.Handler {
 	return promhttp.HandlerFor(
 		globalMetricGatherer,
-		HandlerOpts{},
+		promhttp.HandlerOpts{},
 	)
 }
 
-// With return a Factory which can produce native prometheus metric with tenant/task const lables
-// For the jobmaster
-func With(tenantID tenant.TenantID, jobID JobID) Factory {
+// NewFactory4JobMaster return a Factory for jobmaster
+// TODO: jobType need format
+func NewFactory4JobMaster(info tenant.ProjectInfo, jobType libModel.JobType, jobID libModel.MasterID) Factory {
+	return &wrappingFactory{
+		r:      globalMetricRegistry,
+		prefix: jobType,
+		constLabels: prometheus.Labels{
+			constLableTenantKey:  info.TenantID,
+			constLabelProjectKey: info.ProjectID,
+			constLableJobKey:     jobID,
+		},
+	}
+}
+
+// NewFactory4Worker return a Factory for worker
+// TODO: jobType need format
+func NewFactory4Worker(info tenant.ProjectInfo, jobType libModel.JobType, jobID libModel.MasterID,
+	workerID libModel.WorkerID) Factory {
+	return &wrappingFactory{
+		r:      globalMetricRegistry,
+		prefix: jobType,
+		constLabels: prometheus.Labels{
+			constLableTenantKey:  info.TenantID,
+			constLabelProjectKey: info.ProjectID,
+			constLableJobKey:     jobID,
+			constLableWorkerKey:  workerID,
+		},
+	}
+}
+
+// NewFactory4Framework return a Factory for dataflow framework
+// NOTICE: we use auto service label to distinguish different dataflow engine
+// or different executor
+func NewFactory4Framework() Factory {
 	return &wrappingFactory{
 		r: globalMetricRegistry,
-		labels: prometheus.Labels{
-			lableTenantKey:  tenantID,
-			labelProjectKey: "",
-			lableJobKey:     jobID,
+		constLabels: prometheus.Labels{
+			constLabelFrameworkKey: "true",
 		},
 	}
 }

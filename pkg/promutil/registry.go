@@ -1,11 +1,28 @@
 package promutil
 
-// NOTICE: we don't use prometheus.DefaultRegistry in case of incorrect usage of a 
+import (
+	"sync"
+
+	libModel "github.com/hanfei1991/microcosm/lib/model"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
+	dto "github.com/prometheus/client_model/go"
+)
+
+// NOTICE: we don't use prometheus.DefaultRegistry in case of incorrect usage of a
 // non-wrapped metrici by app(user)
 var (
 	globalMetricRegistry                     = NewRegistry()
 	globalMetricGatherer prometheus.Gatherer = globalMetricRegistry
 )
+
+func init() {
+	globalMetricRegistry.MustRegister(systemID, collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+	// NOTICE: v1.12.1 revert some runtime metric for go collector
+	// ref: https://github.com/prometheus/client_golang/releases
+	globalMetricRegistry.MustRegister(systemID, collectors.NewGoCollector(collectors.WithGoCollections(
+		collectors.GoRuntimeMemStatsCollection|collectors.GoRuntimeMetricsCollection)))
+}
 
 // Registry is used for registering metric
 type Registry struct {
@@ -14,34 +31,37 @@ type Registry struct {
 
 	// collectorByWorker is for cleaning all collectors for specific worker(jobmaster/worker)
 	// when it commits suicide if lost heartbeat
-	collectorByWorker map[libModel.WorkerID][]Prometheus.Collector
+	collectorByWorker map[libModel.WorkerID][]prometheus.Collector
 }
 
 // NewRegistry new a Registry
 func NewRegistry() *Registry {
-	return &Registry {
-		prometheus.Registry: prometheus.NewRegistry(),
-		collectorByWorker: make(map[libModel.WorkerID][]Prometheus.Collector)
+	return &Registry{
+		Registry:          prometheus.NewRegistry(),
+		collectorByWorker: make(map[libModel.WorkerID][]prometheus.Collector),
 	}
 }
 
 // Register registers the provided Collector of the specified worker
-func (r *Registry) MustRegister(workerID libModel.WorkerID, c Collector) error {
+func (r *Registry) MustRegister(workerID libModel.WorkerID, c prometheus.Collector) {
+	if c == nil {
+		return
+	}
 	r.Lock()
 	defer r.Unlock()
 
 	r.Registry.MustRegister(c)
-	
+
 	var (
-		cls []Prometheus.Collector
+		cls    []prometheus.Collector
 		exists bool
 	)
-	cls, exists = r.collectorByWorker[workerID]	
+	cls, exists = r.collectorByWorker[workerID]
 	if !exists {
-		cls = make([]Prometheus.Collector)	
-		r.collectorByWorker[workerID] = cls
+		cls = make([]prometheus.Collector, 0)
 	}
-	cls = cls.append(c) 
+	cls = append(cls, c)
+	r.collectorByWorker[workerID] = cls
 }
 
 // Unregister unregisters all Collectors of the specified worker
@@ -51,7 +71,7 @@ func (r *Registry) Unregister(workerID libModel.WorkerID) {
 
 	cls, exists := r.collectorByWorker[workerID]
 	if exists {
-		for collector := range cls {
+		for _, collector := range cls {
 			r.Registry.Unregister(collector)
 		}
 		delete(r.collectorByWorker, workerID)
@@ -59,14 +79,9 @@ func (r *Registry) Unregister(workerID libModel.WorkerID) {
 }
 
 // Gather implements Gatherer interface
-func (r *Registry) Gather() ([]*dto.MetricFamily, err) {
+func (r *Registry) Gather() ([]*dto.MetricFamily, error) {
 	r.Lock()
 	defer r.Unlock()
-	
-	return r.Registry.Gather()	
-}
 
-func init() {
-	globalMetricRegistry.MustRegister(systemID, collectors.NewProcessCollector(ProcessCollectorOpts{}))
-	globalMetricRegistry.MustRegister(systemID, collectors.NewGoCollector())
+	return r.Registry.Gather()
 }

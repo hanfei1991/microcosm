@@ -11,6 +11,6 @@ const (
 )
 
 type ProjectInfo struct {
-	tenantID  TenantID
-	projectID ProjectID
+	TenantID  TenantID
+	ProjectID ProjectID
 }
