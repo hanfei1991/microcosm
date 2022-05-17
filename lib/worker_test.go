@@ -428,6 +428,62 @@ func TestWorkerGracefulExit(t *testing.T) {
 	require.Regexp(t, ".*fake error.*", err)
 }
 
+func TestWorkerGracefulExitWhileTimeout(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	worker := newMockWorkerImpl(workerID1, masterName)
+	worker.clock = clock.NewMock()
+	worker.clock.(*clock.Mock).Set(time.Now())
+	putMasterMeta(ctx, t, worker.metaClient, &libModel.MasterMetaKVData{
+		ID:         masterName,
+		NodeID:     masterNodeName,
+		Epoch:      1,
+		StatusCode: libModel.MasterStatusInit,
+	})
+
+	worker.On("InitImpl", mock.Anything).Return(nil)
+	worker.On("Status").Return(libModel.WorkerStatus{
+		Code: libModel.WorkerStatusNormal,
+	}, nil)
+
+	err := worker.Init(ctx)
+	require.NoError(t, err)
+
+	worker.On("Tick", mock.Anything).
+		Return(errors.New("fake error")).Once()
+
+	for {
+		err := worker.Poll(ctx)
+		require.NoError(t, err)
+
+		// Make the heartbeat worker tick.
+		worker.clock.(*clock.Mock).Add(time.Second)
+
+		rawMsg, ok := worker.messageSender.TryPop(masterNodeName, libModel.HeartbeatPingTopic(masterName))
+		if !ok {
+			continue
+		}
+		msg := rawMsg.(*libModel.HeartbeatPingMessage)
+		if msg.IsFinished {
+			break
+		}
+	}
+
+	for {
+		err := worker.Poll(ctx)
+		worker.clock.(*clock.Mock).Add(time.Second)
+
+		if err != nil {
+			require.Regexp(t, ".*fake error.*", err)
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 func TestCloseBeforeInit(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

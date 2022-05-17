@@ -465,7 +465,9 @@ func (w *DefaultBaseWorker) runWatchDog(ctx context.Context) error {
 			return errors.Trace(err)
 		}
 		if !isNormal {
-			return derror.ErrWorkerSuicide.GenWithStackByArgs(w.masterClient.MasterID())
+			errOut := derror.ErrWorkerSuicide.GenWithStackByArgs(w.masterClient.MasterID())
+			w.exitController.ForceExit(errOut)
+			return errOut
 		}
 	}
 }
