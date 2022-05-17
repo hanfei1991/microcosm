@@ -880,8 +880,8 @@ func TestResource(t *testing.T) {
 						"count(1)",
 					}).AddRow(0))
 				mock.ExpectExec("INSERT INTO `resource_meta` [(]`created_at`,`updated_at`,`project_id`,`id`,`job_id`,"+
-					"`worker_id`,`executor_id`,`deleted`,`seq_id`[)]").WithArgs(
-					createdAt, updatedAt, "111-222-333", "r333", "j111", "w222", "e444", false, 1).
+					"`worker_id`,`executor_id`,`gc_pending`,`deleted`,`seq_id`[)]").WithArgs(
+					createdAt, updatedAt, "111-222-333", "r333", "j111", "w222", "e444", false, false, 1).
 					WillReturnResult(sqlmock.NewResult(1, 1))
 				mock.ExpectCommit()
 			},
@@ -954,8 +954,8 @@ func TestResource(t *testing.T) {
 			err: cerrors.ErrMetaOpFail.GenWithStackByArgs(),
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
 				mock.ExpectExec("INSERT INTO `resource_meta` [(]`created_at`,`updated_at`,`project_id`,`id`,`job_id`,"+
-					"`worker_id`,`executor_id`,`deleted`,`seq_id`[)]").WithArgs(
-					createdAt, updatedAt, "111-222-333", "r333", "j111", "w222", "e444", true, 1).WillReturnError(&mysql.MySQLError{Number: 1062, Message: "error"})
+					"`worker_id`,`executor_id`,`gc_pending`,`deleted`,`seq_id`[)]").WithArgs(
+					createdAt, updatedAt, "111-222-333", "r333", "j111", "w222", "e444", false, true, 1).WillReturnError(&mysql.MySQLError{Number: 1062, Message: "error"})
 			},
 		},
 		{

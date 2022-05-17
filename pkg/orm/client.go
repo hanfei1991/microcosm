@@ -108,6 +108,7 @@ type ResourceClient interface {
 	QueryResources(ctx context.Context) ([]*resourcemeta.ResourceMeta, error)
 	QueryResourcesByJobID(ctx context.Context, jobID string) ([]*resourcemeta.ResourceMeta, error)
 	QueryResourcesByExecutorID(ctx context.Context, executorID string) ([]*resourcemeta.ResourceMeta, error)
+	SetGCPending(ctx context.Context, ids []resourcemeta.ResourceID) error
 }
 
 // NewClient return the client to operate framework metastore
@@ -606,6 +607,14 @@ func (c *metaOpsClient) QueryResourcesByExecutorID(ctx context.Context, executor
 	}
 
 	return resources, nil
+}
+
+func (c *metaOpsClient) SetGCPending(ctx context.Context, ids []resourcemeta.ResourceID) error {
+	result := c.db.WithContext(ctx).
+		Model(&resourcemeta.ResourceMeta{}).
+		Where("id in ?", ids).
+		Update("gc_pending", true)
+	return cerrors.ErrMetaOpFail.Wrap(result.Error)
 }
 
 // Result defines a query result interface

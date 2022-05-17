@@ -5,7 +5,9 @@ import (
 	gerrors "errors"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/ratelimit"
+	"go.uber.org/zap"
 
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
@@ -112,9 +114,25 @@ func (c *DefaultGCCoordinator) gcByAllJobStatusSnapshot(ctx context.Context, sna
 		}
 	}
 
+	log.L().Info("Added resources to GC queue",
+		zap.Any("resource-ids", toGC))
+
+	return c.metaClient.SetGCPending(ctx, toGC)
 }
 
 func (c *DefaultGCCoordinator) gcByOfflineJobID(ctx context.Context, jobID string) error {
-	// TODO implement me
-	panic("implement me")
+	resources, err := c.metaClient.QueryResourcesByJobID(ctx, jobID)
+	if err != nil {
+		return err
+	}
+
+	toGC := make([]resourcemeta.ResourceID, 0, len(resources))
+	for _, resMeta := range resources {
+		toGC = append(toGC, resMeta.ID)
+	}
+
+	log.L().Info("Added resources to GC queue",
+		zap.Any("resource-ids", toGC))
+
+	return c.metaClient.SetGCPending(ctx, toGC)
 }
