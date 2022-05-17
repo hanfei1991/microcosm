@@ -35,6 +35,9 @@ df-demo:
 	go build -o bin/demoserver ./cmd/demoserver
 	cp ./bin/demoserver ./ansible/roles/common/files/demoserver.bin
 
+df-chaos-case:
+	go build -o bin/df-chaos-case ./chaos/cases
+
 unit_test: check_failpoint_ctl
 	mkdir -p "$(TEST_DIR)"
 	$(FAILPOINT_ENABLE)
