@@ -759,7 +759,7 @@ func (c *workerExitController) PollExit() error {
 
 	switch c.workerExitFsm.Load() {
 	case workerNormal:
-		c.workerExitFsm.Store(workerHalfExit)
+		c.workerExitFsm.CAS(workerNormal, workerHalfExit)
 		c.halfExitTime.Store(c.clock.Now())
 		return derror.ErrWorkerHalfExit.FastGenByArgs()
 	case workerHalfExit:
