@@ -123,7 +123,7 @@ type DefaultBaseWorker struct {
 	cancelBgTasks context.CancelFunc
 	cancelPool    context.CancelFunc
 
-	workerExitFsm atomic.Int32
+	exitController *workerExitController
 
 	clock clock.Clock
 
@@ -180,8 +180,6 @@ func NewBaseWorker(
 		clock:     clock.New(),
 		// [TODO] use tenantID if support multi-tenant
 		userMetaKVClient: kvclient.NewPrefixKVClient(params.UserRawKVClient, tenant.DefaultUserTenantID),
-
-		workerExitFsm: *atomic.NewInt32(workerNormal),
 	}
 }
 
@@ -246,6 +244,7 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) error {
 			}))
 		})
 
+	w.exitController = newWorkerExitController(w.masterClient, w.errCenter, w.clock)
 	w.workerMetaClient = metadata.NewWorkerMetadataClient(w.masterID, w.frameMetaClient)
 
 	w.statusSender = statusutil.NewWriter(
@@ -282,28 +281,9 @@ func (w *DefaultBaseWorker) doPostInit(ctx context.Context) error {
 }
 
 func (w *DefaultBaseWorker) doPoll(ctx context.Context) error {
-	if err := w.errCenter.CheckError(); err != nil {
-		if derror.ErrWorkerSuicide.Equal(err) {
-			// Suicides should result in an immediate exit.
-			w.workerExitFsm.Store(workerExited)
-			return err
-		}
-
-		switch w.workerExitFsm.Load() {
-		case workerNormal:
-			w.workerExitFsm.Store(workerHalfExit)
-			return derror.ErrWorkerHalfExit.FastGenByArgs()
-		case workerHalfExit:
-			if w.masterClient.IsMasterSideClosed() {
-				w.workerExitFsm.Store(workerExited)
-				return err
-			}
-			return derror.ErrWorkerHalfExit.FastGenByArgs()
-		case workerExited:
-			fallthrough
-		default:
-			log.L().Panic("unreachable")
-		}
+	err := w.exitController.PollExit()
+	if err != nil {
+		return err
 	}
 
 	if err := w.messageHandlerManager.CheckError(ctx); err != nil {
@@ -458,7 +438,7 @@ func (w *DefaultBaseWorker) runHeartbeatWorker(ctx context.Context) error {
 			return errors.Trace(ctx.Err())
 		case <-ticker.C:
 			isFinished := false
-			if w.workerExitFsm.Load() == workerHalfExit {
+			if w.exitController.IsExiting() {
 				// If we are in the state workerHalfExit,
 				// we need to notify the master so that the master
 				// marks us as exited.
@@ -734,4 +714,88 @@ func (m *masterClient) getLastMasterAckedPingTime() clock.MonotonicTime {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.lastMasterAckedPingTime
+}
+
+const (
+	workerExitWaitForMasterTimeout = time.Second * 15
+)
+
+// workerExitController implements the exit sequence of
+// a worker. This object is thread-safe.
+// TODO move this to a separate file or package.
+type workerExitController struct {
+	workerExitFsm atomic.Int32
+	halfExitTime  atomic.Time
+	errCenter     *errctx.ErrCenter
+	masterClient  *masterClient
+
+	// clock is to facilitate unit testing.
+	clock clock.Clock
+}
+
+func newWorkerExitController(
+	masterClient *masterClient,
+	errCenter *errctx.ErrCenter,
+	clock clock.Clock,
+) *workerExitController {
+	return &workerExitController{
+		workerExitFsm: *atomic.NewInt32(workerNormal),
+		errCenter:     errCenter,
+		masterClient:  masterClient,
+		clock:         clock,
+	}
+}
+
+// PollExit is called in each tick of the worker.
+// Returning an error other than ErrWorkerHalfExit
+// means that the worker is ready to exit.
+func (c *workerExitController) PollExit() error {
+	err := c.errCenter.CheckError()
+	if err == nil {
+		return nil
+	}
+
+	if derror.ErrWorkerSuicide.Equal(err) {
+		// Suicides should result in an immediate exit.
+		c.workerExitFsm.Store(workerExited)
+		return err
+	}
+
+	switch c.workerExitFsm.Load() {
+	case workerNormal:
+		c.workerExitFsm.Store(workerHalfExit)
+		c.halfExitTime.Store(c.clock.Now())
+		return derror.ErrWorkerHalfExit.FastGenByArgs()
+	case workerHalfExit:
+		if c.masterClient.IsMasterSideClosed() {
+			c.workerExitFsm.Store(workerExited)
+			return err
+		}
+		sinceStartExiting := c.clock.Since(c.halfExitTime.Load())
+		if sinceStartExiting > workerExitWaitForMasterTimeout {
+			// TODO log worker ID and master ID.
+			log.L().Warn("Exiting worker cannot get acknowledgement from master")
+			return err
+		}
+		return derror.ErrWorkerHalfExit.FastGenByArgs()
+	case workerExited:
+		return err
+	default:
+		log.L().Panic("unreachable")
+	}
+	return nil
+}
+
+// ForceExit forces a quick exit without notifying the
+// master. It should be used when suicide is required when
+// we have lost contact with the master.
+func (c *workerExitController) ForceExit(errIn error) {
+	c.errCenter.OnError(errIn)
+	c.workerExitFsm.Store(workerExited)
+}
+
+// IsExiting indicates whether the worker is performing
+// an exit sequence.
+func (c *workerExitController) IsExiting() bool {
+	return c.workerExitFsm.Load() == workerHalfExit
 }
