@@ -757,12 +757,6 @@ func (c *workerExitController) PollExit() error {
 		return nil
 	}
 
-	if derror.ErrWorkerSuicide.Equal(err) {
-		// Suicides should result in an immediate exit.
-		c.workerExitFsm.Store(workerExited)
-		return err
-	}
-
 	switch c.workerExitFsm.Load() {
 	case workerNormal:
 		c.workerExitFsm.Store(workerHalfExit)
