@@ -38,7 +38,7 @@ const (
 )
 
 // HttpHandlerForMetric return http.Handler for prometheus metric
-func HttpHandlerForMetric() http.Handler {
+func HTTPHandlerForMetric() http.Handler {
 	return promhttp.HandlerFor(
 		globalMetricGatherer,
 		promhttp.HandlerOpts{},

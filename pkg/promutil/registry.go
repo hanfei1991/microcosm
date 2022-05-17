@@ -42,7 +42,7 @@ func NewRegistry() *Registry {
 	}
 }
 
-// Register registers the provided Collector of the specified worker
+// MustRegister registers the provided Collector of the specified worker
 func (r *Registry) MustRegister(workerID libModel.WorkerID, c prometheus.Collector) {
 	if c == nil {
 		return
