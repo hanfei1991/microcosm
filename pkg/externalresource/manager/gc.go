@@ -99,8 +99,19 @@ func (c *DefaultGCCoordinator) initializeGC(ctx context.Context) (<-chan JobStat
 }
 
 func (c *DefaultGCCoordinator) gcByAllJobStatusSnapshot(ctx context.Context, snapshot JobStatusesSnapshot) error {
-	// TODO implement me
-	panic("implement me")
+	resources, err := c.metaClient.QueryResources(ctx)
+	if err != nil {
+		return err
+	}
+
+	var toGC []resourcemeta.ResourceID
+	for _, resMeta := range resources {
+		if _, exists := snapshot[resMeta.Job]; !exists {
+			// The resource belongs to a deleted job.
+			toGC = append(toGC, resMeta.ID)
+		}
+	}
+
 }
 
 func (c *DefaultGCCoordinator) gcByOfflineJobID(ctx context.Context, jobID string) error {
