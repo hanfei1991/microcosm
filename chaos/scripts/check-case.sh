@@ -18,6 +18,7 @@ for i in {1..20}; do
 		if [[ $failed -gt 0 ]]; then
 			echo "chaos-test-case job has failed"
 			kubectl logs job.batch/chaos-test-case
+            kubectl describe jobs/chaos-test-case
 			break
 		fi
 	fi
