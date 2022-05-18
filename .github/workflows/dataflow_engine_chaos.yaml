@@ -81,6 +81,7 @@ jobs:
 
       - name: Build Dataflow engine docker image
         run: |
+          cp -r $GITHUB_WORKSPACE/chaos/cases/conf/ $GITHUB_WORKSPACE/bin/
           docker build -f $GITHUB_WORKSPACE/chaos/manifests/Dockerfile -t dataflow:chaos $GITHUB_WORKSPACE/bin
           docker image list
 

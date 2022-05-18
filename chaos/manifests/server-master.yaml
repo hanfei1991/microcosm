@@ -38,6 +38,8 @@ spec:
           image: dataflow:chaos
           imagePullPolicy: IfNotPresent
           volumeMounts:
+            - mountPath: /data
+              name: server-master-data
             - mountPath: /log
               name: server-master-log
           env:
@@ -63,15 +65,16 @@ spec:
             - "--advertise-peer-urls=http://$(MY_POD_NAME).server-master.$(MY_POD_NAMESPACE):10239"
             - "--initial-cluster=server-master-0=http://server-master-0.server-master.$(MY_POD_NAMESPACE):10239,server-master-1=http://server-master-1.server-master.$(MY_POD_NAMESPACE):10239,server-master-2=http://server-master-2.server-master.$(MY_POD_NAMESPACE):10239"
             - "--log-file=/log/$(MY_POD_NAME).log"
+            - "--config=/conf/server-master.toml"
   volumeClaimTemplates:
     - metadata:
-        name: server-master
+        name: server-master-data
       spec:
         accessModes:
           - ReadWriteOnce
         resources:
           requests:
-            storage: 1Gi
+            storage: 2Gi
     - metadata:
         name: server-master-log
       spec:
