@@ -21,9 +21,11 @@ type Notifier[T any] struct {
 
 	queue *containers.SliceQueue[T]
 
+	closed        atomic.Bool
 	closeCh       chan struct{}
 	synchronizeCh chan struct{}
-	closeOnce     sync.Once
+
+	wg sync.WaitGroup
 }
 
 // Receiver is the receiving endpoint of a single-producer-multiple-consumer
@@ -38,25 +40,14 @@ type Receiver[T any] struct {
 	notifier *Notifier[T]
 }
 
-func (r *Receiver[T]) close() {
-	r.closed.Store(true)
-	r.closeOnce.Do(
-		func() {
-			close(r.C)
-		})
-}
-
 // Close closes the receiver
 func (r *Receiver[T]) Close() {
-	r.closed.Store(true)
-	select {
-	case <-r.notifier.synchronizeCh:
-	case <-r.notifier.closeCh:
-	}
-
 	r.closeOnce.Do(
 		func() {
+			r.closed.Store(true)
+			<-r.notifier.synchronizeCh
 			close(r.C)
+			r.notifier.receivers.Delete(r.id)
 		})
 }
 
@@ -69,7 +60,11 @@ func NewNotifier[T any]() *Notifier[T] {
 		synchronizeCh: make(chan struct{}),
 	}
 
-	go ret.run()
+	ret.wg.Add(1)
+	go func() {
+		defer ret.wg.Done()
+		ret.run()
+	}()
 	return ret
 }
 
@@ -94,21 +89,18 @@ func (n *Notifier[T]) Notify(event T) {
 
 // Close closes the notifier.
 func (n *Notifier[T]) Close() {
-	n.closeOnce.Do(func() {
-		close(n.closeCh)
+	if n.closed.Swap(true) {
+		// Ensures idempotency of closing once.
+		return
+	}
 
-		var receivers []*Receiver[T]
-		n.receivers.Range(func(_, value any) bool {
-			receiver := value.(*Receiver[T])
-			receivers = append(receivers, receiver)
-			return true
-		})
+	close(n.closeCh)
+	n.wg.Wait()
 
-		<-n.synchronizeCh
-
-		for _, receiver := range receivers {
-			receiver.close()
-		}
+	n.receivers.Range(func(_, value any) bool {
+		receiver := value.(*Receiver[T])
+		receiver.Close()
+		return true
 	})
 }
 
