@@ -14,7 +14,7 @@ const (
 	DefaultUserTenantID = "def_default_user"
 )
 
-// ProjectInfo is the tenant/project information which is consistent with DBaas
+// ProjectInfo is the tenant/project information which is consistent with cloud service provider
 type ProjectInfo struct {
 	TenantID  Tenant
 	ProjectID ProjectID

@@ -2,9 +2,9 @@ package promutil
 
 import (
 	libModel "github.com/hanfei1991/microcosm/lib/model"
-
-	//nolint:staticcheck // Ignore SA1019. Need to keep deprecated package for compatibility.
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/prometheus/client_golang/prometheus"
+	"go.uber.org/zap"
 )
 
 type wrappingFactory struct {
@@ -18,8 +18,6 @@ type wrappingFactory struct {
 	// constLabels is added to user metric by default to avoid metric conflict
 	constLabels prometheus.Labels
 }
-
-// TODO: should we clone the opts and modify?
 
 // NewCounter works like the function of the same name in the prometheus
 // package, but it automatically registers the Counter with the Factory's
@@ -82,7 +80,7 @@ func wrapCounterOpts(prefix string, constLabels prometheus.Labels, opts *prometh
 	cls := opts.ConstLabels
 	for name, value := range constLabels {
 		if _, exists := cls[name]; exists {
-			panic("duplicate label name")
+			log.L().Panic("duplicate label name", zap.String("label", name))
 		}
 		cls[name] = value
 	}
@@ -97,7 +95,7 @@ func wrapGaugeOpts(prefix string, constLabels prometheus.Labels, opts *prometheu
 	cls := opts.ConstLabels
 	for name, value := range constLabels {
 		if _, exists := cls[name]; exists {
-			panic("duplicate label name")
+			log.L().Panic("duplicate label name", zap.String("label", name))
 		}
 		cls[name] = value
 	}
@@ -112,7 +110,7 @@ func wrapHistogramOpts(prefix string, constLabels prometheus.Labels, opts *prome
 	cls := opts.ConstLabels
 	for name, value := range constLabels {
 		if _, exists := cls[name]; exists {
-			panic("duplicate label name")
+			log.L().Panic("duplicate label name", zap.String("label", name))
 		}
 		cls[name] = value
 	}
