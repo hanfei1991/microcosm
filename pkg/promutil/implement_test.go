@@ -85,4 +85,4 @@ func TestWrapCounterOptsLableDuplicate(t *testing.T) {
 	require.True(t, false)
 }
 
-// Test prometheus metric method, should not change there behavior
+//[TODO]: Test prometheus metric method, should not change their behavior
