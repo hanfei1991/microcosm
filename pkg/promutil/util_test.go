@@ -10,6 +10,11 @@ import (
 )
 
 func TestNewFactory4JobMaster(t *testing.T) {
+	t.Parallel()
+
+	reg := NewRegistry()
+	require.NotNil(t, reg)
+
 	cases := []struct {
 		info    tenant.ProjectInfo
 		jobType libModel.JobType
@@ -24,11 +29,11 @@ func TestNewFactory4JobMaster(t *testing.T) {
 			jobType: "DM",
 			jobID:   "job0",
 			output: &wrappingFactory{
-				r:      globalMetricRegistry,
+				r:      reg,
 				prefix: "DM",
 				id:     "job0",
 				constLabels: prometheus.Labels{
-					constLableTenantKey:  "user0",
+					constLabelTenantKey:  "user0",
 					constLabelProjectKey: "project0",
 					constLabelJobKey:     "job0",
 				},
@@ -37,12 +42,16 @@ func TestNewFactory4JobMaster(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		f := NewFactory4JobMaster(c.info, c.jobType, c.jobID)
+		f := NewFactory4JobMaster(reg, c.info, c.jobType, c.jobID)
 		require.Equal(t, c.output, f)
 	}
 }
 
 func TestNewFactory4Worker(t *testing.T) {
+	t.Parallel()
+
+	reg := NewRegistry()
+	require.NotNil(t, reg)
 	cases := []struct {
 		info     tenant.ProjectInfo
 		jobType  libModel.JobType
@@ -59,11 +68,11 @@ func TestNewFactory4Worker(t *testing.T) {
 			jobID:    "job0",
 			workerID: "worker0",
 			output: &wrappingFactory{
-				r:      globalMetricRegistry,
+				r:      reg,
 				prefix: "DM",
 				id:     "worker0",
 				constLabels: prometheus.Labels{
-					constLableTenantKey:  "user0",
+					constLabelTenantKey:  "user0",
 					constLabelProjectKey: "project0",
 					constLabelJobKey:     "job0",
 					constLabelWorkerKey:  "worker0",
@@ -73,18 +82,22 @@ func TestNewFactory4Worker(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		f := NewFactory4Worker(c.info, c.jobType, c.jobID, c.workerID)
+		f := NewFactory4Worker(reg, c.info, c.jobType, c.jobID, c.workerID)
 		require.Equal(t, c.output, f)
 	}
 }
 
 func TestNewFactory4Framework(t *testing.T) {
+	t.Parallel()
+
+	reg := NewRegistry()
+	require.NotNil(t, reg)
 	cases := []struct {
 		output Factory
 	}{
 		{
 			output: &wrappingFactory{
-				r:  globalMetricRegistry,
+				r:  reg,
 				id: frameworkID,
 				constLabels: prometheus.Labels{
 					constLabelFrameworkKey: "true",
@@ -94,7 +107,7 @@ func TestNewFactory4Framework(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		f := NewFactory4Framework()
+		f := NewFactory4Framework(reg)
 		require.Equal(t, c.output, f)
 	}
 }

@@ -28,8 +28,8 @@ const (
 	constLabelFrameworkKey = "framework"
 
 	/// app const label
-	// constLableTenantKey and constLabelProjectKey is used to recognize metric for tenant/project
-	constLableTenantKey  = "tenant"
+	// constLabelTenantKey and constLabelProjectKey is used to recognize metric for tenant/project
+	constLabelTenantKey  = "tenant"
 	constLabelProjectKey = "project_id"
 	// constLabelJobKey is used to recognize jobs of the same job type
 	constLabelJobKey = "job_id"
@@ -46,13 +46,13 @@ func HTTPHandlerForMetric() http.Handler {
 }
 
 // NewFactory4JobMaster return a Factory for jobmaster
-func NewFactory4JobMaster(info tenant.ProjectInfo, jobType libModel.JobType, jobID libModel.MasterID) Factory {
+func NewFactory4JobMaster(reg *Registry, info tenant.ProjectInfo, jobType libModel.JobType, jobID libModel.MasterID) Factory {
 	return &wrappingFactory{
-		r:      globalMetricRegistry,
+		r:      reg,
 		prefix: jobType,
 		id:     jobID,
 		constLabels: prometheus.Labels{
-			constLableTenantKey:  info.TenantID,
+			constLabelTenantKey:  info.TenantID,
 			constLabelProjectKey: info.ProjectID,
 			constLabelJobKey:     jobID,
 		},
@@ -60,15 +60,15 @@ func NewFactory4JobMaster(info tenant.ProjectInfo, jobType libModel.JobType, job
 }
 
 // NewFactory4Worker return a Factory for worker
-func NewFactory4Worker(info tenant.ProjectInfo, jobType libModel.JobType, jobID libModel.MasterID,
+func NewFactory4Worker(reg *Registry, info tenant.ProjectInfo, jobType libModel.JobType, jobID libModel.MasterID,
 	workerID libModel.WorkerID,
 ) Factory {
 	return &wrappingFactory{
-		r:      globalMetricRegistry,
+		r:      reg,
 		prefix: jobType,
 		id:     workerID,
 		constLabels: prometheus.Labels{
-			constLableTenantKey:  info.TenantID,
+			constLabelTenantKey:  info.TenantID,
 			constLabelProjectKey: info.ProjectID,
 			constLabelJobKey:     jobID,
 			constLabelWorkerKey:  workerID,
@@ -79,9 +79,9 @@ func NewFactory4Worker(info tenant.ProjectInfo, jobType libModel.JobType, jobID 
 // NewFactory4Framework return a Factory for dataflow framework
 // NOTICE: we use auto service label tagged by cloud service to distinguish
 // different dataflow engine or different executor
-func NewFactory4Framework() Factory {
+func NewFactory4Framework(reg *Registry) Factory {
 	return &wrappingFactory{
-		r:  globalMetricRegistry,
+		r:  reg,
 		id: frameworkID,
 		constLabels: prometheus.Labels{
 			constLabelFrameworkKey: "true",
