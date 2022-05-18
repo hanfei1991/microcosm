@@ -11,7 +11,6 @@ spec:
           imagePullPolicy: IfNotPresent
           command:
             - "/df-chaos-case"
-            - "--config-dir=/conf" # we put config files into `/conf` when building the docker image
             - "--duration=20m"
       restartPolicy: Never
   backoffLimit: 0 # fail immediately
