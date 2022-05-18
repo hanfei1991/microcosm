@@ -6,10 +6,10 @@ metadata:
     app: server-master
 spec:
   ports:
-    - name: server-master
+    - name: port-master
       port: 10240
       targetPort: 10240
-    - name: server-master-peer
+    - name: port-mpeer
       port: 10239
       targetPort: 10239
   selector:
@@ -51,9 +51,9 @@ spec:
                   fieldPath: metadata.namespace
           ports:
             - containerPort: 10240
-              name: server-master
+              name: port-master
             - containerPort: 10239
-              name: server-master-peer
+              name: port-mpeer
           command:
             - "/df-server-master"
             - "--name=$(MY_POD_NAME)"

@@ -35,8 +35,6 @@ spec:
           image: dataflow:chaos # build this image in GitHub action workflow
           imagePullPolicy: IfNotPresent
           volumeMounts:
-            - mountPath: /data
-              name: executor
             - mountPath: /log
               name: executor-log
           env:
