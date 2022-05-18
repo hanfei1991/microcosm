@@ -23,7 +23,7 @@ type wrappingFactory struct {
 // package, but it automatically registers the Counter with the Factory's
 // Registerer. Panic if it can't register successfully. Thread-safe.
 func (f *wrappingFactory) NewCounter(opts prometheus.CounterOpts) prometheus.Counter {
-	c := prometheus.NewCounter(*wrapOpts(f.prefix, f.constLabels, &opts))
+	c := prometheus.NewCounter(*wrapCounterOpts(f.prefix, f.constLabels, &opts))
 	f.r.MustRegister(f.id, c)
 	return c
 }
@@ -32,7 +32,7 @@ func (f *wrappingFactory) NewCounter(opts prometheus.CounterOpts) prometheus.Cou
 // prometheus, package but it automatically registers the CounterVec with
 // the Factory's Registerer. Panic if it can't register successfully.Thread-safe.
 func (f *wrappingFactory) NewCounterVec(opts prometheus.CounterOpts, labelNames []string) *prometheus.CounterVec {
-	c := prometheus.NewCounterVec(*wrapOpts(f.prefix, f.constLabels, &opts), labelNames)
+	c := prometheus.NewCounterVec(*wrapCounterOpts(f.prefix, f.constLabels, &opts), labelNames)
 	f.r.MustRegister(f.id, c)
 	return c
 }
@@ -41,7 +41,7 @@ func (f *wrappingFactory) NewCounterVec(opts prometheus.CounterOpts, labelNames 
 // package, but it automatically registers the Gauge with the Factory's
 // Registerer. Panic if it can't register successfully.Thread-safe.
 func (f *wrappingFactory) NewGauge(opts prometheus.GaugeOpts) prometheus.Gauge {
-	c := prometheus.NewGauge(*wrapOpts(f.prefix, f.constLabels, &opts))
+	c := prometheus.NewGauge(*wrapGaugeOpts(f.prefix, f.constLabels, &opts))
 	f.r.MustRegister(f.id, c)
 	return c
 }
@@ -50,7 +50,7 @@ func (f *wrappingFactory) NewGauge(opts prometheus.GaugeOpts) prometheus.Gauge {
 // package but it automatically registers the GaugeVec with the Factory's
 // Registerer. Panic if it can't register successfully.Thread-safe.
 func (f *wrappingFactory) NewGaugeVec(opts prometheus.GaugeOpts, labelNames []string) *prometheus.GaugeVec {
-	c := prometheus.NewGaugeVec(*wrapOpts(f.prefix, f.constLabels, &opts), labelNames)
+	c := prometheus.NewGaugeVec(*wrapGaugeOpts(f.prefix, f.constLabels, &opts), labelNames)
 	f.r.MustRegister(f.id, c)
 	return c
 }
@@ -59,7 +59,7 @@ func (f *wrappingFactory) NewGaugeVec(opts prometheus.GaugeOpts, labelNames []st
 // package but it automatically registers the Histogram with the Factory's
 // Registerer. Panic if it can't register successfully.Thread-safe.
 func (f *wrappingFactory) NewHistogram(opts prometheus.HistogramOpts) prometheus.Histogram {
-	c := prometheus.NewHistogram(*wrapOpts(f.prefix, f.constLabels, &opts))
+	c := prometheus.NewHistogram(*wrapHistogramOpts(f.prefix, f.constLabels, &opts))
 	f.r.MustRegister(f.id, c)
 	return c
 }
@@ -68,19 +68,43 @@ func (f *wrappingFactory) NewHistogram(opts prometheus.HistogramOpts) prometheus
 // prometheus package but it automatically registers the HistogramVec
 // with the Factory's Registerer. Panic if it can't register successfully.Thread-safe.
 func (f *wrappingFactory) NewHistogramVec(opts prometheus.HistogramOpts, labelNames []string) *prometheus.HistogramVec {
-	c := prometheus.NewHistogramVec(*wrapOpts(f.prefix, f.constLabels, &opts), labelNames)
+	c := prometheus.NewHistogramVec(*wrapHistogramOpts(f.prefix, f.constLabels, &opts), labelNames)
 	f.r.MustRegister(f.id, c)
 	return c
 }
 
-type IOpts any
-
-func wrapOpts[O IOpts](prefix string, constLabels prometheus.Labels, opts O) O {
+func wrapCounterOpts(prefix string, constLabels prometheus.Labels, opts *prometheus.CounterOpts) *prometheus.CounterOpts {
 	opts.Namespace = prefix + "_" + opts.Namespace
 	cls := opts.ConstLabels
 	for name, value := range constLabels {
 		if _, exists := cls[name]; exists {
-			panic("duplicate label name: %s", name)
+			panic("duplicate label name")
+		}
+		cls[name] = value
+	}
+
+	return opts
+}
+
+func wrapGaugeOpts(prefix string, constLabels prometheus.Labels, opts *prometheus.GaugeOpts) *prometheus.GaugeOpts {
+	opts.Namespace = prefix + "_" + opts.Namespace
+	cls := opts.ConstLabels
+	for name, value := range constLabels {
+		if _, exists := cls[name]; exists {
+			panic("duplicate label name")
+		}
+		cls[name] = value
+	}
+
+	return opts
+}
+
+func wrapHistogramOpts(prefix string, constLabels prometheus.Labels, opts *prometheus.HistogramOpts) *prometheus.HistogramOpts {
+	opts.Namespace = prefix + "_" + opts.Namespace
+	cls := opts.ConstLabels
+	for name, value := range constLabels {
+		if _, exists := cls[name]; exists {
+			panic("duplicate label name")
 		}
 		cls[name] = value
 	}

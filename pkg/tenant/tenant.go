@@ -1,8 +1,8 @@
 package tenant
 
 type (
-	// TenantID is the tenant id type
-	TenantID = string
+	// Tenant is the tenant id type
+	Tenant = string
 	// ProjectID is the project id type of tenant
 	ProjectID = string
 )
@@ -16,6 +16,6 @@ const (
 
 // ProjectInfo is the tenant/project information which is consistent with DBaas
 type ProjectInfo struct {
-	TenantID  TenantID
+	TenantID  Tenant
 	ProjectID ProjectID
 }

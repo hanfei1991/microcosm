@@ -37,7 +37,7 @@ const (
 	constLableWorkerKey = "worker_id"
 )
 
-// HttpHandlerForMetric return http.Handler for prometheus metric
+// HTTPHandlerForMetric return http.Handler for prometheus metric
 func HTTPHandlerForMetric() http.Handler {
 	return promhttp.HandlerFor(
 		globalMetricGatherer,
@@ -51,6 +51,7 @@ func NewFactory4JobMaster(info tenant.ProjectInfo, jobType libModel.JobType, job
 	return &wrappingFactory{
 		r:      globalMetricRegistry,
 		prefix: jobType,
+		id:     jobID,
 		constLabels: prometheus.Labels{
 			constLableTenantKey:  info.TenantID,
 			constLabelProjectKey: info.ProjectID,
@@ -62,10 +63,12 @@ func NewFactory4JobMaster(info tenant.ProjectInfo, jobType libModel.JobType, job
 // NewFactory4Worker return a Factory for worker
 // TODO: jobType need format
 func NewFactory4Worker(info tenant.ProjectInfo, jobType libModel.JobType, jobID libModel.MasterID,
-	workerID libModel.WorkerID) Factory {
+	workerID libModel.WorkerID,
+) Factory {
 	return &wrappingFactory{
 		r:      globalMetricRegistry,
 		prefix: jobType,
+		id:     workerID,
 		constLabels: prometheus.Labels{
 			constLableTenantKey:  info.TenantID,
 			constLabelProjectKey: info.ProjectID,
@@ -80,7 +83,8 @@ func NewFactory4Worker(info tenant.ProjectInfo, jobType libModel.JobType, jobID 
 // or different executor
 func NewFactory4Framework() Factory {
 	return &wrappingFactory{
-		r: globalMetricRegistry,
+		r:  globalMetricRegistry,
+		id: frameworkID,
 		constLabels: prometheus.Labels{
 			constLabelFrameworkKey: "true",
 		},
