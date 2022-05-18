@@ -115,7 +115,7 @@ jobs:
       - name: Wait for server-master ready
         run: |
           sleep 10
-          kubectl wait --for=condition=Ready pod -l app=server-master --all --timeout=300s || true
+          kubectl wait --for=condition=Ready pod -l app=server-master --all --timeout=60s|| true
           echo "<<<<< show pvc >>>>>"
           kubectl get pvc -l app=server-master -o wide
           echo "<<<<< show pv >>>>>"
@@ -151,7 +151,7 @@ jobs:
 
       - name: Wait for executor ready
         run: |
-          kubectl wait --for=condition=Ready pod -l app=executor --all --timeout=300s || true
+          kubectl wait --for=condition=Ready pod -l app=executor --all --timeout=60s|| true
           echo "<<<<< show pvc >>>>>"
           kubectl get pvc -l app=executor -o wide
           echo "<<<<< show pv >>>>>"
