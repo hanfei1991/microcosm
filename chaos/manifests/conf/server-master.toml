@@ -2,7 +2,7 @@
 data-dir = "/data/etcd"
 
 [frame-metastore-conf]
-endpoints = ["metastore-framework-mysql-0.metastore:3336"]
+endpoints = ["metastore-framework-mysql-0.metastore:3306"]
 auth.user = "root"
 auth.passwd = ""
 
