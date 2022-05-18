@@ -12,7 +12,7 @@ import (
 var _ prometheus.Gatherer = globalMetricGatherer
 
 // NOTICE: we don't use prometheus.DefaultRegistry in case of incorrect usage of a
-// non-wrapped metrici by app(user)
+// non-wrapped metric by app(user)
 var (
 	globalMetricRegistry                     = NewRegistry()
 	globalMetricGatherer prometheus.Gatherer = globalMetricRegistry
@@ -33,7 +33,7 @@ type Registry struct {
 	collectorByWorker map[libModel.WorkerID][]prometheus.Collector
 }
 
-// NewRegistry new a Registry
+// NewRegistry return a new Registry
 func NewRegistry() *Registry {
 	return &Registry{
 		Registry:          prometheus.NewRegistry(),
@@ -79,8 +79,6 @@ func (r *Registry) Unregister(workerID libModel.WorkerID) {
 
 // Gather implements Gatherer interface
 func (r *Registry) Gather() ([]*dto.MetricFamily, error) {
-	r.Lock()
-	defer r.Unlock()
-
+	// NOT NEED lock here. prometheus.Registry has thread-safe methods
 	return r.Registry.Gather()
 }

@@ -10,7 +10,7 @@ import (
 type wrappingFactory struct {
 	r *Registry
 	// ID identify the worker(jobmaster/worker) the factory owns
-	// It's used to unregister all collectors when worker commit suicide
+	// It's used to unregister all collectors when worker exits normally or commits suicide
 	id libModel.WorkerID
 	// prefix is added to the metric name to avoid cross app metric conflict
 	// e.g. $prefix_$namespace_$subsystem_$name

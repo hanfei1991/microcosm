@@ -158,6 +158,7 @@ func TestMustRegisterFailDuplicateNameLabels(t *testing.T) {
 // metric names are same, but help + labels name are inconsistent
 func TestMustRegisterFailInconsistent(t *testing.T) {
 	t.Parallel()
+
 	defer func() {
 		err := recover()
 		require.NotNil(t, err)
@@ -179,4 +180,45 @@ func TestMustRegisterFailInconsistent(t *testing.T) {
 			"k1": "v0",
 		},
 	}))
+}
+
+func TestUnregister(t *testing.T) {
+	t.Parallel()
+
+	reg := NewRegistry()
+	require.NotNil(t, reg.Registry)
+	reg.MustRegister("worker0", prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "counter5",
+		ConstLabels: prometheus.Labels{
+			"k0": "v0",
+		},
+	}))
+	reg.MustRegister("worker0", prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "counter5",
+		ConstLabels: prometheus.Labels{
+			"k0": "v1",
+		},
+	}))
+	reg.MustRegister("worker1", prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "counter6",
+		ConstLabels: prometheus.Labels{
+			"k0": "v1",
+		},
+	}))
+	require.Len(t, reg.collectorByWorker, 2)
+	require.Len(t, reg.collectorByWorker["worker0"], 2)
+	require.Len(t, reg.collectorByWorker["worker1"], 1)
+
+	reg.Unregister("worker0")
+	require.Len(t, reg.collectorByWorker, 1)
+	require.Len(t, reg.collectorByWorker["worker0"], 0)
+
+	// re-register the same metric to check if it's unregister successfully
+	reg.MustRegister("worker0", prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "counter5",
+		ConstLabels: prometheus.Labels{
+			"k0": "v0",
+		},
+	}))
+	require.Len(t, reg.collectorByWorker, 2)
 }

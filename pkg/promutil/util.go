@@ -32,9 +32,9 @@ const (
 	constLableTenantKey  = "tenant"
 	constLabelProjectKey = "project_id"
 	// constLabelJobKey is used to recognize jobs of the same job type
-	constLableJobKey = "job_id"
+	constLabelJobKey = "job_id"
 	// constLabelWorkerKey is used to recognize workers of the same job
-	constLableWorkerKey = "worker_id"
+	constLabelWorkerKey = "worker_id"
 )
 
 // HTTPHandlerForMetric return http.Handler for prometheus metric
@@ -46,7 +46,6 @@ func HTTPHandlerForMetric() http.Handler {
 }
 
 // NewFactory4JobMaster return a Factory for jobmaster
-// TODO: jobType need format
 func NewFactory4JobMaster(info tenant.ProjectInfo, jobType libModel.JobType, jobID libModel.MasterID) Factory {
 	return &wrappingFactory{
 		r:      globalMetricRegistry,
@@ -55,13 +54,12 @@ func NewFactory4JobMaster(info tenant.ProjectInfo, jobType libModel.JobType, job
 		constLabels: prometheus.Labels{
 			constLableTenantKey:  info.TenantID,
 			constLabelProjectKey: info.ProjectID,
-			constLableJobKey:     jobID,
+			constLabelJobKey:     jobID,
 		},
 	}
 }
 
 // NewFactory4Worker return a Factory for worker
-// TODO: jobType need format
 func NewFactory4Worker(info tenant.ProjectInfo, jobType libModel.JobType, jobID libModel.MasterID,
 	workerID libModel.WorkerID,
 ) Factory {
@@ -72,15 +70,15 @@ func NewFactory4Worker(info tenant.ProjectInfo, jobType libModel.JobType, jobID 
 		constLabels: prometheus.Labels{
 			constLableTenantKey:  info.TenantID,
 			constLabelProjectKey: info.ProjectID,
-			constLableJobKey:     jobID,
-			constLableWorkerKey:  workerID,
+			constLabelJobKey:     jobID,
+			constLabelWorkerKey:  workerID,
 		},
 	}
 }
 
 // NewFactory4Framework return a Factory for dataflow framework
-// NOTICE: we use auto service label to distinguish different dataflow engine
-// or different executor
+// NOTICE: we use auto service label tagged by cloud service to distinguish
+// different dataflow engine or different executor
 func NewFactory4Framework() Factory {
 	return &wrappingFactory{
 		r:  globalMetricRegistry,
