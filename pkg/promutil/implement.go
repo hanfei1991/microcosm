@@ -19,6 +19,8 @@ type wrappingFactory struct {
 	constLabels prometheus.Labels
 }
 
+// TODO: should we clone the opts and modify?
+
 // NewCounter works like the function of the same name in the prometheus
 // package, but it automatically registers the Counter with the Factory's
 // Registerer. Panic if it can't register successfully. Thread-safe.
@@ -74,7 +76,9 @@ func (f *wrappingFactory) NewHistogramVec(opts prometheus.HistogramOpts, labelNa
 }
 
 func wrapCounterOpts(prefix string, constLabels prometheus.Labels, opts *prometheus.CounterOpts) *prometheus.CounterOpts {
-	opts.Namespace = prefix + "_" + opts.Namespace
+	if prefix != "" {
+		opts.Namespace = prefix + "_" + opts.Namespace
+	}
 	cls := opts.ConstLabels
 	for name, value := range constLabels {
 		if _, exists := cls[name]; exists {
@@ -87,7 +91,9 @@ func wrapCounterOpts(prefix string, constLabels prometheus.Labels, opts *prometh
 }
 
 func wrapGaugeOpts(prefix string, constLabels prometheus.Labels, opts *prometheus.GaugeOpts) *prometheus.GaugeOpts {
-	opts.Namespace = prefix + "_" + opts.Namespace
+	if prefix != "" {
+		opts.Namespace = prefix + "_" + opts.Namespace
+	}
 	cls := opts.ConstLabels
 	for name, value := range constLabels {
 		if _, exists := cls[name]; exists {
@@ -100,7 +106,9 @@ func wrapGaugeOpts(prefix string, constLabels prometheus.Labels, opts *prometheu
 }
 
 func wrapHistogramOpts(prefix string, constLabels prometheus.Labels, opts *prometheus.HistogramOpts) *prometheus.HistogramOpts {
-	opts.Namespace = prefix + "_" + opts.Namespace
+	if prefix != "" {
+		opts.Namespace = prefix + "_" + opts.Namespace
+	}
 	cls := opts.ConstLabels
 	for name, value := range constLabels {
 		if _, exists := cls[name]; exists {

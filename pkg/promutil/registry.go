@@ -9,6 +9,8 @@ import (
 	dto "github.com/prometheus/client_model/go"
 )
 
+var _ prometheus.Gatherer = globalMetricGatherer
+
 // NOTICE: we don't use prometheus.DefaultRegistry in case of incorrect usage of a
 // non-wrapped metrici by app(user)
 var (
@@ -18,19 +20,16 @@ var (
 
 func init() {
 	globalMetricRegistry.MustRegister(systemID, collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
-	// NOTICE: v1.12.1 revert some runtime metric for go collector
-	// ref: https://github.com/prometheus/client_golang/releases
 	globalMetricRegistry.MustRegister(systemID, collectors.NewGoCollector(collectors.WithGoCollections(
 		collectors.GoRuntimeMemStatsCollection|collectors.GoRuntimeMetricsCollection)))
 }
 
 // Registry is used for registering metric
 type Registry struct {
-	sync.Mutex // TODO: what kind of lock??
+	sync.Mutex
 	*prometheus.Registry
 
 	// collectorByWorker is for cleaning all collectors for specific worker(jobmaster/worker)
-	// when it commits suicide if lost heartbeat
 	collectorByWorker map[libModel.WorkerID][]prometheus.Collector
 }
 
