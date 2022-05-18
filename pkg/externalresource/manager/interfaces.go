@@ -4,7 +4,9 @@ import (
 	"context"
 
 	libModel "github.com/hanfei1991/microcosm/lib/model"
+	"github.com/hanfei1991/microcosm/model"
 	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
+	"github.com/hanfei1991/microcosm/pkg/notifier"
 )
 
 // ExecutorInfoProvider describes an object that maintains a list
@@ -12,6 +14,9 @@ import (
 type ExecutorInfoProvider interface {
 	HasExecutor(executorID string) bool
 	ListExecutors() []string
+	WatchExecutors(
+		ctx context.Context,
+	) ([]model.ExecutorID, *notifier.Receiver[model.ExecutorID], error)
 }
 
 // JobStatus describes the a Job's status.

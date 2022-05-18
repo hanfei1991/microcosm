@@ -1,9 +1,12 @@
 package manager
 
 import (
+	"context"
 	"sync"
 
+	"github.com/hanfei1991/microcosm/model"
 	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
+	"github.com/hanfei1991/microcosm/pkg/notifier"
 )
 
 // MockExecutorInfoProvider implements ExecutorManager interface
@@ -55,4 +58,12 @@ func (p *MockExecutorInfoProvider) ListExecutors() (ret []string) {
 		ret = append(ret, string(id))
 	}
 	return
+}
+
+// WatchExecutors implements ExecutorManager.WatchExecutors
+func (p *MockExecutorInfoProvider) WatchExecutors(
+	ctx context.Context,
+) ([]model.ExecutorID, *notifier.Receiver[model.ExecutorID], error) {
+	// TODO implement me
+	panic("implement me")
 }

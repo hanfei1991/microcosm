@@ -109,6 +109,8 @@ type ResourceClient interface {
 	QueryResourcesByJobID(ctx context.Context, jobID string) ([]*resourcemeta.ResourceMeta, error)
 	QueryResourcesByExecutorID(ctx context.Context, executorID string) ([]*resourcemeta.ResourceMeta, error)
 	SetGCPending(ctx context.Context, ids []resourcemeta.ResourceID) error
+	DeleteResourcesByExecutorID(ctx context.Context, executorID string) error
+	DeleteResources(ctx context.Context, resourceIDs []string) (Result, error)
 }
 
 // NewClient return the client to operate framework metastore
@@ -566,6 +568,16 @@ func (c *metaOpsClient) DeleteResource(ctx context.Context, resourceID string) (
 	return &ormResult{rowsAffected: result.RowsAffected}, nil
 }
 
+// DeleteResources delete the specified resources
+func (c *metaOpsClient) DeleteResources(ctx context.Context, resourceIDs []string) (Result, error) {
+	result := c.db.Where("id in ?", resourceIDs).Delete(&resourcemeta.ResourceMeta{})
+	if result.Error != nil {
+		return nil, cerrors.ErrMetaOpFail.Wrap(result.Error)
+	}
+
+	return &ormResult{rowsAffected: result.RowsAffected}, nil
+}
+
 // GetResourceByID query resource of the resource_id
 func (c *metaOpsClient) GetResourceByID(ctx context.Context, resourceID string) (*resourcemeta.ResourceMeta, error) {
 	var resource resourcemeta.ResourceMeta
@@ -607,6 +619,15 @@ func (c *metaOpsClient) QueryResourcesByExecutorID(ctx context.Context, executor
 	}
 
 	return resources, nil
+}
+
+func (c *metaOpsClient) DeleteResourcesByExecutorID(ctx context.Context, executorID string) error {
+	tx := c.db.WithContext(ctx).Where("executor_id = ?", executorID).
+		Delete(&resourcemeta.ResourceMeta{})
+	if tx.Error != nil {
+		return cerrors.ErrMetaOpFail.Wrap(tx.Error)
+	}
+	return nil
 }
 
 func (c *metaOpsClient) SetGCPending(ctx context.Context, ids []resourcemeta.ResourceID) error {

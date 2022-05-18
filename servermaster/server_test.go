@@ -16,6 +16,7 @@ import (
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/manager"
+	"github.com/hanfei1991/microcosm/pkg/notifier"
 	"github.com/hanfei1991/microcosm/servermaster/scheduler"
 
 	"github.com/phayes/freeport"
@@ -261,6 +262,11 @@ func (m *mockJobManager) WatchJobStatuses(ctx context.Context) (manager.JobStatu
 type mockExecutorManager struct {
 	executorMu sync.RWMutex
 	count      map[model.ExecutorStatus]int
+}
+
+func (m *mockExecutorManager) WatchExecutors(ctx context.Context) ([]model.ExecutorID, *notifier.Receiver[model.ExecutorID], error) {
+	// TODO implement me
+	panic("implement me")
 }
 
 func (m *mockExecutorManager) GetAddr(executorID model.ExecutorID) (string, bool) {

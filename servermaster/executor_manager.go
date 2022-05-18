@@ -12,6 +12,7 @@ import (
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/errors"
+	"github.com/hanfei1991/microcosm/pkg/notifier"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
 	"github.com/hanfei1991/microcosm/servermaster/resource"
 	"github.com/hanfei1991/microcosm/servermaster/scheduler"
@@ -28,6 +29,7 @@ type ExecutorManager interface {
 	ExecutorCount(status model.ExecutorStatus) int
 	HasExecutor(executorID string) bool
 	ListExecutors() []string
+	WatchExecutors(ctx context.Context) ([]model.ExecutorID, *notifier.Receiver[model.ExecutorID], error)
 	CapacityProvider() scheduler.CapacityProvider
 	GetAddr(executorID model.ExecutorID) (string, bool)
 }
@@ -45,6 +47,8 @@ type ExecutorManagerImpl struct {
 
 	rescMgr resource.RescMgr
 	logRL   *rate.Limiter
+
+	notifier notifier.Notifier[model.ExecutorID]
 }
 
 // NewExecutorManagerImpl creates a new ExecutorManagerImpl instance
@@ -72,6 +76,7 @@ func (e *ExecutorManagerImpl) removeExecutorImpl(id model.ExecutorID) error {
 	delete(e.executors, id)
 	e.rescMgr.Unregister(id)
 	log.L().Logger.Info("notify to offline exec")
+	e.notifier.Notify(id)
 	if test.GetGlobalTestFlag() {
 		e.testContext.NotifyExecutorChange(&test.ExecutorChangeEvent{
 			Tp:   test.Delete,
@@ -171,6 +176,27 @@ func (e *ExecutorManagerImpl) ListExecutors() []string {
 		ret = append(ret, string(id))
 	}
 	return ret
+}
+
+// WatchExecutors returns a current snapshot of executor list,
+// and a stream that indicates executor offline events.
+func (e *ExecutorManagerImpl) WatchExecutors(
+	ctx context.Context,
+) ([]model.ExecutorID, *notifier.Receiver[model.ExecutorID], error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if err := e.notifier.Flush(ctx); err != nil {
+		return nil, nil, err
+	}
+
+	snap := make([]model.ExecutorID, 0, len(e.executors))
+	for id := range e.executors {
+		snap = append(snap, id)
+	}
+
+	receiver := e.notifier.NewReceiver()
+	return snap, receiver, nil
 }
 
 // Executor records the status of an executor instance.

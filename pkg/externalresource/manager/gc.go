@@ -3,6 +3,7 @@ package manager
 import (
 	"context"
 	gerrors "errors"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -10,7 +11,9 @@ import (
 	"go.uber.org/zap"
 
 	libModel "github.com/hanfei1991/microcosm/lib/model"
+	"github.com/hanfei1991/microcosm/model"
 	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
+	"github.com/hanfei1991/microcosm/pkg/notifier"
 	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 )
 
@@ -46,13 +49,13 @@ func (c *DefaultGCCoordinator) Run(ctx context.Context) error {
 		default:
 		}
 
-		jobWatchCh, err := c.initializeGC(ctx)
+		jobWatchCh, executorReceiver, err := c.initializeGC(ctx)
 		if err != nil {
 			rl.Take()
 			continue
 		}
 
-		err = c.runGCEventLoop(ctx, jobWatchCh)
+		err = c.runGCEventLoop(ctx, jobWatchCh, executorReceiver.C)
 		if gerrors.Is(err, context.Canceled) || gerrors.Is(err, context.DeadlineExceeded) {
 			return errors.Trace(err)
 		}
@@ -69,6 +72,7 @@ func (c *DefaultGCCoordinator) OnKeepAlive(resourceID resourcemeta.ResourceID, w
 func (c *DefaultGCCoordinator) runGCEventLoop(
 	ctx context.Context,
 	jobWatchCh <-chan JobStatusChangeEvent,
+	executorWatchCh <-chan model.ExecutorID,
 ) error {
 	for {
 		select {
@@ -82,42 +86,90 @@ func (c *DefaultGCCoordinator) runGCEventLoop(
 			if err != nil {
 				return err
 			}
-			// TODO listen on executor offlines.
+		case offlinedExecutorID := <-executorWatchCh:
+			err := c.gcByOfflineExecutorID(ctx, offlinedExecutorID)
+			if err != nil {
+				return err
+			}
 		}
 	}
 }
 
-func (c *DefaultGCCoordinator) initializeGC(ctx context.Context) (<-chan JobStatusChangeEvent, error) {
-	snapshot, jobWatchCh, err := c.jobInfos.WatchJobStatuses(ctx)
+func (c *DefaultGCCoordinator) initializeGC(
+	ctx context.Context,
+) (<-chan JobStatusChangeEvent, *notifier.Receiver[model.ExecutorID], error) {
+	// TODO use receivers.
+	jobSnapshot, jobWatchCh, err := c.jobInfos.WatchJobStatuses(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	if err := c.gcByAllJobStatusSnapshot(ctx, snapshot); err != nil {
-		return nil, err
+	// TODO close the receiver.
+	executorSnapshot, executorReceiver, err := c.executorInfos.WatchExecutors(ctx)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	return jobWatchCh, nil
+	if err := c.gcByStatusSnapshots(ctx, jobSnapshot, executorSnapshot); err != nil {
+		return nil, nil, err
+	}
+
+	return jobWatchCh, executorReceiver, nil
 }
 
-func (c *DefaultGCCoordinator) gcByAllJobStatusSnapshot(ctx context.Context, snapshot JobStatusesSnapshot) error {
+func (c *DefaultGCCoordinator) gcByStatusSnapshots(
+	ctx context.Context,
+	jobSnapshot JobStatusesSnapshot,
+	executorSnapshot []model.ExecutorID,
+) error {
+	startTime := time.Now()
+	defer func() {
+		duration := time.Since(startTime)
+		log.L().Info("gcByStatusSnapshots finished",
+			zap.Duration("duration", duration))
+	}()
+
 	resources, err := c.metaClient.QueryResources(ctx)
 	if err != nil {
 		return err
 	}
 
-	var toGC []resourcemeta.ResourceID
+	executorSet := make(map[model.ExecutorID]struct{}, len(executorSnapshot))
+	for _, id := range executorSnapshot {
+		executorSet[id] = struct{}{}
+	}
+
+	var (
+		toGC     []resourcemeta.ResourceID
+		toRemove []resourcemeta.ResourceID
+	)
 	for _, resMeta := range resources {
-		if _, exists := snapshot[resMeta.Job]; !exists {
+		if _, exists := jobSnapshot[resMeta.Job]; !exists {
 			// The resource belongs to a deleted job.
 			toGC = append(toGC, resMeta.ID)
+			continue
+		}
+
+		if _, exists := executorSet[resMeta.Executor]; !exists {
+			// The resource belongs to an offlined executor.
+			toRemove = append(toGC, resMeta.ID)
+			continue
 		}
 	}
 
-	log.L().Info("Added resources to GC queue",
+	log.L().Info("Adding resources to GC queue",
 		zap.Any("resource-ids", toGC))
+	if err := c.metaClient.SetGCPending(ctx, toGC); err != nil {
+		return err
+	}
 
-	return c.metaClient.SetGCPending(ctx, toGC)
+	log.L().Info("Removing stale resources for offlined executors",
+		zap.Any("resource-ids", toRemove))
+	if _, err := c.metaClient.DeleteResources(ctx, toRemove); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (c *DefaultGCCoordinator) gcByOfflineJobID(ctx context.Context, jobID string) error {
@@ -135,4 +187,10 @@ func (c *DefaultGCCoordinator) gcByOfflineJobID(ctx context.Context, jobID strin
 		zap.Any("resource-ids", toGC))
 
 	return c.metaClient.SetGCPending(ctx, toGC)
+}
+
+func (c *DefaultGCCoordinator) gcByOfflineExecutorID(ctx context.Context, executorID model.ExecutorID) error {
+	log.L().Info("Cleaning up resources meta for offlined executor",
+		zap.String("executor-id", string(executorID)))
+	return c.metaClient.DeleteResourcesByExecutorID(ctx, string(executorID))
 }
