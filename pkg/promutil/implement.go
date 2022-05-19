@@ -74,46 +74,28 @@ func (f *wrappingFactory) NewHistogramVec(opts prometheus.HistogramOpts, labelNa
 }
 
 func wrapCounterOpts(prefix string, constLabels prometheus.Labels, opts *prometheus.CounterOpts) *prometheus.CounterOpts {
-	if prefix != "" {
-		opts.Namespace = prefix + "_" + opts.Namespace
-	}
-	cls := opts.ConstLabels
-	for name, value := range constLabels {
-		if _, exists := cls[name]; exists {
-			log.L().Panic("duplicate label name", zap.String("label", name))
-		}
-		cls[name] = value
-	}
-
+	wrapOptsCommon(prefix, constLabels, &opts.Namespace, opts.ConstLabels)
 	return opts
 }
 
 func wrapGaugeOpts(prefix string, constLabels prometheus.Labels, opts *prometheus.GaugeOpts) *prometheus.GaugeOpts {
-	if prefix != "" {
-		opts.Namespace = prefix + "_" + opts.Namespace
-	}
-	cls := opts.ConstLabels
-	for name, value := range constLabels {
-		if _, exists := cls[name]; exists {
-			log.L().Panic("duplicate label name", zap.String("label", name))
-		}
-		cls[name] = value
-	}
-
+	wrapOptsCommon(prefix, constLabels, &opts.Namespace, opts.ConstLabels)
 	return opts
 }
 
 func wrapHistogramOpts(prefix string, constLabels prometheus.Labels, opts *prometheus.HistogramOpts) *prometheus.HistogramOpts {
+	wrapOptsCommon(prefix, constLabels, &opts.Namespace, opts.ConstLabels)
+	return opts
+}
+
+func wrapOptsCommon(prefix string, constLabels prometheus.Labels, namespace *string, cls prometheus.Labels) {
 	if prefix != "" {
-		opts.Namespace = prefix + "_" + opts.Namespace
+		*namespace = prefix + "_" + *namespace
 	}
-	cls := opts.ConstLabels
 	for name, value := range constLabels {
 		if _, exists := cls[name]; exists {
 			log.L().Panic("duplicate label name", zap.String("label", name))
 		}
 		cls[name] = value
 	}
-
-	return opts
 }

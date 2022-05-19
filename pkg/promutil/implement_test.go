@@ -240,10 +240,12 @@ func TestNewCounter(t *testing.T) {
 }
 
 func TestNewCounterFail(t *testing.T) {
-	// const label conflict with inner const labels
+	// [TODO]: const label conflict with inner const labels
 
-	// metric duplicate
+	// [TODO]: metric duplicate
 }
+
+// TODO: add more uts to solidate the api behavior
 
 func compareMetric(t *testing.T, expected *dto.Metric, actual *dto.Metric) {
 	// compare label pairs
