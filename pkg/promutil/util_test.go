@@ -97,8 +97,9 @@ func TestNewFactory4Framework(t *testing.T) {
 	}{
 		{
 			output: &wrappingFactory{
-				r:  reg,
-				id: frameworkID,
+				r:      reg,
+				id:     frameworkID,
+				prefix: frameworkMetricPrefix,
 				constLabels: prometheus.Labels{
 					constLabelFrameworkKey: "true",
 				},

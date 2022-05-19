@@ -155,14 +155,88 @@ func TestNewCounter(t *testing.T) {
 	)
 
 	// different jobID of the same project, but with same metric
+	jobID = "job1"
+	factory = NewFactory4JobMaster(
+		reg,
+		tenant,
+		jobType,
+		jobID,
+	)
+	counter = factory.NewCounter(prometheus.CounterOpts{
+		Namespace: "dm",
+		Subsystem: "syncer",
+		Name:      "http_request",
+		ConstLabels: prometheus.Labels{
+			labelKey: labelValue, // user defined const labels
+		},
+	})
 
 	// different project but with same metric
+	tenant.ProjectID = "project1"
+	factory = NewFactory4JobMaster(
+		reg,
+		tenant,
+		jobType,
+		jobID,
+	)
+	counter = factory.NewCounter(prometheus.CounterOpts{
+		Namespace: "dm",
+		Subsystem: "syncer",
+		Name:      "http_request",
+		ConstLabels: prometheus.Labels{
+			labelKey: labelValue, // user defined const labels
+		},
+	})
 
-	// worker with same metric
+	// JobMaster and Worker of the same job type can't has same
+	// metric name
+	workerID := "worker0"
+	factory = NewFactory4Worker(
+		reg,
+		tenant,
+		jobType,
+		jobID,
+		workerID,
+	)
+	counter = factory.NewCounter(prometheus.CounterOpts{
+		Namespace: "dm",
+		Subsystem: "worker",
+		Name:      "http_request",
+		ConstLabels: prometheus.Labels{
+			labelKey: labelValue, // user defined const labels
+		},
+	})
 
 	// different workerID of the same job, but with same metric
+	workerID = "worker1"
+	factory = NewFactory4Worker(
+		reg,
+		tenant,
+		jobType,
+		jobID,
+		workerID,
+	)
+	counter = factory.NewCounter(prometheus.CounterOpts{
+		Namespace: "dm",
+		Subsystem: "worker",
+		Name:      "http_request",
+		ConstLabels: prometheus.Labels{
+			labelKey: labelValue, // user defined const labels
+		},
+	})
 
 	// framework with same metric
+	factory = NewFactory4Framework(
+		reg,
+	)
+	counter = factory.NewCounter(prometheus.CounterOpts{
+		Namespace: "dm",
+		Subsystem: "worker",
+		Name:      "http_request",
+		ConstLabels: prometheus.Labels{
+			labelKey: labelValue, // user defined const labels
+		},
+	})
 }
 
 func TestNewCounterFail(t *testing.T) {

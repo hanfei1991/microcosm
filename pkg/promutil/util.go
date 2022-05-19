@@ -19,8 +19,9 @@ import (
 // registration and http handler. Similar to usage of promauto.
 
 const (
-	systemID    = "dataflow-system"
-	frameworkID = "dateflow-framework"
+	systemID              = "dataflow-system"
+	frameworkID           = "dateflow-framework"
+	frameworkMetricPrefix = "dataflow" // avoid metric conflict with app
 )
 
 const (
@@ -61,8 +62,7 @@ func NewFactory4JobMaster(reg *Registry, info tenant.ProjectInfo, jobType libMod
 
 // NewFactory4Worker return a Factory for worker
 func NewFactory4Worker(reg *Registry, info tenant.ProjectInfo, jobType libModel.JobType, jobID libModel.MasterID,
-	workerID libModel.WorkerID,
-) Factory {
+	workerID libModel.WorkerID) Factory {
 	return &wrappingFactory{
 		r:      reg,
 		prefix: jobType,
@@ -81,8 +81,9 @@ func NewFactory4Worker(reg *Registry, info tenant.ProjectInfo, jobType libModel.
 // different dataflow engine or different executor
 func NewFactory4Framework(reg *Registry) Factory {
 	return &wrappingFactory{
-		r:  reg,
-		id: frameworkID,
+		r:      reg,
+		prefix: frameworkMetricPrefix,
+		id:     frameworkID,
 		constLabels: prometheus.Labels{
 			constLabelFrameworkKey: "true",
 		},
