@@ -635,6 +635,9 @@ func (c *metaOpsClient) SetGCPending(ctx context.Context, ids []resourcemeta.Res
 		Model(&resourcemeta.ResourceMeta{}).
 		Where("id in ?", ids).
 		Update("gc_pending", true)
+	if result.Error == nil {
+		return nil
+	}
 	return cerrors.ErrMetaOpFail.Wrap(result.Error)
 }
 

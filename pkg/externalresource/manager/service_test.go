@@ -180,7 +180,7 @@ func TestServiceBasics(t *testing.T) {
 
 func TestServiceNotReady(t *testing.T) {
 	// skip for now
-	t.SkipNow()
+	t.Skip()
 
 	suite := newServiceTestSuite(t)
 	// We do not call Start()
