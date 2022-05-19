@@ -19,6 +19,7 @@ type Notifier[T any] struct {
 	receivers sync.Map // receiverID -> *Receiver[T]
 	nextID    atomic.Int64
 
+	// queue is unbounded.
 	queue *containers.SliceQueue[T]
 
 	closed        atomic.Bool
@@ -31,11 +32,16 @@ type Notifier[T any] struct {
 // Receiver is the receiving endpoint of a single-producer-multiple-consumer
 // notification mechanism.
 type Receiver[T any] struct {
+	// C is a channel to read the events from.
+	// Note that it is part of the public interface of this package.
+	C chan T
+
 	id receiverID
-	C  chan T
 
 	closeOnce sync.Once
-	closed    atomic.Bool
+
+	// closed MUST be set to true before closing `C`.
+	closed atomic.Bool
 
 	notifier *Notifier[T]
 }
@@ -45,6 +51,10 @@ func (r *Receiver[T]) Close() {
 	r.closeOnce.Do(
 		func() {
 			r.closed.Store(true)
+			// Waits for the synchronization barrier, which
+			// means that run() has finished the last iteration,
+			// and since we have set `closed` to true, the `C` channel,
+			// will not be written to anymore. So it is safe to close it now.
 			<-r.notifier.synchronizeCh
 			close(r.C)
 			r.notifier.receivers.Delete(r.id)
@@ -105,12 +115,17 @@ func (n *Notifier[T]) Close() {
 }
 
 // Flush flushes all pending notifications.
+// Note that for Flush to work as expected, a
+// quiescent period is required, i.e. you should
+// not send more events until Flush returns.
 func (n *Notifier[T]) Flush(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case <-n.synchronizeCh:
+			// Checks the queue size after each iteration
+			// of run().
 		}
 
 		if n.queue.Size() == 0 {
