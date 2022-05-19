@@ -13,8 +13,9 @@ import (
 
 type receiverID = int64
 
-// Notifier is the sending endpoint of a single-producer-multiple-consumer
-// notification mechanism.
+// Notifier is the sending endpoint of an event
+// notification mechanism. It broadcasts a stream of
+// events to a number of receivers.
 type Notifier[T any] struct {
 	receivers sync.Map // receiverID -> *Receiver[T]
 	nextID    atomic.Int64
