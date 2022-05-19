@@ -163,7 +163,7 @@ func (c *JobCfg) adjust() error {
 	return c.fromDMTaskCfg(dmTaskCfg)
 }
 
-// ToDMSubtaskCfg adapts a TaskCfg to a SubTaskCfg for worker now.
+// ToDMSubTaskCfg adapts a TaskCfg to a SubTaskCfg for worker now.
 // TODO: fully support all fields
 func (c *TaskCfg) ToDMSubTaskCfg() *dmconfig.SubTaskConfig {
 	cfg := &dmconfig.SubTaskConfig{}
