@@ -16,15 +16,20 @@ package main
 import (
 	"context"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
-var cases = []string{"fake-job-normal", "fake-job-fast-finish"}
+type caseFn func(context.Context, *config) error
 
-func runCases(ctx context.Context) error {
-	for _, c := range cases {
-		log.L().Info("run case successfully", zap.String("case", c))
+var cases = []caseFn{runFakeJobCase}
+
+func runCases(ctx context.Context, cfg *config) error {
+	errg, ctx := errgroup.WithContext(ctx)
+	for _, fn := range cases {
+		fn := fn
+		errg.Go(func() error {
+			return fn(ctx, cfg)
+		})
 	}
-	return nil
+	return errg.Wait()
 }

@@ -50,7 +50,6 @@ func main() {
 	}
 
 	err = log.InitLogger(&log.Config{
-		File:  "chaos-case.log",
 		Level: "info",
 	})
 	if err != nil {
@@ -82,7 +81,7 @@ func main() {
 	}()
 
 	// run tests cases
-	err = runCases(ctx)
+	err = runCases(ctx, cfg)
 	if err != nil {
 		log.L().Error("run cases failed", zap.Error(err))
 		code = 2

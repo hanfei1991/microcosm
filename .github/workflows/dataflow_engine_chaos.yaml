@@ -23,8 +23,8 @@ jobs:
       matrix:
         chaos-obj:
           [
-            "pod-failure-dfe",
-            "pod-kill-dfe",
+            "pod-failure-dataflow",
+            "pod-kill-dataflow",
           ]
 
     # Steps represent a sequence of tasks that will be executed as part of the job
@@ -191,15 +191,15 @@ jobs:
           kubectl get -f $GITHUB_WORKSPACE/chaos/manifests/cases.yaml
           kubectl describe -f $GITHUB_WORKSPACE/chaos/manifests/cases.yaml
 
-      # - name: Encode chaos-mesh action
-      #   run: |
-      #     echo CFG_BASE64=$(base64 -w 0 $GITHUB_WORKSPACE/chaos/manifests/${{ matrix.chaos-obj }}.yaml) >> $GITHUB_ENV
+      - name: Encode chaos-mesh action
+        run: |
+          echo CFG_BASE64=$(base64 -w 0 $GITHUB_WORKSPACE/chaos/manifests/${{ matrix.chaos-obj }}.yaml) >> $GITHUB_ENV
 
-      # - name: Run chaos mesh action
-      #   uses: chaos-mesh/chaos-mesh-action@master
-      #   env:
-      #     CFG_BASE64: ${{ env.CFG_BASE64 }}
-      #     CHAOS_MESH_VERSION: v1.0.0
+      - name: Run chaos mesh action
+        uses: chaos-mesh/chaos-mesh-action@master
+        env:
+          CFG_BASE64: ${{ env.CFG_BASE64 }}
+          CHAOS_MESH_VERSION: v1.0.0
 
       # check whether complete with 1m * 20 times.
       - name: Wait for chaos test case complete
