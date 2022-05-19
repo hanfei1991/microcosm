@@ -255,7 +255,9 @@ func (m *mockJobManager) GetJobStatuses(ctx context.Context) (map[libModel.Maste
 	panic("not implemented")
 }
 
-func (m *mockJobManager) WatchJobStatuses(ctx context.Context) (manager.JobStatusesSnapshot, <-chan manager.JobStatusChangeEvent, error) {
+func (m *mockJobManager) WatchJobStatuses(
+	ctx context.Context,
+) (manager.JobStatusesSnapshot, *notifier.Receiver[manager.JobStatusChangeEvent], error) {
 	panic("not implemented")
 }
 

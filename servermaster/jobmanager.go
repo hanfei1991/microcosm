@@ -3,9 +3,9 @@ package servermaster
 import (
 	"context"
 	"encoding/json"
-	"sync"
 	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 
@@ -16,8 +16,10 @@ import (
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
+	"github.com/hanfei1991/microcosm/pkg/ctxmu"
 	derrors "github.com/hanfei1991/microcosm/pkg/errors"
 	resManager "github.com/hanfei1991/microcosm/pkg/externalresource/manager"
+	"github.com/hanfei1991/microcosm/pkg/notifier"
 	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
@@ -36,7 +38,7 @@ type JobManager interface {
 	GetJobStatuses(ctx context.Context) (map[libModel.MasterID]libModel.MasterStatusCode, error)
 	WatchJobStatuses(
 		ctx context.Context,
-	) (resManager.JobStatusesSnapshot, <-chan resManager.JobStatusChangeEvent, error)
+	) (resManager.JobStatusesSnapshot, *notifier.Receiver[resManager.JobStatusChangeEvent], error)
 }
 
 const defaultJobMasterCost = 1
@@ -57,11 +59,13 @@ type JobManagerImplV2 struct {
 	frameMetaClient  pkgOrm.Client
 	tombstoneCleaned bool
 
-	// watchMu protects fields required for status watching.
-	// TODO refactor out status watching capability as a generic component.
-	watchMu       sync.RWMutex
-	watchers      map[int]chan resManager.JobStatusChangeEvent
-	nextWatcherID int
+	// jobStatusChangeMu must be taken when we try to create, delete,
+	// pause or resume a job.
+	// NOTE The concurrency management for the JobManager is not complete
+	// yet. We are prioritizing implementing all features.
+	// TODO We might add a pending operation queue in the future.
+	jobStatusChangeMu *ctxmu.CtxMutex
+	notifier          *notifier.Notifier[resManager.JobStatusChangeEvent]
 }
 
 // PauseJob implements proto/Master.PauseJob
@@ -127,23 +131,11 @@ func (jm *JobManagerImplV2) CancelJob(ctx context.Context, req *pb.CancelJobRequ
 }
 
 func (jm *JobManagerImplV2) deleteJobMeta(ctx context.Context, jobID string) error {
-	jm.watchMu.RLock()
-
-	var congestedWatcherIDs []int
-	defer func() {
-		jm.watchMu.Lock()
-		defer jm.watchMu.Unlock()
-
-		for _, wid := range congestedWatcherIDs {
-			close(jm.watchers[wid])
-			delete(jm.watchers, wid)
-		}
-	}()
-
-	defer jm.watchMu.RUnlock()
-
-	timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
+
+	jm.jobStatusChangeMu.Lock(ctx)
+	defer jm.jobStatusChangeMu.Unlock()
 
 	// Note that DeleteJob is a soft delete.
 	res, err := jm.frameMetaClient.DeleteJob(ctx, jobID)
@@ -155,19 +147,10 @@ func (jm *JobManagerImplV2) deleteJobMeta(ctx context.Context, jobID string) err
 			zap.Any("job-id", jobID))
 	}
 
-	for wid, watcher := range jm.watchers {
-		select {
-		case <-timeoutCtx.Done():
-			congestedWatcherIDs = append(congestedWatcherIDs, wid)
-			log.L().Warn("status watcher timed out")
-			return timeoutCtx.Err()
-		case watcher <- resManager.JobStatusChangeEvent{
-			EventType: resManager.JobRemovedEvent,
-			JobID:     jobID,
-		}:
-		}
-	}
-
+	jm.notifier.Notify(resManager.JobStatusChangeEvent{
+		EventType: resManager.JobRemovedEvent,
+		JobID:     jobID,
+	})
 	return nil
 }
 
@@ -305,12 +288,13 @@ func NewJobManagerImplV2(
 	metaClient := metaCli.(pkgOrm.Client)
 	cli := metadata.NewMasterMetadataClient(id, metaClient)
 	impl := &JobManagerImplV2{
-		JobFsm:           NewJobFsm(),
-		uuidGen:          uuid.NewGenerator(),
-		masterMetaClient: cli,
-		clocker:          clock.New(),
-		frameMetaClient:  metaClient,
-		watchers:         make(map[int]chan resManager.JobStatusChangeEvent),
+		JobFsm:            NewJobFsm(),
+		uuidGen:           uuid.NewGenerator(),
+		masterMetaClient:  cli,
+		clocker:           clock.New(),
+		frameMetaClient:   metaClient,
+		jobStatusChangeMu: ctxmu.New(),
+		notifier:          notifier.NewNotifier[resManager.JobStatusChangeEvent](),
 	}
 	impl.BaseMaster = lib.NewBaseMaster(
 		dctx,
@@ -469,6 +453,7 @@ func (jm *JobManagerImplV2) OnWorkerStatusUpdated(worker lib.WorkerHandle, newSt
 
 // CloseImpl implements lib.MasterImpl.CloseImpl
 func (jm *JobManagerImplV2) CloseImpl(ctx context.Context) error {
+	jm.notifier.Close()
 	return nil
 }
 
@@ -476,35 +461,28 @@ func (jm *JobManagerImplV2) CloseImpl(ctx context.Context) error {
 // of job status changes.
 func (jm *JobManagerImplV2) WatchJobStatuses(
 	ctx context.Context,
-) (snapshot resManager.JobStatusesSnapshot, watchCh <-chan resManager.JobStatusChangeEvent, retErr error) {
-	jm.watchMu.Lock()
-	defer jm.watchMu.Unlock()
+) (resManager.JobStatusesSnapshot, *notifier.Receiver[resManager.JobStatusChangeEvent], error) {
+	// We add an explicit deadline to make sure that
+	// any potential problem will not block the JobManager forever.
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
 
-	watcher, wid := jm.initWatcher()
-
-	defer func() {
-		if retErr != nil {
-			// Note that this delete must be before
-			// unlocking the watchMu.
-			delete(jm.watchers, wid)
-		}
-	}()
+	// Note that the lock is cancellable by the context.
+	jm.jobStatusChangeMu.Lock(ctx)
+	defer jm.jobStatusChangeMu.Lock(ctx)
 
 	snapshot, err := jm.GetJobStatuses(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return snapshot, watcher, err
-}
+	// Waits for pending JobStatusChangeEvents to be flushed,
+	// so that the new receiver does not receive any stale data.
+	err = jm.notifier.Flush(ctx)
+	if err != nil {
+		return nil, nil, errors.Trace(err)
+	}
 
-// initWatcher MUST be called with jm.watchMu taken exclusively.
-func (jm *JobManagerImplV2) initWatcher() (chan resManager.JobStatusChangeEvent, int) {
-	wid := jm.nextWatcherID
-	jm.nextWatcherID++
-
-	watcher := make(chan resManager.JobStatusChangeEvent, 16)
-	jm.watchers[wid] = watcher
-
-	return watcher, wid
+	receiver := jm.notifier.NewReceiver()
+	return snapshot, receiver, nil
 }

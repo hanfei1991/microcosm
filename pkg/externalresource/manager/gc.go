@@ -49,13 +49,16 @@ func (c *DefaultGCCoordinator) Run(ctx context.Context) error {
 		default:
 		}
 
-		jobWatchCh, executorReceiver, err := c.initializeGC(ctx)
+		jobReceiver, executorReceiver, err := c.initializeGC(ctx)
 		if err != nil {
 			rl.Take()
 			continue
 		}
 
-		err = c.runGCEventLoop(ctx, jobWatchCh, executorReceiver.C)
+		err = c.runGCEventLoop(ctx, jobReceiver.C, executorReceiver.C)
+		jobReceiver.Close()
+		executorReceiver.Close()
+
 		if gerrors.Is(err, context.Canceled) || gerrors.Is(err, context.DeadlineExceeded) {
 			return errors.Trace(err)
 		}
@@ -97,7 +100,7 @@ func (c *DefaultGCCoordinator) runGCEventLoop(
 
 func (c *DefaultGCCoordinator) initializeGC(
 	ctx context.Context,
-) (<-chan JobStatusChangeEvent, *notifier.Receiver[model.ExecutorID], error) {
+) (*notifier.Receiver[JobStatusChangeEvent], *notifier.Receiver[model.ExecutorID], error) {
 	// TODO use receivers.
 	jobSnapshot, jobWatchCh, err := c.jobInfos.WatchJobStatuses(ctx)
 	if err != nil {

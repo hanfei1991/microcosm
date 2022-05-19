@@ -50,7 +50,9 @@ type JobStatusProvider interface {
 
 	// WatchJobStatuses listens on all job status changes followed by
 	// a snapshot.
-	WatchJobStatuses(ctx context.Context) (JobStatusesSnapshot, <-chan JobStatusChangeEvent, error)
+	WatchJobStatuses(
+		ctx context.Context,
+	) (JobStatusesSnapshot, *notifier.Receiver[JobStatusChangeEvent], error)
 }
 
 // GCCoordinator describes an object responsible for triggering
