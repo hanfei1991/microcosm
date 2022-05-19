@@ -62,7 +62,8 @@ func NewFactory4JobMaster(reg *Registry, info tenant.ProjectInfo, jobType libMod
 
 // NewFactory4Worker return a Factory for worker
 func NewFactory4Worker(reg *Registry, info tenant.ProjectInfo, jobType libModel.JobType, jobID libModel.MasterID,
-	workerID libModel.WorkerID) Factory {
+	workerID libModel.WorkerID,
+) Factory {
 	return &wrappingFactory{
 		r:      reg,
 		prefix: jobType,

@@ -130,19 +130,19 @@ func TestNewCounter(t *testing.T) {
 	compareMetric(t, &dto.Metric{
 		Label: []*dto.LabelPair{
 			// all const labels
-			&dto.LabelPair{
+			{
 				Name:  &jobKey,
 				Value: &jobID,
 			},
-			&dto.LabelPair{
+			{
 				Name:  &labelKey,
 				Value: &labelValue,
 			},
-			&dto.LabelPair{
+			{
 				Name:  &projectKey,
 				Value: &tenant.ProjectID,
 			},
-			&dto.LabelPair{
+			{
 				Name:  &tenantKey,
 				Value: &tenant.TenantID,
 			},
@@ -279,6 +279,7 @@ func compareCounter(t *testing.T, expected *dto.Counter, actual *dto.Counter) {
 	}
 }
 
+// nolint: deadcode
 func compareGauge(t *testing.T, expected *dto.Gauge, actual *dto.Gauge) {
 	require.NotNil(t, expected)
 	require.NotNil(t, actual)
