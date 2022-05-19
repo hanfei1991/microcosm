@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/hanfei1991/microcosm/lib/master"
 	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/hanfei1991/microcosm/jobmaster/dm/config"
 	"github.com/hanfei1991/microcosm/jobmaster/dm/metadata"
+	"github.com/hanfei1991/microcosm/jobmaster/dm/runtime"
 	"github.com/hanfei1991/microcosm/lib"
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/model"
@@ -117,6 +119,55 @@ func TestOperateTask(t *testing.T) {
 	require.EqualError(t, messageAgent.OperateTask(context.Background(), "task-not-exist", metadata.StagePaused), fmt.Sprintf("worker for task %s not exist", "task-not-exist"))
 	// wrong stage
 	require.EqualError(t, messageAgent.OperateTask(context.Background(), task1, metadata.StageInit), fmt.Sprintf("invalid expected stage %d for task %s", metadata.StageInit, task1))
+}
+
+func TestQueryStatus(t *testing.T) {
+	mockMasterImpl := &MockMaster{}
+	messageAgent := NewMessageAgent(nil, "mock-jobmaster", mockMasterImpl)
+	task1 := "task1"
+	worker1 := "worker1"
+
+	workerHandle := &master.MockHandle{WorkerID: "worker1", WorkerStatus: &libModel.WorkerStatus{}, IsTombstone: true}
+	messageAgent.UpdateWorkerHandle(task1, workerHandle)
+	// worker offline
+	resp, err := messageAgent.QueryStatus(context.Background(), task1)
+	require.Error(t, err)
+	require.Nil(t, resp)
+
+	// task not exists
+	resp, err = messageAgent.QueryStatus(context.Background(), "task-not-exists")
+	require.Error(t, err)
+	require.Nil(t, resp)
+
+	messageAgent.UpdateWorkerHandle(task1, &MockSender{id: worker1})
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	// response timeout
+	resp, err = messageAgent.QueryStatus(ctx, task1)
+	require.Error(t, err)
+	require.Nil(t, resp)
+
+	// receive response
+	dumpStatus := &runtime.DumpStatus{
+		DefaultTaskStatus: runtime.DefaultTaskStatus{
+			Unit:  lib.WorkerDMDump,
+			Task:  task1,
+			Stage: metadata.StageRunning,
+		},
+	}
+	expectedResp := dmpkg.QueryStatusResponse{ErrorMsg: "", TaskStatus: dumpStatus}
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		resp, err = messageAgent.QueryStatus(context.Background(), task1)
+	}()
+	time.Sleep(time.Second)
+	messageAgent.OnWorkerMessage(dmpkg.MessageWithID{ID: 3, Message: expectedResp})
+	wg.Wait()
+	require.Nil(t, err)
+	require.Equal(t, expectedResp, *resp)
 }
 
 func TestOnWorkerMessage(t *testing.T) {
