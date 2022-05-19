@@ -26,7 +26,7 @@ func NewSliceQueue[T any]() *SliceQueue[T] {
 	}
 }
 
-func (q *SliceQueue[T]) Add(elem T) {
+func (q *SliceQueue[T]) Push(elem T) {
 	q.mu.Lock()
 
 	signal := false

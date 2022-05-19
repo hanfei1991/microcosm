@@ -94,7 +94,7 @@ func (n *Notifier[T]) NewReceiver() *Receiver[T] {
 
 // Notify sends a new notification event.
 func (n *Notifier[T]) Notify(event T) {
-	n.queue.Add(event)
+	n.queue.Push(event)
 }
 
 // Close closes the notifier.
@@ -156,6 +156,9 @@ func (n *Notifier[T]) run() {
 					break Inner
 				}
 
+				// TODO In the current implementation, congestion
+				// in once receiver will prevent all other receivers
+				// from receiving events.
 				n.receivers.Range(func(_, value any) bool {
 					receiver := value.(*Receiver[T])
 
