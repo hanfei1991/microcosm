@@ -12,11 +12,11 @@ func TestSliceQueueBasics(t *testing.T) {
 
 	require.False(t, checkSignal(q.C))
 	require.Equal(t, 0, q.Size())
-	q.Add(1)
+	q.Push(1)
 	require.Equal(t, 1, q.Size())
-	q.Add(2)
+	q.Push(2)
 	require.Equal(t, 2, q.Size())
-	q.Add(3)
+	q.Push(3)
 	require.Equal(t, 3, q.Size())
 
 	val, ok := q.Peek()
@@ -59,7 +59,7 @@ func TestSliceQueueManyElements(t *testing.T) {
 
 	q := NewSliceQueue[int]()
 	for i := 0; i < numElems; i++ {
-		q.Add(i)
+		q.Push(i)
 	}
 	require.Equal(t, numElems, q.Size())
 
@@ -72,7 +72,7 @@ func TestSliceQueueManyElements(t *testing.T) {
 
 	// Repeat the test
 	for i := 0; i < numElems; i++ {
-		q.Add(i)
+		q.Push(i)
 	}
 	require.Equal(t, numElems, q.Size())
 
@@ -94,7 +94,7 @@ func TestSliceQueueConcurrentWriteAndRead(t *testing.T) {
 		defer wg.Done()
 
 		for i := 0; i < numElems; i++ {
-			q.Add(i)
+			q.Push(i)
 		}
 	}()
 

@@ -8,6 +8,11 @@ type SliceQueue[T any] struct {
 	mu    sync.Mutex
 	elems []T
 
+	// C is a signal for non-empty queue.
+	// A consumer can select for C and then Pop
+	// as many elements as possible in a for-select
+	// loop.
+	// Refer to an example in TestSliceQueueConcurrentWriteAndRead.
 	C chan struct{}
 
 	pool *sync.Pool
@@ -21,7 +26,7 @@ func NewSliceQueue[T any]() *SliceQueue[T] {
 	}
 }
 
-func (q *SliceQueue[T]) Add(elem T) {
+func (q *SliceQueue[T]) Push(elem T) {
 	q.mu.Lock()
 
 	signal := false
@@ -29,6 +34,7 @@ func (q *SliceQueue[T]) Add(elem T) {
 		signal = true
 		if q.elems == nil {
 			q.elems = q.allocateSlice()
+			q.elems = q.elems[:0]
 		}
 	}
 
@@ -100,9 +106,8 @@ func (q *SliceQueue[T]) allocateSlice() []T {
 }
 
 func (q *SliceQueue[T]) freeSlice(s []T) {
-	var zero T
-	for idx := range s {
-		s[idx] = zero
+	if len(s) != 0 {
+		panic("only empty slice allowed")
 	}
 	q.pool.Put(&s)
 }

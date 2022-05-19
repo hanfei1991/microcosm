@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/atomic"
 
 	"github.com/hanfei1991/microcosm/pkg/containers"
@@ -14,50 +13,52 @@ import (
 
 type receiverID = int64
 
-// Notifier is the sending endpoint of a single-producer-multiple-consumer
-// notification mechanism.
+// Notifier is the sending endpoint of an event
+// notification mechanism. It broadcasts a stream of
+// events to a number of receivers.
 type Notifier[T any] struct {
 	receivers sync.Map // receiverID -> *Receiver[T]
 	nextID    atomic.Int64
 
+	// queue is unbounded.
 	queue *containers.SliceQueue[T]
 
+	closed        atomic.Bool
 	closeCh       chan struct{}
 	synchronizeCh chan struct{}
-	closeOnce     sync.Once
+
+	wg sync.WaitGroup
 }
 
 // Receiver is the receiving endpoint of a single-producer-multiple-consumer
 // notification mechanism.
 type Receiver[T any] struct {
+	// C is a channel to read the events from.
+	// Note that it is part of the public interface of this package.
+	C chan T
+
 	id receiverID
-	C  chan T
 
 	closeOnce sync.Once
-	closed    atomic.Bool
+
+	// closed MUST be set to true before closing `C`.
+	closed atomic.Bool
 
 	notifier *Notifier[T]
 }
 
-func (r *Receiver[T]) close() {
-	r.closed.Store(true)
-	r.closeOnce.Do(
-		func() {
-			close(r.C)
-		})
-}
-
 // Close closes the receiver
 func (r *Receiver[T]) Close() {
-	r.closed.Store(true)
-	select {
-	case <-r.notifier.synchronizeCh:
-	case <-r.notifier.closeCh:
-	}
-
 	r.closeOnce.Do(
 		func() {
+			r.closed.Store(true)
+			// Waits for the synchronization barrier, which
+			// means that run() has finished the last iteration,
+			// and since we have set `closed` to true, the `C` channel,
+			// will not be written to anymore. So it is safe to close it now.
+			<-r.notifier.synchronizeCh
 			close(r.C)
+			r.notifier.receivers.Delete(r.id)
 		})
 }
 
@@ -70,7 +71,11 @@ func NewNotifier[T any]() *Notifier[T] {
 		synchronizeCh: make(chan struct{}),
 	}
 
-	go ret.run()
+	ret.wg.Add(1)
+	go func() {
+		defer ret.wg.Done()
+		ret.run()
+	}()
 	return ret
 }
 
@@ -90,36 +95,38 @@ func (n *Notifier[T]) NewReceiver() *Receiver[T] {
 
 // Notify sends a new notification event.
 func (n *Notifier[T]) Notify(event T) {
-	n.queue.Add(event)
+	n.queue.Push(event)
 }
 
 // Close closes the notifier.
 func (n *Notifier[T]) Close() {
-	n.closeOnce.Do(func() {
-		close(n.closeCh)
+	if n.closed.Swap(true) {
+		// Ensures idempotency of closing once.
+		return
+	}
 
-		var receivers []*Receiver[T]
-		n.receivers.Range(func(_, value any) bool {
-			receiver := value.(*Receiver[T])
-			receivers = append(receivers, receiver)
-			return true
-		})
+	close(n.closeCh)
+	n.wg.Wait()
 
-		<-n.synchronizeCh
-
-		for _, receiver := range receivers {
-			receiver.close()
-		}
+	n.receivers.Range(func(_, value any) bool {
+		receiver := value.(*Receiver[T])
+		receiver.Close()
+		return true
 	})
 }
 
 // Flush flushes all pending notifications.
+// Note that for Flush to work as expected, a
+// quiescent period is required, i.e. you should
+// not send more events until Flush returns.
 func (n *Notifier[T]) Flush(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case <-n.synchronizeCh:
+			// Checks the queue size after each iteration
+			// of run().
 		}
 
 		if n.queue.Size() == 0 {
@@ -150,7 +157,9 @@ func (n *Notifier[T]) run() {
 					break Inner
 				}
 
-				startTime := time.Now()
+				// TODO In the current implementation, congestion
+				// in once receiver will prevent all other receivers
+				// from receiving events.
 				n.receivers.Range(func(_, value any) bool {
 					receiver := value.(*Receiver[T])
 
@@ -161,12 +170,6 @@ func (n *Notifier[T]) run() {
 					select {
 					case <-n.closeCh:
 						return false
-					case <-ticker.C:
-						if time.Since(startTime) > 1*time.Second {
-							log.L().Warn("Receiver congested")
-							receiver.close()
-						}
-						return true
 					case receiver.C <- event:
 						// send the event to the receiver.
 					}

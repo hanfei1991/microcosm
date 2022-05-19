@@ -21,7 +21,7 @@ func NewDeque[T any]() *Deque[T] {
 	}
 }
 
-func (d *Deque[T]) Add(elem T) {
+func (d *Deque[T]) Push(elem T) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
