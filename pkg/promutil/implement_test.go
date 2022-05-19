@@ -105,7 +105,7 @@ func TestNewCounter(t *testing.T) {
 	projectKey := constLabelProjectKey
 	tenantKey := constLabelTenantKey
 
-	factory := NewFactory4JobMaster(
+	factory := NewFactory4JobMasterImpl(
 		reg,
 		tenant,
 		jobType,
@@ -156,7 +156,7 @@ func TestNewCounter(t *testing.T) {
 
 	// different jobID of the same project, but with same metric
 	jobID = "job1"
-	factory = NewFactory4JobMaster(
+	factory = NewFactory4JobMasterImpl(
 		reg,
 		tenant,
 		jobType,
@@ -173,7 +173,7 @@ func TestNewCounter(t *testing.T) {
 
 	// different project but with same metric
 	tenant.ProjectID = "project1"
-	factory = NewFactory4JobMaster(
+	factory = NewFactory4JobMasterImpl(
 		reg,
 		tenant,
 		jobType,
@@ -191,7 +191,7 @@ func TestNewCounter(t *testing.T) {
 	// JobMaster and Worker of the same job type can't has same
 	// metric name
 	workerID := "worker0"
-	factory = NewFactory4Worker(
+	factory = NewFactory4WorkerImpl(
 		reg,
 		tenant,
 		jobType,
@@ -209,7 +209,7 @@ func TestNewCounter(t *testing.T) {
 
 	// different workerID of the same job, but with same metric
 	workerID = "worker1"
-	factory = NewFactory4Worker(
+	factory = NewFactory4WorkerImpl(
 		reg,
 		tenant,
 		jobType,
@@ -226,7 +226,7 @@ func TestNewCounter(t *testing.T) {
 	})
 
 	// framework with same metric
-	factory = NewFactory4Framework(
+	factory = NewFactory4FrameworkImpl(
 		reg,
 	)
 	counter = factory.NewCounter(prometheus.CounterOpts{
