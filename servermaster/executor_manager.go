@@ -48,7 +48,7 @@ type ExecutorManagerImpl struct {
 	rescMgr resource.RescMgr
 	logRL   *rate.Limiter
 
-	notifier notifier.Notifier[model.ExecutorID]
+	notifier *notifier.Notifier[model.ExecutorID]
 }
 
 // NewExecutorManagerImpl creates a new ExecutorManagerImpl instance
@@ -61,6 +61,7 @@ func NewExecutorManagerImpl(initHeartbeatTTL, keepAliveInterval time.Duration, c
 		keepAliveInterval: keepAliveInterval,
 		rescMgr:           resource.NewCapRescMgr(),
 		logRL:             rate.NewLimiter(rate.Every(time.Second*5), 1 /*burst*/),
+		notifier:          notifier.NewNotifier[model.ExecutorID](),
 	}
 }
 
