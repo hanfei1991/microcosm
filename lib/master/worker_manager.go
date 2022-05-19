@@ -22,10 +22,13 @@ import (
 )
 
 type (
-	Callback          = func(ctx context.Context, handle WorkerHandle) error
+	// Callback alias to worker callback function when there is no error along with.
+	Callback = func(ctx context.Context, handle WorkerHandle) error
+	// CallbackWithError alias to worker callback function when there could be an error along with.
 	CallbackWithError = func(ctx context.Context, handle WorkerHandle, err error) error
 )
 
+// WorkerManager manages all workers belonging to a job master
 type WorkerManager struct {
 	mu            sync.Mutex
 	workerEntries map[libModel.WorkerID]*workerEntry
@@ -64,6 +67,7 @@ const (
 	workerManagerWaitingHeartbeat
 )
 
+// NewWorkerManager creates a new WorkerManager instance
 func NewWorkerManager(
 	masterID libModel.MasterID,
 	epoch libModel.Epoch,
@@ -117,6 +121,7 @@ func NewWorkerManager(
 	return ret
 }
 
+// Close closes the WorkerManager and waits all resource released.
 func (m *WorkerManager) Close() {
 	close(m.closeCh)
 	m.wg.Wait()
@@ -182,19 +187,21 @@ func (m *WorkerManager) InitAfterRecover(ctx context.Context) (retErr error) {
 			zap.Duration("duration", m.clock.Since(startTime)))
 	case <-timer.C:
 		// Wait for the worker timeout to expire
-		m.mu.Lock()
-		for _, entry := range m.workerEntries {
-			if entry.State() == workerEntryWait {
-				entry.MarkAsTombstone()
-			}
-		}
-		m.mu.Unlock()
 	}
 
+	m.mu.Lock()
+	for _, entry := range m.workerEntries {
+		if entry.State() == workerEntryWait || entry.IsFinished() {
+			entry.MarkAsTombstone()
+		}
+	}
 	m.state = workerManagerReady
+	m.mu.Unlock()
+
 	return nil
 }
 
+// HandleHeartbeat handles heartbeat ping message from a worker
 func (m *WorkerManager) HandleHeartbeat(msg *libModel.HeartbeatPingMessage, fromNode p2p.NodeID) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -214,6 +221,10 @@ func (m *WorkerManager) HandleHeartbeat(msg *libModel.HeartbeatPingMessage, from
 			zap.Any("message", msg),
 			zap.String("from-node", fromNode))
 		return
+	}
+
+	if msg.IsFinished {
+		entry.SetFinished()
 	}
 
 	entry.SetExpireTime(m.nextExpireTime())
@@ -286,7 +297,10 @@ func (m *WorkerManager) Tick(ctx context.Context) error {
 		}
 
 		if event.beforeHook != nil {
-			event.beforeHook()
+			if ok := event.beforeHook(); !ok {
+				// Continue to the next event.
+				continue
+			}
 		}
 
 		switch event.Tp {
@@ -345,11 +359,12 @@ func (m *WorkerManager) AbortCreatingWorker(workerID libModel.WorkerID, errIn er
 			manager:  m,
 		},
 		Err: errIn,
-		beforeHook: func() {
+		beforeHook: func() bool {
 			m.mu.Lock()
 			defer m.mu.Unlock()
 
 			delete(m.workerEntries, workerID)
+			return true
 		},
 	}
 
@@ -369,22 +384,39 @@ func (m *WorkerManager) OnWorkerStatusUpdateMessage(msg *statusutil.WorkerStatus
 	}
 
 	entry, exists := m.workerEntries[msg.Worker]
-	if exists {
-		err := entry.StatusReader().OnAsynchronousNotification(msg.Status)
-		if err != nil {
-			log.L().Warn("Error encountered when processing status update",
-				zap.String("master-id", m.masterID),
-				zap.Any("message", msg),
-				zap.Error(err))
-		}
+	if !exists {
+		log.L().Info("WorkerStatusMessage dropped for unknown worker",
+			zap.String("master-id", m.masterID),
+			zap.Any("message", msg))
 		return
 	}
 
-	log.L().Info("WorkerStatusMessage dropped for unknown worker",
-		zap.String("master-id", m.masterID),
-		zap.Any("message", msg))
+	event := &masterEvent{
+		Tp: workerStatusUpdatedEvent,
+		Handle: &runningHandleImpl{
+			workerID:   msg.Worker,
+			executorID: entry.executorID,
+			manager:    m,
+		},
+		WorkerID: msg.Worker,
+		beforeHook: func() bool {
+			if entry.IsTombstone() {
+				// Cancel the event
+				return false
+			}
+			entry.UpdateStatus(msg.Status)
+			return true
+		},
+	}
+
+	if err := m.enqueueEvent(event); err != nil {
+		m.errCenter.OnError(err)
+		return
+	}
 }
 
+// GetWorkers gets all workers maintained by WorkerManager, including both running
+// workers and dead workers.
 func (m *WorkerManager) GetWorkers() map[libModel.WorkerID]WorkerHandle {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -408,6 +440,8 @@ func (m *WorkerManager) GetWorkers() map[libModel.WorkerID]WorkerHandle {
 	return ret
 }
 
+// IsInitialized returns true after the worker manager has checked all tombstone
+// workers are online or dead.
 func (m *WorkerManager) IsInitialized() bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -434,34 +468,19 @@ func (m *WorkerManager) checkWorkerEntriesOnce() error {
 			continue
 		}
 
-		if entry.ExpireTime().After(m.clock.Now()) {
-			// Not timed out
-			if reader := entry.StatusReader(); reader != nil {
-				if _, ok := reader.Receive(); ok {
-					err := m.enqueueEvent(&masterEvent{
-						Tp:       workerStatusUpdatedEvent,
-						WorkerID: workerID,
-						Handle: &runningHandleImpl{
-							workerID:   workerID,
-							executorID: entry.executorID,
-							manager:    m,
-						},
-					})
-					if err != nil {
-						return err
-					}
-				}
-			}
-
+		hasTimedOut := entry.ExpireTime().Before(m.clock.Now())
+		shouldGoOffline := hasTimedOut || entry.IsFinished()
+		if !shouldGoOffline {
 			continue
 		}
 
-		// The worker has timed out.
+		// The worker has timed out, or has received a heartbeat
+		// with IsFinished == true.
 		entry.MarkAsOffline()
 
 		var offlineError error
-		if reader := entry.StatusReader(); reader != nil {
-			switch reader.Status().Code {
+		if status := entry.Status(); status != nil {
+			switch status.Code {
 			case libModel.WorkerStatusFinished:
 				offlineError = derror.ErrWorkerFinish.FastGenByArgs()
 			case libModel.WorkerStatusStopped:
@@ -479,8 +498,9 @@ func (m *WorkerManager) checkWorkerEntriesOnce() error {
 				manager:  m,
 			},
 			Err: offlineError,
-			beforeHook: func() {
+			beforeHook: func() bool {
 				entry.MarkAsTombstone()
+				return true
 			},
 		})
 		if err != nil {

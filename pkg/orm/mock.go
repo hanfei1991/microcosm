@@ -3,107 +3,46 @@ package orm
 import (
 	"context"
 	"fmt"
+	"time"
 
-	sqle "github.com/dolthub/go-mysql-server"
-	"github.com/dolthub/go-mysql-server/memory"
-	gsvr "github.com/dolthub/go-mysql-server/server"
-	gsql "github.com/dolthub/go-mysql-server/sql"
-	"github.com/dolthub/go-mysql-server/sql/information_schema"
-	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
-	"github.com/hanfei1991/microcosm/pkg/tenant"
-	"github.com/phayes/freeport"
+	cerrors "github.com/hanfei1991/microcosm/pkg/errors"
+	"github.com/hanfei1991/microcosm/pkg/uuid"
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
+
+func randomDBFile() string {
+	return uuid.NewGenerator().NewString() + ".db"
+}
 
 // NewMockClient creates a mock orm client
 func NewMockClient() (Client, error) {
-	svr, addr, err := MockBackendDB(tenant.FrameTenantID)
+	// ref:https://www.sqlite.org/inmemorydb.html
+	// using dsn(file:%s?mode=memory&cache=shared) format here to
+	// 1. Create different DB for different TestXXX()
+	// 2. Enable DB shared for different connection
+	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", randomDBFile())
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
+		SkipDefaultTransaction: true,
+		// TODO: logger
+	})
 	if err != nil {
+		log.L().Error("create gorm client fail", zap.Error(err))
+		return nil, cerrors.ErrMetaNewClientFail.Wrap(err)
+	}
+
+	cli := &metaOpsClient{
+		db: db,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := cli.Initialize(ctx); err != nil {
+		cli.Close()
 		return nil, err
 	}
-	var store metaclient.StoreConfigParams
-	store.SetEndpoints(addr)
-	store.Auth.User = "root"
 
-	cli, err := NewClient(store, NewDefaultDBConfig())
-	if err != nil {
-		svr.Close()
-		return nil, err
-	}
-	err = cli.Initialize(context.Background())
-	if err != nil {
-		svr.Close()
-		return nil, err
-	}
-
-	return &mockClient{
-		Client: cli,
-		svr:    svr,
-	}, nil
-}
-
-type mockClient struct {
-	Client
-
-	svr *gsvr.Server
-}
-
-func (m *mockClient) Close() error {
-	m.Client.Close()
-
-	if m.svr != nil {
-		m.svr.Close()
-	}
-
-	return nil
-}
-
-func allocTempURL() string {
-	port, err := freeport.GetFreePort()
-	if err != nil {
-		return ""
-	}
-	return fmt.Sprintf("localhost:%d", port)
-}
-
-// MockBackendDB creates a mock mysql using go-mysql-server as backend storage
-// https://github.com/dolthub/go-mysql-server
-// go-mysql-server not support unique index
-// ref: https://github.com/dolthub/go-mysql-server/issues/571
-func MockBackendDB(db string) (*gsvr.Server, string, error) {
-	addr := allocTempURL()
-	engine := sqle.NewDefault(
-		gsql.NewDatabaseProvider(
-			createTestDatabase(db),
-			information_schema.NewInformationSchemaDatabase(),
-		))
-
-	config := gsvr.Config{
-		Protocol: "tcp",
-		Address:  addr,
-	}
-
-	s, err := gsvr.NewDefaultServer(config, engine)
-	if err != nil {
-		return nil, "", err
-	}
-
-	go func() {
-		err := s.Start()
-		if err != nil {
-			panic(err)
-		}
-	}()
-
-	return s, addr, err
-}
-
-func createTestDatabase(db string) *memory.Database {
-	return memory.NewDatabase(db)
-}
-
-// CloseBackendDB closes backend db
-func CloseBackendDB(svr *gsvr.Server) {
-	if svr != nil {
-		svr.Close()
-	}
+	return cli, nil
 }

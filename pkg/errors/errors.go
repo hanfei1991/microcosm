@@ -72,6 +72,7 @@ var (
 	ErrWorkerFinish               = errors.Normalize("worker finished and exited", errors.RFCCodeText("DFLOW:ErrWorkerFinish"))
 	ErrWorkerStop                 = errors.Normalize("worker is stopped", errors.RFCCodeText("DFLOW:ErrWorkerStop"))
 	ErrTooManyStatusUpdates       = errors.Normalize("there are too many pending worker status updates: %d", errors.RFCCodeText("DFLOW:ErrTooManyStatusUpdates"))
+	ErrWorkerHalfExit             = errors.Normalize("the worker is in half-exited state", errors.RFCCodeText("DFLOW:ErrWorkerHalfExit"))
 
 	// master etcd related errors
 	ErrMasterEtcdCreateSessionFail    = errors.Normalize("failed to create Etcd session", errors.RFCCodeText("DFLOW:ErrMasterEtcdCreateSessionFail"))
@@ -108,18 +109,19 @@ var (
 	ErrPlannerDAGDepthExceeded = errors.Normalize("dag depth exceeded: %d", errors.RFCCodeText("DFLOW:ErrPlannerDAGDepthExceeded"))
 
 	// meta related errors
-	ErrMetaNewClientFail    = errors.Normalize("create meta client fail", errors.RFCCodeText("DFLOW:ErrMetaNewClientFail"))
-	ErrMetaOpFail           = errors.Normalize("meta operation fail", errors.RFCCodeText("DFLOW:ErrMetaOpFail"))
-	ErrMetaOptionInvalid    = errors.Normalize("meta option invalid", errors.RFCCodeText("DFLOW:ErrMetaOptionInvalid"))
-	ErrMetaOptionConflict   = errors.Normalize("WithRange/WithPrefix/WithFromKey, more than one option are used", errors.RFCCodeText("DFLOW:ErrMetaOptionConflict"))
-	ErrMetaEmptyKey         = errors.Normalize("meta empty key", errors.RFCCodeText("DFLOW:ErrMetaEmptyKey"))
-	ErrMetaRevisionUnmatch  = errors.Normalize("meta revision unmatch", errors.RFCCodeText("DFLOW:ErrMetaRevisionUnmatch"))
-	ErrMetaNestedTxn        = errors.Normalize("meta unsupported nested txn", errors.RFCCodeText("DFLOW:ErrMetaNestedTxn"))
-	ErrMetaCommittedTxn     = errors.Normalize("meta already committed txn", errors.RFCCodeText("DFLOW:ErrMetaCommittedTxn"))
-	ErrMetaStoreIDDuplicate = errors.Normalize("metastore id duplicated", errors.RFCCodeText("DFLOW:ErrMetaStoreIDDuplicate"))
-	ErrMetaStoreUnfounded   = errors.Normalize("metastore unfounded:%s", errors.RFCCodeText("DFLOW:ErrMetaStoreUnfounded"))
-	ErrMetaEntryNotFound    = errors.Normalize("meta entry not found", errors.RFCCodeText("DFLOW:ErrMetaEntryNotFound"))
-	ErrMetaParamsInvalid    = errors.Normalize("meta params invalid:%s", errors.RFCCodeText("DFLOW:ErrMetaParamsInvalid"))
+	ErrMetaNewClientFail      = errors.Normalize("create meta client fail", errors.RFCCodeText("DFLOW:ErrMetaNewClientFail"))
+	ErrMetaOpFail             = errors.Normalize("meta operation fail", errors.RFCCodeText("DFLOW:ErrMetaOpFail"))
+	ErrMetaOptionInvalid      = errors.Normalize("meta option invalid", errors.RFCCodeText("DFLOW:ErrMetaOptionInvalid"))
+	ErrMetaOptionConflict     = errors.Normalize("WithRange/WithPrefix/WithFromKey, more than one option are used", errors.RFCCodeText("DFLOW:ErrMetaOptionConflict"))
+	ErrMetaEmptyKey           = errors.Normalize("meta empty key", errors.RFCCodeText("DFLOW:ErrMetaEmptyKey"))
+	ErrMetaRevisionUnmatch    = errors.Normalize("meta revision unmatch", errors.RFCCodeText("DFLOW:ErrMetaRevisionUnmatch"))
+	ErrMetaNestedTxn          = errors.Normalize("meta unsupported nested txn", errors.RFCCodeText("DFLOW:ErrMetaNestedTxn"))
+	ErrMetaCommittedTxn       = errors.Normalize("meta already committed txn", errors.RFCCodeText("DFLOW:ErrMetaCommittedTxn"))
+	ErrMetaStoreIDDuplicate   = errors.Normalize("metastore id duplicated", errors.RFCCodeText("DFLOW:ErrMetaStoreIDDuplicate"))
+	ErrMetaStoreUnfounded     = errors.Normalize("metastore unfounded:%s", errors.RFCCodeText("DFLOW:ErrMetaStoreUnfounded"))
+	ErrMetaEntryNotFound      = errors.Normalize("meta entry not found", errors.RFCCodeText("DFLOW:ErrMetaEntryNotFound"))
+	ErrMetaParamsInvalid      = errors.Normalize("meta params invalid:%s", errors.RFCCodeText("DFLOW:ErrMetaParamsInvalid"))
+	ErrMetaEntryAlreadyExists = errors.Normalize("meta entry already exists", errors.RFCCodeText("DFLOW:ErrMetaEntryAlreadyExists"))
 
 	// DataSet errors
 	ErrDatasetEntryNotFound = errors.Normalize("dataset entry not found. Key: %s", errors.RFCCodeText("DFLOW:ErrDatasetEntryNotFound"))

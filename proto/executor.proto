@@ -32,3 +32,14 @@ message ConfirmDispatchTaskRequest {
 
 message ConfirmDispatchTaskResponse {
 }
+
+service BrokerService {
+    rpc RemoveResource(RemoveLocalResourceRequest) returns (RemoveLocalResourceResponse){}
+}
+
+message RemoveLocalResourceRequest {
+    string resource_id = 1;
+    string creator_id = 2;
+}
+
+message RemoveLocalResourceResponse {}

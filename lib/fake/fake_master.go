@@ -45,13 +45,17 @@ type Config struct {
 	EtcdWatchEnable bool     `json:"etcd-watch-enable"`
 	EtcdEndpoints   []string `json:"etcd-endpoints"`
 	EtcdWatchPrefix string   `json:"etcd-watch-prefix"`
+
+	InjectErrorInterval time.Duration `json:"inject-error-interval"`
 }
 
+// Checkpoint defines the checkpoint of fake job
 type Checkpoint struct {
 	Ticks       map[int]int64            `json:"ticks"`
 	Checkpoints map[int]workerCheckpoint `json:"checkpoints"`
 }
 
+// String implements fmt.Stringer
 func (cp *Checkpoint) String() string {
 	data, err := json.Marshal(cp)
 	if err != nil {
@@ -74,6 +78,7 @@ func zeroWorkerCheckpoint() workerCheckpoint {
 
 var _ lib.BaseJobMaster = (*Master)(nil)
 
+// Master defines the job master implementation of fake job.
 type Master struct {
 	lib.BaseJobMaster
 
@@ -106,11 +111,13 @@ type businessStatus struct {
 	status map[libModel.WorkerID]*dummyWorkerStatus
 }
 
+// OnJobManagerFailover implements JobMasterImpl.OnJobManagerFailover
 func (m *Master) OnJobManagerFailover(reason lib.MasterFailoverReason) error {
 	log.L().Info("FakeMaster: OnJobManagerFailover", zap.Any("reason", reason))
 	return nil
 }
 
+// OnJobManagerMessage implements JobMasterImpl.OnJobManagerMessage
 func (m *Master) OnJobManagerMessage(topic p2p.Topic, message p2p.MessageValue) error {
 	log.L().Info("FakeMaster: OnJobManagerMessage", zap.Any("message", message))
 	switch msg := message.(type) {
@@ -153,18 +160,22 @@ func (m *Master) OnJobManagerMessage(topic p2p.Topic, message p2p.MessageValue) 
 	return nil
 }
 
+// IsJobMasterImpl implements JobMasterImpl.IsJobMasterImpl
 func (m *Master) IsJobMasterImpl() {
 	panic("unreachable")
 }
 
+// ID implements BaseJobMaster.ID
 func (m *Master) ID() worker.RunnableID {
 	return m.workerID
 }
 
+// Workload implements BaseJobMaster.Workload
 func (m *Master) Workload() model.RescUnit {
 	return 0
 }
 
+// InitImpl implements BaseJobMaster.InitImpl
 func (m *Master) InitImpl(ctx context.Context) error {
 	log.L().Info("FakeMaster: Init", zap.Any("config", m.config))
 	return m.initWorkers()
@@ -327,6 +338,7 @@ func (m *Master) tickedCheckStatus(ctx context.Context) error {
 	return nil
 }
 
+// Tick implements MasterImpl.Tick
 func (m *Master) Tick(ctx context.Context) error {
 	if err := m.tickedCheckWorkers(ctx); err != nil {
 		return err
@@ -334,11 +346,13 @@ func (m *Master) Tick(ctx context.Context) error {
 	return m.tickedCheckStatus(ctx)
 }
 
+// OnMasterRecovered implements MasterImpl.OnMasterRecovered
 func (m *Master) OnMasterRecovered(ctx context.Context) error {
 	log.L().Info("FakeMaster: OnMasterRecovered")
 	return nil
 }
 
+// OnWorkerDispatched implements MasterImpl.OnWorkerDispatched
 func (m *Master) OnWorkerDispatched(worker lib.WorkerHandle, result error) error {
 	if result != nil {
 		log.L().Error("FakeMaster: OnWorkerDispatched", zap.Error(result))
@@ -348,6 +362,7 @@ func (m *Master) OnWorkerDispatched(worker lib.WorkerHandle, result error) error
 	return nil
 }
 
+// OnWorkerOnline implements MasterImpl.OnWorkerOnline
 func (m *Master) OnWorkerOnline(worker lib.WorkerHandle) error {
 	log.L().Info("FakeMaster: OnWorkerOnline",
 		zap.String("worker-id", worker.ID()))
@@ -366,14 +381,21 @@ func (m *Master) OnWorkerOnline(worker lib.WorkerHandle) error {
 	return nil
 }
 
+// OnWorkerOffline implements MasterImpl.OnWorkerOffline
 func (m *Master) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
 	index := -1
+	m.workerListMu.Lock()
 	for i, handle := range m.workerList {
+		if handle == nil {
+			continue
+		}
 		if handle.ID() == worker.ID() {
 			index = i
+			m.workerList[i] = nil
 			break
 		}
 	}
+	m.workerListMu.Unlock()
 	if index < 0 {
 		return errors.Errorf("worker(%s) is not found in worker list", worker.ID())
 	}
@@ -406,6 +428,7 @@ func (m *Master) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
 	return m.createWorker(wcfg)
 }
 
+// OnWorkerMessage implements MasterImpl.OnWorkerMessage
 func (m *Master) OnWorkerMessage(worker lib.WorkerHandle, topic p2p.Topic, message interface{}) error {
 	log.L().Info("FakeMaster: OnWorkerMessage",
 		zap.String("topic", topic),
@@ -413,20 +436,27 @@ func (m *Master) OnWorkerMessage(worker lib.WorkerHandle, topic p2p.Topic, messa
 	return nil
 }
 
+// OnWorkerStatusUpdated implements MasterImpl.OnWorkerStatusUpdated
 func (m *Master) OnWorkerStatusUpdated(worker lib.WorkerHandle, newStatus *libModel.WorkerStatus) error {
+	log.L().Info("FakeMaster: worker status updated",
+		zap.String("worker-id", worker.ID()),
+		zap.Any("worker-status", newStatus))
 	return nil
 }
 
+// CloseImpl implements MasterImpl.CloseImpl
 func (m *Master) CloseImpl(ctx context.Context) error {
 	log.L().Info("FakeMaster: Close", zap.Stack("stack"))
 	return nil
 }
 
+// OnMasterFailover implements MasterImpl.OnMasterFailover
 func (m *Master) OnMasterFailover(reason lib.MasterFailoverReason) error {
 	log.L().Info("FakeMaster: OnMasterFailover", zap.Stack("stack"))
 	return nil
 }
 
+// OnMasterMessage implements MasterImpl.OnMasterMessage
 func (m *Master) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
 	log.L().Info("FakeMaster: OnMasterMessage", zap.Any("message", message))
 	return nil
@@ -442,6 +472,7 @@ func (m *Master) marshalBusinessStatus() []byte {
 	return bytes
 }
 
+// Status implements
 func (m *Master) Status() libModel.WorkerStatus {
 	extBytes := m.marshalBusinessStatus()
 	return libModel.WorkerStatus{
@@ -468,6 +499,7 @@ func parseExtBytes(data []byte) (*dummyWorkerStatus, error) {
 	return dws, err
 }
 
+// CheckpointKey returns key path used in etcd for checkpoint
 func CheckpointKey(id libModel.MasterID) string {
 	return strings.Join([]string{"fake-master", "checkpoint", id}, "/")
 }
@@ -505,10 +537,12 @@ func (m *Master) genWorkerConfig(index int, checkpoint workerCheckpoint) *Worker
 		EtcdWatchPrefix: m.config.EtcdWatchPrefix,
 
 		// loaded from checkpoint if exists
-		Checkpoint: checkpoint,
+		Checkpoint:          checkpoint,
+		InjectErrorInterval: m.config.InjectErrorInterval,
 	}
 }
 
+// NewFakeMaster creates a new fake master instance
 func NewFakeMaster(ctx *dcontext.Context, workerID libModel.WorkerID, masterID libModel.MasterID, config lib.WorkerConfig) *Master {
 	log.L().Info("new fake master", zap.Any("config", config))
 	masterConfig := config.(*Config)
@@ -518,7 +552,7 @@ func NewFakeMaster(ctx *dcontext.Context, workerID libModel.WorkerID, masterID l
 		workerList:          make([]lib.WorkerHandle, masterConfig.WorkerCount),
 		workerID2BusinessID: make(map[libModel.WorkerID]int),
 		config:              masterConfig,
-		statusRateLimiter:   rate.NewLimiter(rate.Every(time.Second*3), 1),
+		statusRateLimiter:   rate.NewLimiter(rate.Every(100*time.Millisecond), 1),
 		bStatus:             &businessStatus{status: make(map[libModel.WorkerID]*dummyWorkerStatus)},
 		finishedSet:         make(map[libModel.WorkerID]int),
 		ctx:                 ctx.Context,

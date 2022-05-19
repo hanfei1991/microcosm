@@ -27,15 +27,18 @@ import (
 var _ lib.Worker = (*dummyWorker)(nil)
 
 type (
+	// Worker is exposed for unit test
 	Worker = dummyWorker
 
+	// WorkerConfig defines config of fake worker
 	WorkerConfig struct {
 		ID         int   `json:"id"`
 		TargetTick int64 `json:"target-tick"`
 
-		EtcdWatchEnable bool     `json:"etcd-watch-enable"`
-		EtcdEndpoints   []string `json:"etcd-endpoints"`
-		EtcdWatchPrefix string   `json:"etcd-watch-prefix"`
+		EtcdWatchEnable     bool          `json:"etcd-watch-enable"`
+		EtcdEndpoints       []string      `json:"etcd-endpoints"`
+		EtcdWatchPrefix     string        `json:"etcd-watch-prefix"`
+		InjectErrorInterval time.Duration `json:"inject-error-interval"`
 
 		Checkpoint workerCheckpoint `json:"checkpoint"`
 	}
@@ -55,6 +58,8 @@ type (
 			sync.RWMutex
 			code libModel.WorkerStatusCode
 		}
+
+		startTime time.Time
 	}
 )
 
@@ -100,6 +105,7 @@ func (d *dummyWorker) InitImpl(ctx context.Context) error {
 		}
 		d.init = true
 		d.setStatusCode(libModel.WorkerStatusNormal)
+		d.startTime = time.Now()
 		return nil
 	}
 	return errors.New("repeated init")
@@ -142,6 +148,11 @@ func (d *dummyWorker) Tick(ctx context.Context) error {
 		return d.Exit(ctx, d.Status(), nil)
 	}
 
+	if d.config.InjectErrorInterval != 0 {
+		if time.Since(d.startTime) > d.config.InjectErrorInterval {
+			return errors.Errorf("injected error by worker: %d", d.config.ID)
+		}
+	}
 	return nil
 }
 
@@ -259,6 +270,7 @@ watchLoop:
 	}
 }
 
+// NewDummyWorker creates a new dummy worker instance
 func NewDummyWorker(
 	ctx *dcontext.Context,
 	id libModel.WorkerID, masterID libModel.MasterID,
@@ -274,7 +286,7 @@ func NewDummyWorker(
 		},
 	}
 	return &dummyWorker{
-		statusRateLimiter: rate.NewLimiter(rate.Every(time.Second*3), 1),
+		statusRateLimiter: rate.NewLimiter(rate.Every(100*time.Millisecond), 1),
 		status:            status,
 		config:            wcfg,
 		errCh:             make(chan error, 1),

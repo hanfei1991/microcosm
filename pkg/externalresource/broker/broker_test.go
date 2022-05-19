@@ -2,6 +2,7 @@ package broker
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -16,6 +17,9 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/rpcutil"
 )
 
+// DefaultBroker must implement Broker.
+var _ Broker = (*DefaultBroker)(nil)
+
 func newBroker(t *testing.T) (*DefaultBroker, *rpcutil.FailoverRPCClients[pb.ResourceManagerClient], string) {
 	tmpDir := t.TempDir()
 	client := manager.NewWrappedMockClient()
@@ -28,14 +32,9 @@ func newBroker(t *testing.T) (*DefaultBroker, *rpcutil.FailoverRPCClients[pb.Res
 func TestBrokerOpenNewStorage(t *testing.T) {
 	brk, client, dir := newBroker(t)
 
-	st, err := status.New(codes.Internal, "resource manager error").WithDetails(&pb.ResourceError{
-		ErrorCode: pb.ResourceErrorCode_ResourceNotFound,
-	})
-	require.NoError(t, err)
-
 	innerClient := client.GetLeaderClient().(*manager.MockClient)
 	innerClient.On("QueryResource", mock.Anything, &pb.QueryResourceRequest{ResourceId: "/local/test-1"}, mock.Anything).
-		Return((*pb.QueryResourceResponse)(nil), st.Err())
+		Return((*pb.QueryResourceResponse)(nil), status.Error(codes.NotFound, "resource manager error"))
 	hdl, err := brk.OpenStorage(context.Background(), "worker-1", "job-1", "/local/test-1")
 	require.NoError(t, err)
 	require.Equal(t, "/local/test-1", hdl.ID())
@@ -68,15 +67,9 @@ func TestBrokerOpenNewStorage(t *testing.T) {
 func TestBrokerOpenExistingStorage(t *testing.T) {
 	brk, client, dir := newBroker(t)
 
-	st, err := status.New(codes.NotFound, "resource manager error").WithDetails(&pb.ResourceError{
-		ErrorCode: pb.ResourceErrorCode_ResourceNotFound,
-	})
-	require.NoError(t, err)
-	notFoundErr := st.Err()
-
 	innerClient := client.GetLeaderClient().(*manager.MockClient)
 	innerClient.On("QueryResource", mock.Anything, &pb.QueryResourceRequest{ResourceId: "/local/test-2"}, mock.Anything).
-		Return((*pb.QueryResourceResponse)(nil), notFoundErr).Once()
+		Return((*pb.QueryResourceResponse)(nil), status.Error(codes.NotFound, "resource manager error")).Once()
 	innerClient.On("CreateResource", mock.Anything, &pb.CreateResourceRequest{
 		ResourceId:      "/local/test-2",
 		CreatorExecutor: "executor-1",
@@ -116,4 +109,74 @@ func TestBrokerOpenExistingStorage(t *testing.T) {
 
 	fileName := filepath.Join(dir, "worker-2", "test-2", "1.txt")
 	require.FileExists(t, fileName)
+}
+
+func TestBrokerRemoveResource(t *testing.T) {
+	brk, _, dir := newBroker(t)
+
+	resPath := filepath.Join(dir, "worker-1", "resource-1")
+	err := os.MkdirAll(resPath, 0o700)
+	require.NoError(t, err)
+
+	// Wrong creatorID would yield NotFound
+	_, err = brk.RemoveResource(context.Background(), &pb.RemoveLocalResourceRequest{
+		ResourceId: "/local/resource-1",
+		CreatorId:  "worker-2", // wrong creatorID
+	})
+	require.Error(t, err)
+	code := status.Convert(err).Code()
+	require.Equal(t, codes.NotFound, code)
+
+	// The response is ignored because it is an empty PB message.
+	_, err = brk.RemoveResource(context.Background(), &pb.RemoveLocalResourceRequest{
+		ResourceId: "/local/resource-1",
+		CreatorId:  "worker-1",
+	})
+	require.NoError(t, err)
+	require.NoDirExists(t, resPath)
+
+	// Repeated calls should fail with NotFound
+	_, err = brk.RemoveResource(context.Background(), &pb.RemoveLocalResourceRequest{
+		ResourceId: "/local/resource-1",
+		CreatorId:  "worker-1",
+	})
+	require.Error(t, err)
+	code = status.Convert(err).Code()
+	require.Equal(t, codes.NotFound, code)
+
+	// Unexpected resource type
+	_, err = brk.RemoveResource(context.Background(), &pb.RemoveLocalResourceRequest{
+		ResourceId: "/s3/resource-1",
+		CreatorId:  "worker-1",
+	})
+	require.Error(t, err)
+	code = status.Convert(err).Code()
+	require.Equal(t, codes.InvalidArgument, code)
+
+	// Unparsable ResourceID
+	_, err = brk.RemoveResource(context.Background(), &pb.RemoveLocalResourceRequest{
+		ResourceId: "#@$!@#!$",
+		CreatorId:  "worker-1",
+	})
+	require.Error(t, err)
+	code = status.Convert(err).Code()
+	require.Equal(t, codes.InvalidArgument, code)
+
+	// Empty CreatorID
+	_, err = brk.RemoveResource(context.Background(), &pb.RemoveLocalResourceRequest{
+		ResourceId: "/local/resource-1",
+		CreatorId:  "",
+	})
+	require.Error(t, err)
+	code = status.Convert(err).Code()
+	require.Equal(t, codes.InvalidArgument, code)
+
+	// Empty ResourceID
+	_, err = brk.RemoveResource(context.Background(), &pb.RemoveLocalResourceRequest{
+		ResourceId: "",
+		CreatorId:  "worker-1",
+	})
+	require.Error(t, err)
+	code = status.Convert(err).Code()
+	require.Equal(t, codes.InvalidArgument, code)
 }
