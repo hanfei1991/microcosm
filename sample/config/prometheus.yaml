@@ -1,8 +1,0 @@
-global:
-  scrape_interval: 3s
-
-scrape_configs:
-  - job_name: "metric_test"
-    scrape_interval: 3s
-    static_configs:
-    - targets: ["localhost:8083"]
