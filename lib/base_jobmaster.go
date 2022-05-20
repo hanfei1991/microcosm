@@ -15,6 +15,7 @@ import (
 	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
+	"github.com/hanfei1991/microcosm/pkg/promutil"
 )
 
 // BaseJobMaster defines an interface that can workr as a job master, it embeds
@@ -25,6 +26,7 @@ type BaseJobMaster interface {
 
 	OnError(err error)
 	MetaKVClient() metaclient.KVClient
+	MetricFactory() promutil.Factory
 	GetWorkers() map[libModel.WorkerID]WorkerHandle
 	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit, resources ...resourcemeta.ResourceID) (libModel.WorkerID, error)
 	JobMasterID() libModel.MasterID
@@ -75,16 +77,16 @@ func NewBaseJobMaster(
 	jobMasterImpl JobMasterImpl,
 	masterID libModel.MasterID,
 	workerID libModel.WorkerID,
+	tp libModel.WorkerType,
 ) BaseJobMaster {
 	// master-worker pair: job manager <-> job master(`baseWorker` following)
 	// master-worker pair: job master(`baseMaster` following) <-> real workers
 	// `masterID` is always the ID of master role, against current object
 	// `workerID` is the ID of current object
 	baseMaster := NewBaseMaster(
-		ctx, &jobMasterImplAsMasterImpl{jobMasterImpl}, workerID)
+		ctx, &jobMasterImplAsMasterImpl{jobMasterImpl}, workerID, tp)
 	baseWorker := NewBaseWorker(
-		// TODO: need worker_type
-		ctx, &jobMasterImplAsWorkerImpl{jobMasterImpl}, workerID, masterID)
+		ctx, &jobMasterImplAsWorkerImpl{jobMasterImpl}, workerID, masterID, tp)
 	errCenter := errctx.NewErrCenter()
 	baseMaster.(*DefaultBaseMaster).errCenter = errCenter
 	baseWorker.(*DefaultBaseWorker).errCenter = errCenter
@@ -99,6 +101,11 @@ func NewBaseJobMaster(
 // MetaKVClient implements BaseJobMaster.MetaKVClient
 func (d *DefaultBaseJobMaster) MetaKVClient() metaclient.KVClient {
 	return d.master.MetaKVClient()
+}
+
+// MetricFactory implements BaseJobMaster.MetricFactory
+func (d *DefaultBaseJobMaster) MetricFactory() promutil.Factory {
+	return d.master.MetricFactory()
 }
 
 // Init implements BaseJobMaster.Init

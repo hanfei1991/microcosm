@@ -33,6 +33,7 @@ type MockMasterImpl struct {
 	*DefaultBaseMaster
 	masterID libModel.MasterID
 	id       libModel.MasterID
+	tp       libModel.WorkerType
 
 	tickCount         atomic.Int64
 	onlineWorkerCount atomic.Int64
@@ -115,7 +116,9 @@ func (m *MockMasterImpl) Reset() {
 	m.DefaultBaseMaster = NewBaseMaster(
 		ctx,
 		m,
-		m.id).(*DefaultBaseMaster)
+		m.id,
+		m.tp,
+	).(*DefaultBaseMaster)
 }
 
 // TickCount returns tick invoke time

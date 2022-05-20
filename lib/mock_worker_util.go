@@ -57,7 +57,9 @@ func MockBaseWorker(
 		ctx,
 		workerImpl,
 		workerID,
-		masterID)
+		masterID,
+		FakeTask,
+	)
 	return &BaseWorkerForTesting{
 		ret.(*DefaultBaseWorker),
 		resourceBroker,
