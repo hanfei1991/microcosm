@@ -24,7 +24,7 @@ func main() {
 	go func() {
 		defer wg.Done()
 		log.L().Info("Start scenarios simulator")
-		simulator(wg)
+		simulator(&wg)
 	}()
 
 	wg.Wait()
@@ -54,8 +54,8 @@ func main() {
 /// tenant/project metric isolation
 // 7. multi-jobmasters of same job type for different project
 
-func simulator(wg sync.WaitGroup) {
-	scenes := []func(wg sync.WaitGroup){
+func simulator(wg *sync.WaitGroup) {
+	scenes := []func(wg *sync.WaitGroup){
 		scenarios1_OneServerOneExecutor, scenarios2_OneServerMultiExecutor,
 		scenarios3_OneJobmasterOneWorker, scenarios4_OneJobmasterMultiWorker,
 		scenarios5_MultiJobmasterMultiWorker, scenarios6_OneJobmasterOneExecutor,
@@ -67,7 +67,7 @@ func simulator(wg sync.WaitGroup) {
 	}
 }
 
-func scenarios1_OneServerOneExecutor(wg sync.WaitGroup) {
+func scenarios1_OneServerOneExecutor(wg *sync.WaitGroup) {
 	log.L().Info("Start scenarios1_OneServerOneExecutor simulation...")
 	wg.Add(2)
 	go func() {
@@ -123,7 +123,7 @@ func scenarios1_OneServerOneExecutor(wg sync.WaitGroup) {
 	}()
 }
 
-func scenarios2_OneServerMultiExecutor(wg sync.WaitGroup) {
+func scenarios2_OneServerMultiExecutor(wg *sync.WaitGroup) {
 	log.L().Info("Start scenarios2_OneServerMultiExecutor simulation...")
 	wg.Add(2)
 	// We already create a servermaster in scenarios1_OneServerOneExecutor, so we don't create one here
@@ -180,7 +180,7 @@ func scenarios2_OneServerMultiExecutor(wg sync.WaitGroup) {
 	}()
 }
 
-func scenarios3_OneJobmasterOneWorker(wg sync.WaitGroup) {
+func scenarios3_OneJobmasterOneWorker(wg *sync.WaitGroup) {
 	log.L().Info("Start scenarios3_OneJobmasterOneWorker simulation...")
 	wg.Add(1)
 
@@ -226,15 +226,39 @@ func scenarios3_OneJobmasterOneWorker(wg sync.WaitGroup) {
 		})
 		counter1.Add(5)
 
+		counterVec := factory.NewCounterVec(prometheus.CounterOpts{
+			Namespace: "dm",
+			Subsystem: "worker",
+			Name:      "counter2",
+
+			ConstLabels: prometheus.Labels{
+				"service": "svr5",
+			},
+		},
+			[]string{"k1", "k2", "k3"},
+		)
+		curryCV, err := counterVec.CurryWith(prometheus.Labels{
+			"k3": "v3",
+		})
+		if err != nil {
+			log.L().Panic("curry with fail")
+		}
+		counter2, err := curryCV.GetMetricWithLabelValues([]string{"v1", "v2"}...)
+		if err != nil {
+			log.L().Panic("GetMetricWithLabelValues")
+		}
+		counter2.Add(5)
+
 		for {
 			counter0.Add(0.1)
 			counter1.Add(0.1)
+			counter2.Add(0.1)
 			time.Sleep(time.Second)
 		}
 	}()
 }
 
-func scenarios4_OneJobmasterMultiWorker(wg sync.WaitGroup) {
+func scenarios4_OneJobmasterMultiWorker(wg *sync.WaitGroup) {
 	log.L().Info("Start scenarios4_OneJobmasterMultiWorker simulation...")
 	wg.Add(1)
 
@@ -302,7 +326,7 @@ func scenarios4_OneJobmasterMultiWorker(wg sync.WaitGroup) {
 	}()
 }
 
-func scenarios5_MultiJobmasterMultiWorker(wg sync.WaitGroup) {
+func scenarios5_MultiJobmasterMultiWorker(wg *sync.WaitGroup) {
 	log.L().Info("Start scenarios5_MultiJobmasterMultiWorker simulation...")
 	wg.Add(1)
 
@@ -439,7 +463,7 @@ func scenarios5_MultiJobmasterMultiWorker(wg sync.WaitGroup) {
 	}()
 }
 
-func scenarios6_OneJobmasterOneExecutor(wg sync.WaitGroup) {
+func scenarios6_OneJobmasterOneExecutor(wg *sync.WaitGroup) {
 	log.L().Info("Start scenarios6_OneJobmasterOneExecutor simulation...")
 	wg.Add(1)
 
@@ -486,7 +510,7 @@ func scenarios6_OneJobmasterOneExecutor(wg sync.WaitGroup) {
 	}()
 }
 
-func scenarios7_MultiJobmasterMultiProjects(wg sync.WaitGroup) {
+func scenarios7_MultiJobmasterMultiProjects(wg *sync.WaitGroup) {
 	log.L().Info("Start scenarios7_MultiJobmasterMultiProjects simulation...")
 	wg.Add(1)
 
