@@ -306,13 +306,15 @@ func TestNewCounterVec(t *testing.T) {
 	require.Error(t, err)
 
 	counter, err = counterVec.GetMetricWith(prometheus.Labels{
-		"k2": "v2", "k3": "v3", "k4": "v4"})
+		"k2": "v2", "k3": "v3", "k4": "v4",
+	})
 	require.NoError(t, err)
 	counter.Inc()
 
 	// unmatch label values count
 	counter, err = counterVec.GetMetricWith(prometheus.Labels{
-		"k3": "v3", "k4": "v4"})
+		"k3": "v3", "k4": "v4",
+	})
 	require.Error(t, err)
 
 	require.True(t, counterVec.DeleteLabelValues([]string{"v1", "v2", "v3"}...))
@@ -320,23 +322,29 @@ func TestNewCounterVec(t *testing.T) {
 	require.False(t, counterVec.DeleteLabelValues([]string{"v1", "v2", "v4"}...))
 
 	require.True(t, counterVec.Delete(prometheus.Labels{
-		"k2": "v2", "k3": "v3", "k4": "v4"}))
+		"k2": "v2", "k3": "v3", "k4": "v4",
+	}))
 	require.False(t, counterVec.Delete(prometheus.Labels{
-		"k3": "v3", "k4": "v4"}))
+		"k3": "v3", "k4": "v4",
+	}))
 	require.False(t, counterVec.Delete(prometheus.Labels{
-		"k2": "v3", "k3": "v3", "k4": "v4"}))
+		"k2": "v3", "k3": "v3", "k4": "v4",
+	}))
 
 	curryCounterVec, err := counterVec.CurryWith(prometheus.Labels{
 		"k2": "v2",
 	})
+	require.NoError(t, err)
 	counter, err = curryCounterVec.GetMetricWith(prometheus.Labels{
-		"k3": "v3", "k4": "v4"})
+		"k3": "v3", "k4": "v4",
+	})
 	require.NoError(t, err)
 	counter.Add(1)
 
 	// unmatch label values count after curry
 	_, err = curryCounterVec.GetMetricWith(prometheus.Labels{
-		"k2": "v2", "k3": "v3", "k4": "v4"})
+		"k2": "v2", "k3": "v3", "k4": "v4",
+	})
 	require.Error(t, err)
 }
 
