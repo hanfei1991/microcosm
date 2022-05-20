@@ -152,7 +152,7 @@ func NewBaseWorker(
 	impl WorkerImpl,
 	workerID libModel.WorkerID,
 	masterID libModel.MasterID,
-	// tp libModel.WorkerType,
+	tp libModel.WorkerType,
 ) BaseWorker {
 	var params workerParams
 	if err := ctx.Deps().Fill(&params); err != nil {
@@ -188,7 +188,7 @@ func NewBaseWorker(
 		metricFactory: promutil.NewFactory4Worker(tenant.ProjectInfo{
 			TenantID:  tenant.DefaultUserTenantID,
 			ProjectID: "TODO",
-		}, "TODO", masterID, workerID),
+		}, WorkerTypeForMetric(tp), masterID, workerID),
 	}
 }
 

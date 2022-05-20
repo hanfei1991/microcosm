@@ -77,16 +77,16 @@ func NewBaseJobMaster(
 	jobMasterImpl JobMasterImpl,
 	masterID libModel.MasterID,
 	workerID libModel.WorkerID,
+	tp libModel.WorkerType,
 ) BaseJobMaster {
 	// master-worker pair: job manager <-> job master(`baseWorker` following)
 	// master-worker pair: job master(`baseMaster` following) <-> real workers
 	// `masterID` is always the ID of master role, against current object
 	// `workerID` is the ID of current object
 	baseMaster := NewBaseMaster(
-		ctx, &jobMasterImplAsMasterImpl{jobMasterImpl}, workerID)
+		ctx, &jobMasterImplAsMasterImpl{jobMasterImpl}, workerID, tp)
 	baseWorker := NewBaseWorker(
-		// TODO: need worker_type
-		ctx, &jobMasterImplAsWorkerImpl{jobMasterImpl}, workerID, masterID)
+		ctx, &jobMasterImplAsWorkerImpl{jobMasterImpl}, workerID, masterID, tp)
 	errCenter := errctx.NewErrCenter()
 	baseMaster.(*DefaultBaseMaster).errCenter = errCenter
 	baseWorker.(*DefaultBaseWorker).errCenter = errCenter

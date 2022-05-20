@@ -179,6 +179,7 @@ func NewBaseMaster(
 	ctx *dcontext.Context,
 	impl MasterImpl,
 	id libModel.MasterID,
+	tp libModel.WorkerType,
 ) BaseMaster {
 	var (
 		nodeID        p2p.NodeID
@@ -231,7 +232,7 @@ func NewBaseMaster(
 		metricFactory: promutil.NewFactory4Master(tenant.ProjectInfo{
 			TenantID:  tenant.DefaultUserTenantID,
 			ProjectID: "TODO",
-		}, "job_type", id),
+		}, WorkerTypeForMetric(tp), id),
 		deps: ctx.Deps(),
 	}
 }
