@@ -72,5 +72,3 @@ require (
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 	gorm.io/gorm v1.23.4 // indirect
 )
-
-replace github.com/hanfei1991/microcosm v0.0.0-20220519065215-9a7a74c24c30 => ../../../../microcosm
