@@ -3,6 +3,7 @@ package orm
 import (
 	"context"
 	"database/sql"
+	gerrors "errors"
 	"fmt"
 	"time"
 
@@ -111,6 +112,7 @@ type ResourceClient interface {
 	SetGCPending(ctx context.Context, ids []resourcemeta.ResourceID) error
 	DeleteResourcesByExecutorID(ctx context.Context, executorID string) error
 	DeleteResources(ctx context.Context, resourceIDs []string) (Result, error)
+	GetOneResourceForGC(ctx context.Context) (*resourcemeta.ResourceMeta, error)
 }
 
 // NewClient return the client to operate framework metastore
@@ -639,6 +641,21 @@ func (c *metaOpsClient) SetGCPending(ctx context.Context, ids []resourcemeta.Res
 		return nil
 	}
 	return cerrors.ErrMetaOpFail.Wrap(result.Error)
+}
+
+func (c *metaOpsClient) GetOneResourceForGC(ctx context.Context) (*resourcemeta.ResourceMeta, error) {
+	var ret resourcemeta.ResourceMeta
+	result := c.db.WithContext(ctx).
+		Order("updated_at asc").
+		Where("gc_pending = true").
+		First(&ret)
+	if result.Error != nil {
+		if gerrors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return nil, cerrors.ErrMetaEntryNotFound.Wrap(result.Error)
+		}
+		return nil, cerrors.ErrMetaOpFail.Wrap(result.Error)
+	}
+	return &ret, nil
 }
 
 // Result defines a query result interface
