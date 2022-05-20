@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"net/http/pprof"
 
+	"github.com/hanfei1991/microcosm/pkg/promutil"
 	"github.com/pingcap/tiflow/dm/dm/common"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func httpHandler(lis net.Listener) error {
@@ -18,7 +18,7 @@ func httpHandler(lis net.Listener) error {
 	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
 	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
 	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
-	mux.Handle("/metrics", promhttp.Handler())
+	mux.Handle("/metrics", promutil.HTTPHandlerForMetric())
 
 	httpS := &http.Server{
 		Handler: mux,

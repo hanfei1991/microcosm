@@ -105,7 +105,7 @@ func TestNewCounter(t *testing.T) {
 	projectKey := constLabelProjectKey
 	tenantKey := constLabelTenantKey
 
-	factory := NewFactory4JobMasterImpl(
+	factory := NewFactory4MasterImpl(
 		reg,
 		tenant,
 		jobType,
@@ -156,7 +156,7 @@ func TestNewCounter(t *testing.T) {
 
 	// different jobID of the same project, but with same metric
 	jobID = "job1"
-	factory = NewFactory4JobMasterImpl(
+	factory = NewFactory4MasterImpl(
 		reg,
 		tenant,
 		jobType,
@@ -173,7 +173,7 @@ func TestNewCounter(t *testing.T) {
 
 	// different project but with same metric
 	tenant.ProjectID = "project1"
-	factory = NewFactory4JobMasterImpl(
+	factory = NewFactory4MasterImpl(
 		reg,
 		tenant,
 		jobType,
@@ -252,7 +252,7 @@ func TestNewCounterFailConstLabelConflict(t *testing.T) {
 	reg := NewRegistry()
 	require.NotNil(t, reg)
 
-	factory := NewFactory4JobMasterImpl(
+	factory := NewFactory4MasterImpl(
 		reg,
 		tenant.ProjectInfo{
 			TenantID:  "user0",
@@ -277,7 +277,7 @@ func TestNewCounterVec(t *testing.T) {
 	reg := NewRegistry()
 	require.NotNil(t, reg)
 
-	factory := NewFactory4JobMasterImpl(
+	factory := NewFactory4MasterImpl(
 		reg,
 		tenant.ProjectInfo{
 			TenantID:  "user0",

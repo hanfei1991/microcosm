@@ -15,6 +15,7 @@ import (
 	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
+	"github.com/hanfei1991/microcosm/pkg/promutil"
 )
 
 // BaseJobMaster defines an interface that can workr as a job master, it embeds
@@ -25,6 +26,7 @@ type BaseJobMaster interface {
 
 	OnError(err error)
 	MetaKVClient() metaclient.KVClient
+	MetricFactory() promutil.Factory
 	GetWorkers() map[libModel.WorkerID]WorkerHandle
 	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit, resources ...resourcemeta.ResourceID) (libModel.WorkerID, error)
 	JobMasterID() libModel.MasterID
@@ -99,6 +101,11 @@ func NewBaseJobMaster(
 // MetaKVClient implements BaseJobMaster.MetaKVClient
 func (d *DefaultBaseJobMaster) MetaKVClient() metaclient.KVClient {
 	return d.master.MetaKVClient()
+}
+
+// MetricFactory implements BaseJobMaster.MetricFactory
+func (d *DefaultBaseJobMaster) MetricFactory() promutil.Factory {
+	return d.master.MetricFactory()
 }
 
 // Init implements BaseJobMaster.Init

@@ -34,6 +34,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
+	"github.com/hanfei1991/microcosm/pkg/promutil"
 	"github.com/hanfei1991/microcosm/pkg/quota"
 	"github.com/hanfei1991/microcosm/pkg/tenant"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
@@ -93,6 +94,7 @@ type BaseMaster interface {
 
 	// MetaKVClient return user metastore kv client
 	MetaKVClient() metaclient.KVClient
+	MetricFactory() promutil.Factory
 	MasterMeta() *libModel.MasterMetaKVData
 	GetWorkers() map[libModel.WorkerID]WorkerHandle
 	IsMasterReady() bool
@@ -146,6 +148,8 @@ type DefaultBaseMaster struct {
 	// user metastore prefix kvclient
 	// Don't close it. It's just a prefix wrapper for underlying userRawKVClient
 	userMetaKVClient metaclient.KVClient
+
+	metricFactory promutil.Factory
 
 	// components for easier unit testing
 	uuidGen uuid.Generator
@@ -221,15 +225,25 @@ func NewBaseMaster(
 		advertiseAddr: advertiseAddr,
 
 		createWorkerQuota: quota.NewConcurrencyQuota(maxCreateWorkerConcurrency),
-		// [TODO] use tenantID if support muliti-tenant
+		// TODO: use tenantID if support muliti-tenant
 		userMetaKVClient: kvclient.NewPrefixKVClient(params.UserRawKVClient, tenant.DefaultUserTenantID),
-		deps:             ctx.Deps(),
+		// TODO: tenant info and job type
+		metricFactory: promutil.NewFactory4Master(tenant.ProjectInfo{
+			TenantID:  tenant.DefaultUserTenantID,
+			ProjectID: "TODO",
+		}, "job_type", id),
+		deps: ctx.Deps(),
 	}
 }
 
 // MetaKVClient returns the user space metaclient
 func (m *DefaultBaseMaster) MetaKVClient() metaclient.KVClient {
 	return m.userMetaKVClient
+}
+
+// MetricFactory implements BaseMaster.MetricFactory
+func (m *DefaultBaseMaster) MetricFactory() promutil.Factory {
+	return m.metricFactory
 }
 
 // Init implements BaseMaster.Init

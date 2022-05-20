@@ -14,7 +14,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	p2pProtocol "github.com/pingcap/tiflow/proto/p2p"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/client/v3/concurrency"
 	"go.etcd.io/etcd/server/v3/embed"
@@ -43,6 +42,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
+	"github.com/hanfei1991/microcosm/pkg/promutil"
 	"github.com/hanfei1991/microcosm/pkg/rpcutil"
 	"github.com/hanfei1991/microcosm/pkg/serverutils"
 	"github.com/hanfei1991/microcosm/pkg/tenant"
@@ -557,7 +557,7 @@ func (s *Server) startGrpcSrv(ctx context.Context) (err error) {
 
 	httpHandlers := map[string]http.Handler{
 		"/debug/":  getDebugHandler(),
-		"/metrics": promhttp.Handler(),
+		"/metrics": promutil.HTTPHandlerForMetric(),
 	}
 
 	// generate grpcServer
