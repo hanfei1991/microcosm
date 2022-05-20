@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/hanfei1991/microcosm/jobmaster/dm/metadata"
+	"github.com/hanfei1991/microcosm/jobmaster/dm/runtime"
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
@@ -33,4 +34,25 @@ func OperateTaskMessageTopic(masterID libModel.MasterID, taskID string) p2p.Topi
 type OperateTaskMessage struct {
 	TaskID string
 	Stage  metadata.TaskStage
+}
+
+// QueryStatusRequestTopic is topic constructor for query status request
+func QueryStatusRequestTopic(masterID libModel.MasterID, taskID string) p2p.Topic {
+	return fmt.Sprintf("query-status-request-%s-%s", masterID, taskID)
+}
+
+// QueryStatusResponseTopic is topic constructor for query status response
+func QueryStatusResponseTopic(workerID libModel.WorkerID, taskID string) p2p.Topic {
+	return fmt.Sprintf("query-status-response-%s-%s", workerID, taskID)
+}
+
+// QueryStatusRequest is query status request
+type QueryStatusRequest struct {
+	Task string
+}
+
+// QueryStatusResponse is query status response
+type QueryStatusResponse struct {
+	ErrorMsg   string
+	TaskStatus runtime.TaskStatus
 }

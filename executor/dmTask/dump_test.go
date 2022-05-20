@@ -1,9 +1,9 @@
-package dm
+package dmtask
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
-	"time"
 
 	"github.com/pingcap/tidb/util/filter"
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -13,11 +13,20 @@ import (
 	"github.com/hanfei1991/microcosm/lib"
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/registry"
+	"github.com/hanfei1991/microcosm/pkg/adapter"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
+	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 )
 
 // nolint: unused
-func mockWorkerConfigIncremental() []byte {
+var (
+	masterID = "master-id"
+	workerID = "worker-id"
+	nodeID   = "node-id"
+)
+
+// nolint: unused
+func mockWorkerConfig() []byte {
 	cfg := &config.SubTaskConfig{
 		SourceID: "source-id",
 		From: config.DBConfig{
@@ -35,18 +44,13 @@ func mockWorkerConfigIncremental() []byte {
 		ServerID:   102,
 		MetaSchema: "db_test",
 		Name:       "db_ut",
-		Mode:       config.ModeIncrement,
+		Mode:       config.ModeAll,
 		Flavor:     "mysql",
+		LoaderConfig: config.LoaderConfig{
+			Dir: "/tmp/dftest.db_ut",
+		},
 		BAList: &filter.Rules{
 			DoDBs: []string{"test"},
-		},
-		Meta: &config.Meta{
-			BinLogName: "mysql-bin.000003",
-			BinLogPos:  194,
-		},
-		SyncerConfig: config.SyncerConfig{
-			WorkerCount: 16,
-			Batch:       100,
 		},
 	}
 	cfg.From.Adjust()
@@ -56,9 +60,23 @@ func mockWorkerConfigIncremental() []byte {
 	return []byte(value)
 }
 
-func TestSyncWorker(t *testing.T) {
-	// This test requires a TiDB running on port 4000 and a MySQL on 3306. Also
-	// the binlog information should be corresponded to the mockWorkerConfigIncremental
+// nolint: unused
+func putMasterMeta(
+	ctx context.Context,
+	t *testing.T,
+	metaClient metaclient.KVClient,
+	metaData *libModel.MasterMetaKVData,
+) {
+	masterKey := adapter.MasterInfoKey.Encode(masterID)
+	masterInfoBytes, err := json.Marshal(metaData)
+	require.NoError(t, err)
+	_, err = metaClient.Put(ctx, masterKey, string(masterInfoBytes))
+	require.NoError(t, err)
+}
+
+func TestDumpWorker(t *testing.T) {
+	// This test requires a MySQL running on port 3306. The "test" database on
+	// the MySQL instance should contain some data to be dumped.
 	t.SkipNow()
 	t.Parallel()
 
@@ -66,10 +84,10 @@ func TestSyncWorker(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	workerWrapped, err := registry.GlobalWorkerRegistry().CreateWorker(
-		dcontext.Background(), lib.WorkerDMSync, workerID, masterID, mockWorkerConfigIncremental())
+		dcontext.Background(), lib.WorkerDMDump, workerID, masterID, mockWorkerConfig())
 	require.NoError(t, err)
 
-	worker := workerWrapped.(*syncWorker)
+	worker := workerWrapped.(*DumpTask)
 	worker.BaseWorker = lib.MockBaseWorker(workerID, masterID, worker)
 
 	putMasterMeta(context.Background(), t, worker.MetaKVClient(), &libModel.MasterMetaKVData{
@@ -83,9 +101,7 @@ func TestSyncWorker(t *testing.T) {
 	require.NoError(t, err)
 	err = worker.Tick(ctx)
 	require.NoError(t, err)
-
-	time.Sleep(3 * time.Second)
-
+	lib.MockBaseWorkerWaitUpdateStatus(t, worker.BaseWorker.(*lib.DefaultBaseWorker))
 	cancel()
 	err = worker.Close(context.Background())
 	require.NoError(t, err)

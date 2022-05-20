@@ -326,7 +326,7 @@ type MockBaseJobmaster struct {
 }
 
 func (m *MockBaseJobmaster) JobMasterID() libModel.MasterID {
-	return libMetadata.JobManagerUUID
+	return "dm-jobmaster-id"
 }
 
 func (m *MockBaseJobmaster) GetWorkers() map[string]lib.WorkerHandle {
