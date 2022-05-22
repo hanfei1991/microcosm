@@ -1116,6 +1116,80 @@ func TestResource(t *testing.T) {
 					errors.New("QueryResourcesByExecutorID error"))
 			},
 		},
+		{
+			fn: "SetGCPending",
+			inputs: []interface{}{
+				[]string{
+					"resource-1",
+					"resource-2",
+					"resource-3",
+				},
+			},
+			mockExpectResFn: func(mock sqlmock.Sqlmock) {
+				expectedSQL := "UPDATE `resource_meta` SET `gc_pending`=?,`updated_at`=? WHERE id"
+				mock.ExpectExec(regexp.QuoteMeta(expectedSQL)).
+					WithArgs(
+						true,
+						anyTime{},
+						"resource-1",
+						"resource-2",
+						"resource-3").
+					WillReturnResult(driver.RowsAffected(1))
+			},
+		},
+		{
+			fn: "DeleteResourcesByExecutorID",
+			inputs: []interface{}{
+				"executor-1",
+			},
+			mockExpectResFn: func(mock sqlmock.Sqlmock) {
+				expectedSQL := "DELETE FROM `resource_meta` WHERE executor_id"
+				mock.ExpectExec(regexp.QuoteMeta(expectedSQL)).
+					WithArgs("executor-1").
+					WillReturnResult(driver.RowsAffected(1))
+			},
+		},
+		{
+			fn: "DeleteResources",
+			inputs: []interface{}{
+				[]string{
+					"resource-1",
+					"resource-2",
+					"resource-3",
+				},
+			},
+			output: &ormResult{rowsAffected: 3},
+			mockExpectResFn: func(mock sqlmock.Sqlmock) {
+				expectedSQL := "DELETE FROM `resource_meta` WHERE id"
+				mock.ExpectExec(regexp.QuoteMeta(expectedSQL)).
+					WithArgs("resource-1", "resource-2", "resource-3").
+					WillReturnResult(driver.RowsAffected(3))
+			},
+		},
+		{
+			fn: "GetOneResourceForGC",
+			output: &resourcemeta.ResourceMeta{
+				Model: model.Model{
+					SeqID:     1,
+					CreatedAt: createdAt,
+					UpdatedAt: updatedAt,
+				},
+				ID:        "resource-1",
+				Job:       "job-1",
+				Worker:    "worker-1",
+				Executor:  "executor-1",
+				GCPending: true,
+			},
+			mockExpectResFn: func(mock sqlmock.Sqlmock) {
+				expectedSQL := "SELECT * FROM `resource_meta` WHERE gc_pending = true ORDER BY"
+				mock.ExpectQuery(regexp.QuoteMeta(expectedSQL)).
+					WillReturnRows(
+						sqlmock.NewRows([]string{
+							"created_at", "updated_at", "project_id", "id", "job_id",
+							"worker_id", "executor_id", "deleted", "gc_pending", "seq_id",
+						}).AddRow(createdAt, updatedAt, "", "resource-1", "job-1", "worker-1", "executor-1", false, true, 1))
+			},
+		},
 	}
 
 	for _, tc := range testCases {
