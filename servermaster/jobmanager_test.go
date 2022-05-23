@@ -15,8 +15,11 @@ import (
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/clock"
+	"github.com/hanfei1991/microcosm/pkg/ctxmu"
 	"github.com/hanfei1991/microcosm/pkg/errors"
+	resManager "github.com/hanfei1991/microcosm/pkg/externalresource/manager"
 	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
+	"github.com/hanfei1991/microcosm/pkg/notifier"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
 )
 
@@ -148,11 +151,13 @@ func TestJobManagerCancelJob(t *testing.T) {
 	mockMaster := lib.NewMockMasterImpl("", "cancel-job-test")
 	mockMaster.On("InitImpl", mock.Anything).Return(nil)
 	mgr := &JobManagerImplV2{
-		BaseMaster:       mockMaster.DefaultBaseMaster,
-		JobFsm:           NewJobFsm(),
-		clocker:          clock.New(),
-		frameMetaClient:  mockMaster.GetFrameMetaClient(),
-		masterMetaClient: metadata.NewMasterMetadataClient(metadata.JobManagerUUID, mockMaster.GetFrameMetaClient()),
+		BaseMaster:        mockMaster.DefaultBaseMaster,
+		JobFsm:            NewJobFsm(),
+		clocker:           clock.New(),
+		frameMetaClient:   mockMaster.GetFrameMetaClient(),
+		masterMetaClient:  metadata.NewMasterMetadataClient(metadata.JobManagerUUID, mockMaster.GetFrameMetaClient()),
+		jobStatusChangeMu: ctxmu.New(),
+		notifier:          notifier.NewNotifier[resManager.JobStatusChangeEvent](),
 	}
 
 	err := mgr.frameMetaClient.UpsertJob(ctx, &libModel.MasterMetaKVData{

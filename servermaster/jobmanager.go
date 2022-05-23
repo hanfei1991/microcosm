@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 
@@ -15,7 +16,10 @@ import (
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
+	"github.com/hanfei1991/microcosm/pkg/ctxmu"
 	derrors "github.com/hanfei1991/microcosm/pkg/errors"
+	resManager "github.com/hanfei1991/microcosm/pkg/externalresource/manager"
+	"github.com/hanfei1991/microcosm/pkg/notifier"
 	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
@@ -32,6 +36,9 @@ type JobManager interface {
 	PauseJob(ctx context.Context, req *pb.PauseJobRequest) *pb.PauseJobResponse
 
 	GetJobStatuses(ctx context.Context) (map[libModel.MasterID]libModel.MasterStatusCode, error)
+	WatchJobStatuses(
+		ctx context.Context,
+	) (resManager.JobStatusesSnapshot, *notifier.Receiver[resManager.JobStatusChangeEvent], error)
 }
 
 const defaultJobMasterCost = 1
@@ -51,6 +58,14 @@ type JobManagerImplV2 struct {
 	clocker          clock.Clock
 	frameMetaClient  pkgOrm.Client
 	tombstoneCleaned bool
+
+	// jobStatusChangeMu must be taken when we try to create, delete,
+	// pause or resume a job.
+	// NOTE The concurrency management for the JobManager is not complete
+	// yet. We are prioritizing implementing all features.
+	// TODO We might add a pending operation queue in the future.
+	jobStatusChangeMu *ctxmu.CtxMutex
+	notifier          *notifier.Notifier[resManager.JobStatusChangeEvent]
 }
 
 // PauseJob implements proto/Master.PauseJob
@@ -105,19 +120,38 @@ func (jm *JobManagerImplV2) CancelJob(ctx context.Context, req *pb.CancelJobRequ
 		}}
 	}
 
-	// Note that DeleteJob is a soft delete.
-	res, err := jm.frameMetaClient.DeleteJob(ctx, req.JobIdStr)
-	if err != nil {
+	if err := jm.deleteJobMeta(ctx, req.JobIdStr); err != nil {
 		return &pb.CancelJobResponse{Err: &pb.Error{
 			Code:    pb.ErrorCode_UnknownError,
 			Message: err.Error(),
 		}}
 	}
+
+	return &pb.CancelJobResponse{}
+}
+
+func (jm *JobManagerImplV2) deleteJobMeta(ctx context.Context, jobID string) error {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	jm.jobStatusChangeMu.Lock(ctx)
+	defer jm.jobStatusChangeMu.Unlock()
+
+	// Note that DeleteJob is a soft delete.
+	res, err := jm.frameMetaClient.DeleteJob(ctx, jobID)
+	if err != nil {
+		return err
+	}
 	if res.RowsAffected() == 0 {
 		log.L().Warn("Job not found in meta (or already deleted)",
-			zap.Any("req", req))
+			zap.Any("job-id", jobID))
 	}
-	return &pb.CancelJobResponse{}
+
+	jm.notifier.Notify(resManager.JobStatusChangeEvent{
+		EventType: resManager.JobRemovedEvent,
+		JobID:     jobID,
+	})
+	return nil
 }
 
 // QueryJob implements proto/Master.QueryJob
@@ -254,11 +288,13 @@ func NewJobManagerImplV2(
 	metaClient := metaCli.(pkgOrm.Client)
 	cli := metadata.NewMasterMetadataClient(id, metaClient)
 	impl := &JobManagerImplV2{
-		JobFsm:           NewJobFsm(),
-		uuidGen:          uuid.NewGenerator(),
-		masterMetaClient: cli,
-		clocker:          clock.New(),
-		frameMetaClient:  metaClient,
+		JobFsm:            NewJobFsm(),
+		uuidGen:           uuid.NewGenerator(),
+		masterMetaClient:  cli,
+		clocker:           clock.New(),
+		frameMetaClient:   metaClient,
+		jobStatusChangeMu: ctxmu.New(),
+		notifier:          notifier.NewNotifier[resManager.JobStatusChangeEvent](),
 	}
 	impl.BaseMaster = lib.NewBaseMaster(
 		dctx,
@@ -417,5 +453,36 @@ func (jm *JobManagerImplV2) OnWorkerStatusUpdated(worker lib.WorkerHandle, newSt
 
 // CloseImpl implements lib.MasterImpl.CloseImpl
 func (jm *JobManagerImplV2) CloseImpl(ctx context.Context) error {
+	jm.notifier.Close()
 	return nil
+}
+
+// WatchJobStatuses returns a snapshot of job statuses followed by a stream
+// of job status changes.
+func (jm *JobManagerImplV2) WatchJobStatuses(
+	ctx context.Context,
+) (resManager.JobStatusesSnapshot, *notifier.Receiver[resManager.JobStatusChangeEvent], error) {
+	// We add an explicit deadline to make sure that
+	// any potential problem will not block the JobManager forever.
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	// Note that the lock is cancellable by the context.
+	jm.jobStatusChangeMu.Lock(ctx)
+	defer jm.jobStatusChangeMu.Lock(ctx)
+
+	snapshot, err := jm.GetJobStatuses(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Waits for pending JobStatusChangeEvents to be flushed,
+	// so that the new receiver does not receive any stale data.
+	err = jm.notifier.Flush(ctx)
+	if err != nil {
+		return nil, nil, errors.Trace(err)
+	}
+
+	receiver := jm.notifier.NewReceiver()
+	return snapshot, receiver, nil
 }
