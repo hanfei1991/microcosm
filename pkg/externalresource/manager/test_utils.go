@@ -3,24 +3,28 @@ package manager
 import (
 	"context"
 	"sync"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
 
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/model"
-	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
+	resModel "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
 	"github.com/hanfei1991/microcosm/pkg/notifier"
 )
 
 // MockExecutorInfoProvider implements ExecutorInfoProvider interface
 type MockExecutorInfoProvider struct {
 	mu          sync.RWMutex
-	executorSet map[resourcemeta.ExecutorID]struct{}
+	executorSet map[resModel.ExecutorID]struct{}
 	notifier    *notifier.Notifier[model.ExecutorID]
 }
 
 // NewMockExecutorInfoProvider creates a new MockExecutorInfoProvider instance
 func NewMockExecutorInfoProvider() *MockExecutorInfoProvider {
 	return &MockExecutorInfoProvider{
-		executorSet: make(map[resourcemeta.ExecutorID]struct{}),
+		executorSet: make(map[resModel.ExecutorID]struct{}),
 		notifier:    notifier.NewNotifier[model.ExecutorID](),
 	}
 }
@@ -30,7 +34,7 @@ func (p *MockExecutorInfoProvider) AddExecutor(executorID string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	p.executorSet[resourcemeta.ExecutorID(executorID)] = struct{}{}
+	p.executorSet[resModel.ExecutorID(executorID)] = struct{}{}
 }
 
 // RemoveExecutor removes an executor from the mock.
@@ -38,7 +42,7 @@ func (p *MockExecutorInfoProvider) RemoveExecutor(executorID string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	delete(p.executorSet, resourcemeta.ExecutorID(executorID))
+	delete(p.executorSet, resModel.ExecutorID(executorID))
 	p.notifier.Notify(model.ExecutorID(executorID))
 }
 
@@ -47,7 +51,7 @@ func (p *MockExecutorInfoProvider) HasExecutor(executorID string) bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	if _, exists := p.executorSet[resourcemeta.ExecutorID(executorID)]; exists {
+	if _, exists := p.executorSet[resModel.ExecutorID(executorID)]; exists {
 		return true
 	}
 	return false
@@ -135,4 +139,37 @@ func (jp *MockJobStatusProvider) WatchJobStatuses(
 	}
 
 	return snapCopy, jp.notifier.NewReceiver(), nil
+}
+
+// MockGCNotifier implements the interface GCNotifier.
+type MockGCNotifier struct {
+	notifyCh chan struct{}
+}
+
+// NewMockGCNotifier returns a new MockGCNotifier
+func NewMockGCNotifier() *MockGCNotifier {
+	return &MockGCNotifier{
+		notifyCh: make(chan struct{}, 1),
+	}
+}
+
+// GCNotify pushes a new notification to the internal channel so
+// it can be waited on by WaitNotify().
+func (n *MockGCNotifier) GCNotify() {
+	select {
+	case n.notifyCh <- struct{}{}:
+	default:
+	}
+}
+
+// WaitNotify waits for a pending notification with timeout.
+func (n *MockGCNotifier) WaitNotify(t *testing.T, timeout time.Duration) {
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
+	select {
+	case <-timer.C:
+		require.FailNow(t, "WaitNotify has timed out")
+	case <-n.notifyCh:
+	}
 }

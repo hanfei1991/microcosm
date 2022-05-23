@@ -16,6 +16,7 @@ import (
 type gcTestHelper struct {
 	ExecInfo *MockExecutorInfoProvider
 	JobInfo  *MockJobStatusProvider
+	Notifier *MockGCNotifier
 	Meta     pkgOrm.Client
 	Coord    *DefaultGCCoordinator
 
@@ -28,17 +29,19 @@ type gcTestHelper struct {
 func newGCTestHelper() *gcTestHelper {
 	execInfo := NewMockExecutorInfoProvider()
 	jobInfo := NewMockJobStatusProvider()
+	notifier := NewMockGCNotifier()
 	meta, err := pkgOrm.NewMockClient()
 	if err != nil {
 		panic(err)
 	}
-	coord := NewGCCoordinator(execInfo, jobInfo, meta)
+	coord := NewGCCoordinator(execInfo, jobInfo, meta, notifier)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	ret := &gcTestHelper{
 		ExecInfo: execInfo,
 		JobInfo:  jobInfo,
 		Meta:     meta,
+		Notifier: notifier,
 		Coord:    coord,
 
 		ctx:    ctx,
@@ -154,6 +157,7 @@ func TestGCCoordinatorRemoveJobs(t *testing.T) {
 
 	require.False(t, helper.IsGCPending(t, "resource-1"))
 	helper.JobInfo.RemoveJob("job-1")
+	helper.Notifier.WaitNotify(t, 1*time.Second)
 	require.Eventually(t, func() bool {
 		return helper.IsGCPending(t, "resource-1")
 	}, 1*time.Second, 10*time.Millisecond)
@@ -161,6 +165,7 @@ func TestGCCoordinatorRemoveJobs(t *testing.T) {
 	time.Sleep(20 * time.Millisecond)
 	require.False(t, helper.IsGCPending(t, "resource-2"))
 	helper.JobInfo.RemoveJob("job-2")
+	helper.Notifier.WaitNotify(t, 1*time.Second)
 	require.Eventually(t, func() bool {
 		return helper.IsGCPending(t, "resource-2")
 	}, 1*time.Second, 10*time.Millisecond)
@@ -168,6 +173,7 @@ func TestGCCoordinatorRemoveJobs(t *testing.T) {
 	time.Sleep(20 * time.Millisecond)
 	require.False(t, helper.IsGCPending(t, "resource-3"))
 	helper.JobInfo.RemoveJob("job-3")
+	helper.Notifier.WaitNotify(t, 1*time.Second)
 	require.Eventually(t, func() bool {
 		return helper.IsGCPending(t, "resource-3")
 	}, 1*time.Second, 10*time.Millisecond)

@@ -12,7 +12,7 @@ import (
 
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/model"
-	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
+	resModel "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
 	"github.com/hanfei1991/microcosm/pkg/notifier"
 	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 )
@@ -23,6 +23,13 @@ type DefaultGCCoordinator struct {
 	executorInfos ExecutorInfoProvider
 	jobInfos      JobStatusProvider
 	metaClient    pkgOrm.ResourceClient
+	notifier      GCNotifier
+}
+
+// GCNotifier exposes a GCNotify method which is called
+// when a new object is marked as needing GC.
+type GCNotifier interface {
+	GCNotify()
 }
 
 // NewGCCoordinator creates a new DefaultGCCoordinator.
@@ -30,11 +37,13 @@ func NewGCCoordinator(
 	executorInfos ExecutorInfoProvider,
 	jobInfos JobStatusProvider,
 	metaClient pkgOrm.ResourceClient,
+	gcNotifier GCNotifier,
 ) *DefaultGCCoordinator {
 	return &DefaultGCCoordinator{
 		executorInfos: executorInfos,
 		jobInfos:      jobInfos,
 		metaClient:    metaClient,
+		notifier:      gcNotifier,
 	}
 }
 
@@ -68,7 +77,7 @@ func (c *DefaultGCCoordinator) Run(ctx context.Context) error {
 }
 
 // OnKeepAlive is not implemented for now.
-func (c *DefaultGCCoordinator) OnKeepAlive(resourceID resourcemeta.ResourceID, workerID libModel.WorkerID) {
+func (c *DefaultGCCoordinator) OnKeepAlive(resourceID resModel.ResourceID, workerID libModel.WorkerID) {
 	// TODO implement me
 	panic("implement me")
 }
@@ -142,8 +151,8 @@ func (c *DefaultGCCoordinator) gcByStatusSnapshots(
 	}
 
 	var (
-		toGC     []resourcemeta.ResourceID
-		toRemove []resourcemeta.ResourceID
+		toGC     []resModel.ResourceID
+		toRemove []resModel.ResourceID
 	)
 	for _, resMeta := range resources {
 		if _, exists := jobSnapshot[resMeta.Job]; !exists {
@@ -159,16 +168,21 @@ func (c *DefaultGCCoordinator) gcByStatusSnapshots(
 		}
 	}
 
-	log.L().Info("Adding resources to GC queue",
-		zap.Any("resource-ids", toGC))
-	if err := c.metaClient.SetGCPending(ctx, toGC); err != nil {
-		return err
+	if len(toGC) > 0 {
+		log.L().Info("Adding resources to GC queue",
+			zap.Any("resource-ids", toGC))
+		if err := c.metaClient.SetGCPending(ctx, toGC); err != nil {
+			return err
+		}
+		c.notifier.GCNotify()
 	}
 
-	log.L().Info("Removing stale resources for offlined executors",
-		zap.Any("resource-ids", toRemove))
-	if _, err := c.metaClient.DeleteResources(ctx, toRemove); err != nil {
-		return err
+	if len(toRemove) > 0 {
+		log.L().Info("Removing stale resources for offlined executors",
+			zap.Any("resource-ids", toRemove))
+		if _, err := c.metaClient.DeleteResources(ctx, toRemove); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -180,7 +194,13 @@ func (c *DefaultGCCoordinator) gcByOfflineJobID(ctx context.Context, jobID strin
 		return err
 	}
 
-	toGC := make([]resourcemeta.ResourceID, 0, len(resources))
+	if len(resources) == 0 {
+		// If there is no resource associated to the job,
+		// we return early.
+		return nil
+	}
+
+	toGC := make([]resModel.ResourceID, 0, len(resources))
 	for _, resMeta := range resources {
 		toGC = append(toGC, resMeta.ID)
 	}
@@ -188,7 +208,12 @@ func (c *DefaultGCCoordinator) gcByOfflineJobID(ctx context.Context, jobID strin
 	log.L().Info("Added resources to GC queue",
 		zap.Any("resource-ids", toGC))
 
-	return c.metaClient.SetGCPending(ctx, toGC)
+	if err := c.metaClient.SetGCPending(ctx, toGC); err != nil {
+		return err
+	}
+
+	c.notifier.GCNotify()
+	return nil
 }
 
 func (c *DefaultGCCoordinator) gcByOfflineExecutorID(ctx context.Context, executorID model.ExecutorID) error {

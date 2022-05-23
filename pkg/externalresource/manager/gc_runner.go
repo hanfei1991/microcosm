@@ -13,12 +13,6 @@ import (
 	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 )
 
-// GCRunner perform the actual GC operations.
-type GCRunner interface {
-	Run(ctx context.Context) error
-	Notify()
-}
-
 type gcHandlerFunc = func(ctx context.Context, meta *resModel.ResourceMeta) error
 
 // DefaultGCRunner implements GCRunner.
@@ -46,7 +40,8 @@ func NewGCRunner(
 // Run runs the GCRunner. It blocks until ctx is canceled.
 func (r *DefaultGCRunner) Run(ctx context.Context) error {
 	// TODO this will result in DB queries every 10 seconds.
-	// Probably we need a better strategy.
+	// This is a very naive strategy, we will modify the
+	// algorithm after doing enough system testing.
 	ticker := r.clock.Ticker(10 * time.Second)
 	defer ticker.Stop()
 

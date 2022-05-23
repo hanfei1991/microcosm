@@ -5,7 +5,7 @@ import (
 
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/model"
-	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
+	resModel "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
 	"github.com/hanfei1991/microcosm/pkg/notifier"
 )
 
@@ -32,6 +32,7 @@ type JobStatusChangeType int32
 const (
 	// JobRemovedEvent means that a job has been removed.
 	JobRemovedEvent = JobStatusChangeType(iota + 1)
+	// TODO add more event types to support more features
 )
 
 // JobStatusChangeEvent is an event denoting a job status
@@ -59,5 +60,11 @@ type JobStatusProvider interface {
 // file resource garbage collection.
 type GCCoordinator interface {
 	Run(ctx context.Context) error
-	OnKeepAlive(resourceID resourcemeta.ResourceID, workerID libModel.WorkerID)
+	OnKeepAlive(resourceID resModel.ResourceID, workerID libModel.WorkerID)
+}
+
+// GCRunner perform the actual GC operations.
+type GCRunner interface {
+	Run(ctx context.Context) error
+	Notify()
 }

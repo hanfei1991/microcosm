@@ -13,7 +13,7 @@ import (
 
 	"github.com/hanfei1991/microcosm/pb"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
-	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
+	resModel "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
 	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 	"github.com/hanfei1991/microcosm/pkg/rpcutil"
 )
@@ -26,7 +26,7 @@ type serviceTestSuite struct {
 	meta                 pkgOrm.Client
 }
 
-var serviceMockData = []*resourcemeta.ResourceMeta{
+var serviceMockData = []*resModel.ResourceMeta{
 	{
 		ID:       "/local/test/1",
 		Job:      "test-job-1",
@@ -92,7 +92,7 @@ func (s *serviceTestSuite) Stop() {
 	s.service.Stop()
 }
 
-func (s *serviceTestSuite) OfflineExecutor(t *testing.T, executor resourcemeta.ExecutorID) {
+func (s *serviceTestSuite) OfflineExecutor(t *testing.T, executor resModel.ExecutorID) {
 	s.executorInfoProvider.RemoveExecutor(string(executor))
 	err := s.service.onExecutorOffline(executor)
 	require.NoError(t, err)
