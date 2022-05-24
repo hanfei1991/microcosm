@@ -414,6 +414,7 @@ func (m *Master) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
 		if ws.Checkpoint != nil {
 			workerCkpt.Revision = ws.Checkpoint.Revision
 			workerCkpt.MvccCount = ws.Checkpoint.MvccCount
+			workerCkpt.Value = ws.Checkpoint.Value
 		}
 	}
 	wcfg := m.genWorkerConfig(businessID, workerCkpt)
